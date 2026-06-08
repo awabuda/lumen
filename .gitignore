@@ -1,0 +1,1 @@
+node_modules/\ndist/\n.turbo/\n*.log\n.env\n.env.local\ncoverage/\n.DS_Store\n
