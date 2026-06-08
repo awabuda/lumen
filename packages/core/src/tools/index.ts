@@ -51,6 +51,8 @@ export interface ToolDescriptor {
   readonly description: string
   readonly inputSchema: z.ZodType<unknown>
   readonly risk: ToolRisk
+  /** Tool version, surfaced to the LLM so it can reason about capability changes. */
+  readonly version: string
   /** JSON Schema form of inputSchema, for providers that need it. */
   readonly inputJsonSchema: Record<string, unknown>
 }
@@ -122,6 +124,7 @@ export abstract class BaseTool {
       inputSchema: this.inputSchema,
       inputJsonSchema: json,
       risk: this.risk,
+      version: this.version,
     }
   }
 }

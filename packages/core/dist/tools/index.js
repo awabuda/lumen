@@ -70,6 +70,7 @@ export class BaseTool {
             inputSchema: this.inputSchema,
             inputJsonSchema: json,
             risk: this.risk,
+            version: this.version,
         };
     }
 }
