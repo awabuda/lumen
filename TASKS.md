@@ -48,7 +48,15 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] I3.x — `lumen doctor` command
 - [x] I4.x — composition root (buildAgent)
 - [x] I5.x — `lumen chat` Ink/React TUI
-- [x] I6.x — `apps/cli` package (6 passing tests)
+- [x] I6.x — `apps/cli` package (7 passing tests)
+- [x] I7.x — TUI 流式输出（Agent.streamRun + Chat 适配）
+
+### J. Streaming
+- [x] J1.x — `RunEvent` discriminated union 类型
+- [x] J2.x — `Agent.streamRun()` 事件生成器
+- [x] J3.x — 流式循环里处理 tool dispatch
+- [x] J4.x — multi-step text + tool 混合时序
+- [x] J5.x — 5 passing tests for streamRun
 
 ### H. Config
 - [x] H1.1 — `@lumen/config` package (schema, loader, errors, define)
@@ -151,6 +159,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 | 2026-06-08 | C1-C3 @lumen/llm (OpenAI-compatible) | subagent → orchestrator review | ✅ typecheck + 10 tests pass + build |
 | 2026-06-08 | D1-D5 @lumen/tools (filesystem) | subagent → orchestrator review | ✅ typecheck + 27 tests pass + build |
 | 2026-06-08 | I1-I6 @lumen/cli (run, doctor, chat TUI) | orchestrator | ✅ typecheck + 6 tests pass + build |
+| 2026-06-08 | I7 + J1-J5 Streaming (Agent.streamRun + TUI 适配) | orchestrator | ✅ typecheck + 6 new tests pass + build |
 
 ## Architecture status (after P0-D — P0 complete)
 

@@ -100,4 +100,10 @@ export {
 export { Budget, type BudgetState } from './budget/index.js'
 
 // Agent
-export { Agent, type AgentConfig, type AgentRunOptions, type AgentRunResult } from './agent/index.js'
+export {
+  Agent,
+  type AgentConfig,
+  type AgentRunOptions,
+  type AgentRunResult,
+  type RunEvent,
+} from './agent/index.js'

@@ -33,5 +33,5 @@ export { HookRegistry, } from './hooks/index.js';
 // Budget
 export { Budget } from './budget/index.js';
 // Agent
-export { Agent } from './agent/index.js';
+export { Agent, } from './agent/index.js';
 //# sourceMappingURL=index.js.map

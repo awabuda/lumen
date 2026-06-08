@@ -25,5 +25,5 @@ export type { MemoryRecord, MemoryQuery, MemorySearchResult, SessionRecord, Sess
 export { BaseMemoryStore } from './memory/index.js';
 export { HookRegistry, type Hook, type HookContext, type HookEvent, } from './hooks/index.js';
 export { Budget, type BudgetState } from './budget/index.js';
-export { Agent, type AgentConfig, type AgentRunOptions, type AgentRunResult } from './agent/index.js';
+export { Agent, type AgentConfig, type AgentRunOptions, type AgentRunResult, type RunEvent, } from './agent/index.js';
 //# sourceMappingURL=index.d.ts.map

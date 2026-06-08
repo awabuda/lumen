@@ -48,24 +48,61 @@ export function Chat({ built }) {
         setInput('');
         const ctrl = new AbortController();
         abortRef.current = ctrl;
+        // Streaming: subscribe to the agent's run events and update UI
+        // state in real time. Each event mutates React state; Ink will
+        // re-render the affected subtree.
         try {
-            // Run synchronously: we don't have mid-run streaming wired in
-            // yet (see Agent.stream()). When the run finishes, the final
-            // AssistantMessage is the whole response. This is the
-            // architectural seam where true streaming will plug in.
-            const result = await built.agent.run({
+            for await (const ev of built.agent.streamRun({
                 userMessage: prompt,
                 signal: ctrl.signal,
-            });
-            setActiveSessionId(result.sessionId);
-            setTurns((prev) => prev.map((t) => (t.key === myKey ? { ...t, assistant: result.finalMessage } : t)));
+            })) {
+                switch (ev.type) {
+                    case 'run:start':
+                        setActiveSessionId(ev.sessionId);
+                        break;
+                    case 'text:start':
+                        setStreamingText('');
+                        break;
+                    case 'text:delta':
+                        setStreamingText((prev) => prev + ev.delta);
+                        break;
+                    case 'text:end':
+                        // Text for this step is done; we'll commit to the turn
+                        // on step:end below.
+                        break;
+                    case 'tool:start':
+                        setActiveTool(ev.toolCall);
+                        break;
+                    case 'tool:end':
+                        setActiveTool(undefined);
+                        break;
+                    case 'step:end':
+                        setTurns((prev) => prev.map((t) => {
+                            if (t.key !== myKey)
+                                return t;
+                            // Replace the assistant message on the latest step.
+                            // Multi-step responses: the last step:end wins.
+                            return { ...t, assistant: ev.message };
+                        }));
+                        setStreamingText('');
+                        break;
+                    case 'run:end':
+                        setStatus('done');
+                        break;
+                    case 'error':
+                        // We won't actually reach this — streamRun re-throws
+                        // after yielding 'error'. The catch below handles it.
+                        break;
+                }
+            }
             setStatus('done');
-            setStreamingText(result.finalMessage.content ?? '');
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             if (err instanceof Error && err.name === 'AbortError') {
                 setStatus('idle');
+                setStreamingText('');
+                setActiveTool(undefined);
             }
             else {
                 setTurns((prev) => prev.map((t) => (t.key === myKey ? { ...t, error: message } : t)));
@@ -74,6 +111,8 @@ export function Chat({ built }) {
         }
         finally {
             abortRef.current = null;
+            setActiveTool(undefined);
+            setStreamingText('');
         }
     }, [built.agent, status]);
     // Ctrl+C handling: abort the in-flight run, or exit if idle.

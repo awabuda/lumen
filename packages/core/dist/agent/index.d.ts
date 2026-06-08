@@ -72,6 +72,64 @@ export interface AgentRunResult {
     readonly iterations: number;
     readonly messages: ReadonlyArray<Message>;
 }
+/**
+ * Events emitted by {@link Agent.streamRun}. The TUI consumes these to
+ * update the screen in real time. Each event has a discriminated `type`
+ * field so consumers can switch on it without runtime guessing.
+ *
+ * Event ordering, by example:
+ *
+ *   { type: 'run:start', sessionId, userMessage }
+ *   { type: 'text:start', iteration: 1 }
+ *   { type: 'text:delta', delta: 'Hel' }      // 0..N times
+ *   { type: 'text:delta', delta: 'lo' }
+ *   { type: 'text:end', content: 'Hello' }     // finalized text of this step
+ *   { type: 'tool:start', toolCall }            // only if model called tools
+ *   { type: 'tool:end', toolCall, result, durationMs }
+ *   { type: 'step:end', iteration, finalMessage }
+ *   { type: 'text:start', iteration: 2 }       // next step
+ *   ...
+ *   { type: 'run:end', finalMessage, iterations, messages }
+ *
+ * On error, the final event is `{ type: 'error', error }` and the
+ * generator terminates (the result promise rejects).
+ */
+export type RunEvent = {
+    type: 'run:start';
+    sessionId: string;
+    userMessage: string;
+} | {
+    type: 'text:start';
+    iteration: number;
+} | {
+    type: 'text:delta';
+    delta: string;
+} | {
+    type: 'text:end';
+    content: string;
+    iteration: number;
+} | {
+    type: 'tool:start';
+    toolCall: ToolCall;
+    iteration: number;
+} | {
+    type: 'tool:end';
+    toolCall: ToolCall;
+    result: ToolResult;
+    durationMs: number;
+    iteration: number;
+} | {
+    type: 'step:end';
+    iteration: number;
+    message: AssistantMessage;
+} | {
+    type: 'run:end';
+    finalMessage: AssistantMessage;
+    iterations: number;
+} | {
+    type: 'error';
+    error: Error;
+};
 export declare class Agent {
     private readonly provider;
     private readonly tools;
@@ -86,6 +144,27 @@ export declare class Agent {
      * Returns the final assistant message plus the full message history.
      */
     run(options: AgentRunOptions): Promise<AgentRunResult>;
+    /**
+     * Run the agent loop, yielding {@link RunEvent}s as work progresses.
+     * This is the streaming-friendly counterpart to {@link run}.
+     *
+     * The generator yields events in this rough order per step:
+     *   text:start → text:delta* → text:end → tool:start* → tool:end* → step:end
+     *
+     * For providers that don't support true streaming, the entire text
+     * arrives as a single `text:delta` followed by `text:end`. This is
+     * fine — the TUI doesn't care, it just renders whatever it gets.
+     *
+     * On the final step, the `run:end` event carries the final assistant
+     * message and total iteration count.
+     *
+     * Error handling: if the loop throws (abort, budget, etc.), the
+     * generator yields one `error` event and then returns. Callers that
+     * need the result should still await the result promise returned by
+     * `toResult()` if they used the helper, or catch the throw if they
+     * consumed events directly.
+     */
+    streamRun(options: AgentRunOptions): AsyncGenerator<RunEvent, AgentRunResult, void>;
     /**
      * Convenience: stream the response. Wraps `run()` and yields the
      * provider's stream events as they arrive, but only for the *last*
