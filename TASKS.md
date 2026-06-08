@@ -43,9 +43,12 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] D5.x — `packages/tools` package
 
 ### I. CLI
-- [ ] I1.x — commander skeleton
-- [ ] I2.x — `lumen chat` command
-- [ ] I3.x — `apps/cli` package
+- [x] I1.x — commander skeleton
+- [x] I2.x — `lumen run` command (single-shot)
+- [x] I3.x — `lumen doctor` command
+- [x] I4.x — composition root (buildAgent)
+- [x] I5.x — `lumen chat` Ink/React TUI
+- [x] I6.x — `apps/cli` package (6 passing tests)
 
 ### H. Config
 - [x] H1.1 — `@lumen/config` package (schema, loader, errors, define)
@@ -147,6 +150,45 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 | 2026-06-08 | B1-B5 @lumen/core (message, tools, memory, hooks, budget, agent) | orchestrator | ✅ typecheck + 26 tests pass + build |
 | 2026-06-08 | C1-C3 @lumen/llm (OpenAI-compatible) | subagent → orchestrator review | ✅ typecheck + 10 tests pass + build |
 | 2026-06-08 | D1-D5 @lumen/tools (filesystem) | subagent → orchestrator review | ✅ typecheck + 27 tests pass + build |
+| 2026-06-08 | I1-I6 @lumen/cli (run, doctor, chat TUI) | orchestrator | ✅ typecheck + 6 tests pass + build |
+
+## Architecture status (after P0-D — P0 complete)
+
+P0 阶段全部完成。MVP 端到端可运行：
+
+```bash
+cd ~/workspace/lumen
+pnpm install
+pnpm --filter @lumen/cli build
+
+# 三种使用方式
+node apps/cli/dist/index.js doctor
+node apps/cli/dist/index.js run "列出当前目录的 .ts 文件"
+node apps/cli/dist/index.js chat  # Ink TUI（需真 TTY）
+```
+
+P0 实现亮点：
+- `apps/cli/src/composition.ts`：唯一的"装配根"，所有协作者在这里 wire
+- `apps/cli/src/commands/run.ts`：单次执行命令，退出码语义化（0/1/2/130）
+- `apps/cli/src/commands/chat.tsx`：懒加载 Ink，只有 `lumen chat` 时才付出 React 成本
+- `apps/cli/src/components/Chat.tsx`：Ink TUI 组件，状态机 idle→thinking→done/error
+- 跨包依赖：cli → llm + tools + core + config，没有循环依赖
+- 全 monorepo 72 个测试通过
+
+P1 阶段（下一批）待办：
+- I7.x: TUI 流式输出（接入 Agent.stream()，现在是 await 完整结果）
+- I8.x: TUI 历史命令
+- I9.x: TUI interrupt 完善（多轮）
+- D6+: 终端工具、git 工具、网络工具
+- E1+: memory 的 SQLite 实现
+- G1+: MCP client
+
+Total project state:
+- 5 packages shipped (config, core, llm, tools, cli)
+- 72 tests passing
+- 0 typecheck errors
+- 5 commits
+- **MVP shipped end-to-end**
 
 ## Architecture status (after P0-C)
 

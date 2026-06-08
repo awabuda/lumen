@@ -1,0 +1,62 @@
+/**
+ * The Ink TUI chat command. Loaded lazily by `src/index.ts` so that
+ * users who only use `lumen run` don't pay the Ink/React startup cost.
+ *
+ * This file owns the **bridge** between the imperative agent runtime
+ * (returns Promises / async iterators) and the declarative React/Ink
+ * UI (driven by props + state). The bridge has three concerns:
+ *
+ *   1. Mount the React app under Ink.
+ *   2. Build the {@link Agent} from CLI options before mounting.
+ *   3. Translate the result of `agent.run()` (a single Promise) into
+ *      a stream of UI events the React tree can consume.
+ *
+ * The React component itself is in `../components/Chat.jsx`. We keep
+ * the JSX in a separate file so this file can stay pure TypeScript.
+ */
+
+import { buildAgent, type BuiltAgent } from '../composition.js'
+
+export interface ChatCommandOptions {
+  model?: string
+  configPath?: string
+  cwd?: string
+}
+
+export const chatCommand = async (options: ChatCommandOptions): Promise<number> => {
+  // Pre-flight: ensure an API key is set, otherwise Ink would mount
+  // and then fail mid-render.
+  if (!process.env.OPENAI_API_KEY && !process.env.LUMEN_API_KEY) {
+    process.stderr.write(
+      'lumen chat: missing API key. Set OPENAI_API_KEY or LUMEN_API_KEY before starting.\n',
+    )
+    return 2
+  }
+
+  let built: BuiltAgent
+  try {
+    built = await buildAgent(options)
+  } catch (err) {
+    process.stderr.write(
+      `lumen chat: failed to build agent: ${err instanceof Error ? err.message : String(err)}\n`,
+    )
+    return 1
+  }
+
+  // Lazy-load Ink to keep cold start cheap for non-TUI commands.
+  const React = await import('react')
+  const { render } = await import('ink')
+  const { Chat } = await import('../components/Chat.js')
+
+  const app = render(
+    React.createElement(Chat, { built }),
+  )
+  return new Promise<number>((resolve) => {
+    app.waitUntilExit().then(() => {
+      resolve(0)
+    }).catch((err: unknown) => {
+      process.stderr.write(`lumen chat: ${err instanceof Error ? err.message : String(err)}\n`)
+      resolve(1)
+    })
+  })
+}
