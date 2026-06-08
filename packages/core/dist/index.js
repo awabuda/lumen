@@ -22,7 +22,7 @@ export { AgentError, BudgetExceededError, MaxIterationsExceededError, ProviderEr
 // Message types
 export { 
 // value types
-Role, MessageSchema, TextPartSchema, ImagePartSchema, ToolCallSchema, ToolResultSchema, AssistantMessageSchema, UserMessageSchema, ToolMessageSchema, SystemMessageSchema, } from './message/index.js';
+Role, MessageSchema, TextPartSchema, ImagePartSchema, ContentPartSchema, ToolCallSchema, ToolResultSchema, AssistantMessageSchema, UserMessageSchema, ToolMessageSchema, SystemMessageSchema, } from './message/index.js';
 // Provider contract
 export { BaseProvider, } from './message/provider.js';
 // Tool contract

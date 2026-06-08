@@ -18,7 +18,7 @@
  * protected). Other files are implementation detail and may move.
  */
 export { AgentError, BudgetExceededError, MaxIterationsExceededError, ProviderError, ToolError, ToolValidationError, AbortError, } from './errors/index.js';
-export { Role, MessageSchema, TextPartSchema, ImagePartSchema, ToolCallSchema, ToolResultSchema, AssistantMessageSchema, UserMessageSchema, ToolMessageSchema, SystemMessageSchema, type Message, type TextPart, type ImagePart, type ToolCall, type ToolResult, type AssistantMessage, type UserMessage, type ToolMessage, type SystemMessage, type ReasoningPart, type StreamEvent, type StreamOptions, } from './message/index.js';
+export { Role, MessageSchema, TextPartSchema, ImagePartSchema, ContentPartSchema, ToolCallSchema, ToolResultSchema, AssistantMessageSchema, UserMessageSchema, ToolMessageSchema, SystemMessageSchema, type Message, type TextPart, type ImagePart, type ContentPart, type ToolCall, type ToolResult, type AssistantMessage, type UserMessage, type ToolMessage, type SystemMessage, type ReasoningPart, type StreamEvent, type StreamOptions, } from './message/index.js';
 export { BaseProvider, type ProviderCapabilities, type ChatRequest, type ChatResponse, type EmbedRequest, type EmbedResponse, } from './message/provider.js';
 export { BaseTool, ToolRegistry, type ToolDescriptor, type ToolContext, type ToolRisk, } from './tools/index.js';
 export type { MemoryRecord, MemoryQuery, MemorySearchResult, SessionRecord, SessionMessage, } from './memory/index.js';
