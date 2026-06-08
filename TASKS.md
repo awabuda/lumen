@@ -22,11 +22,11 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] A1.8 .gitignore
 
 ### B. Core engine
-- [ ] B1.x — Message types, context, serialization
-- [ ] B2.x — Main agent loop, hooks, budget, interrupt
-- [ ] B3.x — Hook system
-- [ ] B4.x — Tool protocol
-- [ ] B5.x — `packages/core` package (base.ts, agent.ts, message.ts, hooks.ts)
+- [x] B1.x — Message types, context, serialization
+- [x] B2.x — Main agent loop, hooks, budget, interrupt
+- [x] B3.x — Hook system
+- [x] B4.x — Tool protocol
+- [x] B5.x — `packages/core` package (base.ts, agent.ts, message.ts, hooks.ts)
 
 ### C. LLM adapter
 - [ ] C1.x — Provider abstraction (`packages/llm/src/base.ts`)
@@ -145,4 +145,18 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 | Date | Unit | Reviewer | Result |
 |---|---|---|---|
 | 2026-06-08 | H1.1 H1.2 @lumen/config | orchestrator | ✅ typecheck + 3 tests pass |
+| 2026-06-08 | B1-B5 @lumen/core (message, tools, memory, hooks, budget, agent) | orchestrator | ✅ typecheck + 26 tests pass + build |
+
+## Architecture status (after P0-A)
+
+Base contracts written, exercised by tests, and ready to be implemented against:
+
+- `BaseProvider`  → consumed by @lumen/llm
+- `BaseTool`      → consumed by @lumen/tools
+- `BaseMemoryStore` → consumed by @lumen/memory
+- `Hook` / `HookRegistry` → consumed by any package that wants to observe
+- `Agent`         → composed in apps/cli
+
+The next step (P0-B) is to spawn a subagent to implement `@lumen/llm`'s
+OpenAI-compatible provider against the BaseProvider contract.
 
