@@ -105,7 +105,39 @@ export const doctorCommand = async () => {
     catch {
         warn('git CLI not on PATH; the git tool will fail every invocation');
     }
-    // 6. ripgrep (best-effort)
+    // 6. Memory store round-trip (in-memory SQLite).
+    //    We do NOT touch the on-disk default (~/.lumen/memory.db)
+    //    so `lumen doctor` stays side-effect-free for a fresh
+    //    install. A failure here is `[FAIL]` because the agent
+    //    loop will throw on its first `appendMessage` without a
+    //    working memory backend.
+    try {
+        const { SqliteStore } = await import('@lumen/memory');
+        const store = new SqliteStore({ path: ':memory:' });
+        await store.init();
+        try {
+            await store.createSession({ id: 'doctor-session', title: 'doctor probe' });
+            await store.appendMessage({
+                sessionId: 'doctor-session',
+                role: 'user',
+                content: 'ping',
+            });
+            const messages = await store.getSessionMessages('doctor-session');
+            if (messages.length === 1 && messages[0]?.content === 'ping') {
+                ok('Memory store round-trip OK (session + message persisted + read back)');
+            }
+            else {
+                fail(`Memory round-trip returned unexpected messages: ${JSON.stringify(messages)}`);
+            }
+        }
+        finally {
+            await store.dispose();
+        }
+    }
+    catch (err) {
+        fail(`Memory store failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    // 7. ripgrep (best-effort)
     try {
         const { execFile } = await import('node:child_process');
         await new Promise((resolve, reject) => {

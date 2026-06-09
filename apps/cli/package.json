@@ -27,6 +27,7 @@
     "@lumen/config": "workspace:*",
     "@lumen/core": "workspace:*",
     "@lumen/llm": "workspace:*",
+    "@lumen/memory": "workspace:*",
     "@lumen/tools": "workspace:*",
     "commander": "^12.1.0",
     "ink": "^5.0.1",

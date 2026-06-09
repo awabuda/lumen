@@ -1,0 +1,22 @@
+
+> @lumen/tools@0.1.0 test /Users/chengpengtao/workspace/lumen/packages/tools
+> vitest run
+
+
+ RUN  v2.1.9 /Users/chengpengtao/workspace/lumen/packages/tools
+
+ ✓ test/none-sandbox.test.ts (2 tests) 3ms
+ ✓ test/default-sandbox.test.ts (5 tests) 90ms
+ ✓ test/read-file.test.ts (5 tests) 12ms
+ ✓ test/terminal.test.ts (6 tests) 8ms
+ ✓ test/write-file.test.ts (5 tests) 39ms
+ ✓ test/patch.test.ts (6 tests) 37ms
+ ✓ test/list-dir.test.ts (5 tests) 31ms
+ ✓ test/search-files.test.ts (6 tests) 160ms
+ ✓ test/git.test.ts (7 tests) 1157ms
+
+ Test Files  9 passed (9)
+      Tests  47 passed (47)
+   Start at  13:19:22
+   Duration  3.25s (transform 1.10s, setup 0ms, collect 3.30s, tests 1.54s, environment 1ms, prepare 1.52s)
+

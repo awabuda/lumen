@@ -1,0 +1,16 @@
+
+> @lumen/memory@0.1.0 test /Users/chengpengtao/workspace/lumen/packages/memory
+> vitest run
+
+
+ RUN  v2.1.9 /Users/chengpengtao/workspace/lumen/packages/memory
+
+ ✓ test/sqlite-file.test.ts (5 tests) 47ms
+ ✓ test/in-memory.test.ts (17 tests) 29ms
+ ✓ test/sqlite.test.ts (17 tests) 41ms
+
+ Test Files  3 passed (3)
+      Tests  39 passed (39)
+   Start at  13:19:22
+   Duration  2.05s (transform 341ms, setup 0ms, collect 1.13s, tests 117ms, environment 0ms, prepare 775ms)
+

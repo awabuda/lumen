@@ -17,6 +17,11 @@ export interface RunCommandOptions {
     apiKey?: string;
     baseUrl?: string;
     noTools?: boolean;
+    /** Skip wiring a memory store (defaults to in-memory SQLite at
+     *  `~/.lumen/memory.db`). Tests pass `:memory:` for hermetic
+     *  runs. */
+    memoryPath?: string;
+    noMemory?: boolean;
 }
 export declare const runCommand: (options: RunCommandOptions) => Promise<number>;
 //# sourceMappingURL=run.d.ts.map

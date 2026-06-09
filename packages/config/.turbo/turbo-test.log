@@ -1,0 +1,14 @@
+
+> @lumen/config@0.1.0 test /Users/chengpengtao/workspace/lumen/packages/config
+> vitest run
+
+
+ RUN  v2.1.9 /Users/chengpengtao/workspace/lumen/packages/config
+
+ ✓ src/loader.test.ts (3 tests) 5ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  13:19:22
+   Duration  1.86s (transform 113ms, setup 0ms, collect 226ms, tests 5ms, environment 0ms, prepare 438ms)
+

@@ -13,12 +13,18 @@ import { loadCliConfig } from '../composition.js';
 export const runCommand = async (options) => {
     // Defer the heavy import so the command surface stays light.
     const { buildAgent } = await import('../composition.js');
+    // Pre-flight: surface the missing-key error **before** we
+    // touch the filesystem (buildAgent opens the SQLite
+    // memory file). This keeps the failure cheap and the
+    // error message specific — the user is told they need
+    // a key, not that we couldn't open a database.
+    if (!process.env.OPENAI_API_KEY && !process.env.LUMEN_API_KEY && !options.apiKey) {
+        process.stderr.write('lumen: missing API key. Set OPENAI_API_KEY or LUMEN_API_KEY, or pass --api-key.\n');
+        return 2;
+    }
+    let built;
     try {
-        const built = await buildAgent(options);
-        if (!process.env.OPENAI_API_KEY && !process.env.LUMEN_API_KEY && !options.apiKey) {
-            process.stderr.write('lumen: missing API key. Set OPENAI_API_KEY or LUMEN_API_KEY, or pass --api-key.\n');
-            return 2;
-        }
+        built = await buildAgent(options);
         const result = await built.agent.run({ userMessage: options.prompt });
         if (result.finalMessage.content) {
             process.stdout.write(result.finalMessage.content);
@@ -36,6 +42,13 @@ export const runCommand = async (options) => {
         const message = err instanceof Error ? err.message : String(err);
         process.stderr.write(`lumen: ${message}\n`);
         return 1;
+    }
+    finally {
+        // Always dispose the memory store. We do this even on
+        // error because a half-finished run may have already
+        // appended the user message; we want the connection
+        // closed cleanly so WAL gets checkpointed.
+        await built?.memory?.dispose();
     }
 };
 // Mark the side-effect import as used; the command delegates to buildAgent.

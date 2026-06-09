@@ -17,6 +17,7 @@
  */
 import { type LumenConfig } from '@lumen/config';
 import { Agent, HookRegistry, type BaseProvider, ToolRegistry } from '@lumen/core';
+import { SqliteStore } from '@lumen/memory';
 export interface CliAgentOptions {
     /** Path to a config file (overrides lookup). */
     configPath?: string;
@@ -30,6 +31,19 @@ export interface CliAgentOptions {
     baseUrl?: string;
     /** Disable filesystem tools (for testing or sandboxed use). */
     noTools?: boolean;
+    /**
+     * Override the SQLite memory database path. When omitted,
+     * the default is `~/.lumen/memory.db` (the XDG-friendly
+     * home-directory choice). Tests pass `:memory:` to keep
+     * the database hermetic.
+     */
+    memoryPath?: string;
+    /**
+     * Skip wiring a memory store at all. The agent runs
+     * ephemerally; every `lumen run` starts a fresh session.
+     * Useful for one-off scripts and CI.
+     */
+    noMemory?: boolean;
 }
 export interface BuiltAgent {
     readonly agent: Agent;
@@ -38,6 +52,14 @@ export interface BuiltAgent {
     readonly hooks: HookRegistry;
     readonly config: LumenConfig;
     readonly model: string;
+    /**
+     * The memory store the agent was wired with, or `undefined`
+     * when the caller asked for `noMemory: true`. The
+     * composition root owns the lifetime: the CLI's `run`/
+     * `chat` commands must call `memory?.dispose()` after the
+     * agent loop finishes.
+     */
+    readonly memory?: SqliteStore;
 }
 /**
  * Read the Lumen config from disk + env, returning a fully validated

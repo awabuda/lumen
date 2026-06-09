@@ -55,10 +55,13 @@ describe('runCommand', () => {
     // We don't actually hit the network; the test verifies that the
     // "missing API key" pre-flight check is bypassed.
     // Without network, the provider call will throw — that's exit 1.
+    // We pass `noMemory: true` to keep the test hermetic — we don't
+    // want a stray `~/.lumen/memory.db` showing up in a test host.
     const code = await runCommand({
       prompt: 'hi',
       apiKey: 'sk-fake',
       baseUrl: 'http://127.0.0.1:1', // nothing listens here
+      noMemory: true,
     })
     expect(code).not.toBe(2)
   })

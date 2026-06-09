@@ -82,12 +82,16 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [ ] D12.x — Sandboxing (Docker)
 
 ### E. Memory
-- [ ] E1.x — `packages/memory` base contract
-- [ ] E2.x — SQLite session store
-- [ ] E3.x — FTS5 indexing
-- [ ] E4.x — sqlite-vec vector store
-- [ ] E5.x — Working memory
-- [ ] E6.x — Cross-session retrieval
+- [x] E1.x — `packages/memory` base 契约重导出
+- [x] E2.x — `InMemoryStore` (Map 后端 + promise-chain 串行化)
+- [x] E3.x — `SqliteStore` (better-sqlite3 + FTS5 + WAL + 21 prepared statements)
+- [x] E4.x — `BaseMemoryStore` 双后端 contract suite (17 shared tests)
+- [x] E5.x — SqliteStore 文件持久化 + readonly + 多连接（WAL 验证）
+- [x] E6.x — CLI composition root 接入默认 `~/.lumen/memory.db`
+- [x] E7.x — `lumen doctor` memory round-trip 检查
+- [ ] E8.x — sqlite-vec vector store
+- [ ] E9.x — Working memory
+- [ ] E10.x — Cross-session retrieval
 
 ### I. CLI (continued)
 - [ ] I4.x — TUI with Ink
@@ -166,6 +170,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 | 2026-06-08 | I1-I6 @lumen/cli (run, doctor, chat TUI) | orchestrator | ✅ typecheck + 6 tests pass + build |
 | 2026-06-08 | I7 + J1-J5 Streaming (Agent.streamRun + TUI 适配) | orchestrator | ✅ typecheck + 6 new tests pass + build |
 | 2026-06-08 | D7-D13 terminal + git + ShellSandbox (P1) | orchestrator | ✅ typecheck + 18 new tests pass + build + doctor OK |
+| 2026-06-08 | E1-E7 @lumen/memory (InMemory + Sqlite + FTS5 + WAL + contract suite) | orchestrator | ✅ typecheck + 39 new tests pass + build + doctor OK |
 
 ## Architecture status (after P0-D — P0 complete)
 

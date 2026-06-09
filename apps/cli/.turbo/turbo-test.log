@@ -1,0 +1,16 @@
+
+> @lumen/cli@0.1.0 test /Users/chengpengtao/workspace/lumen/apps/cli
+> vitest run
+
+
+ RUN  v2.1.9 /Users/chengpengtao/workspace/lumen/apps/cli
+
+ ✓ test/chat.test.tsx (1 test) 114ms
+ ✓ test/composition.test.ts (5 tests) 8ms
+ ✓ test/run.test.ts (2 tests) 9ms
+
+ Test Files  3 passed (3)
+      Tests  8 passed (8)
+   Start at  13:19:22
+   Duration  2.31s (transform 649ms, setup 0ms, collect 1.84s, tests 131ms, environment 0ms, prepare 533ms)
+

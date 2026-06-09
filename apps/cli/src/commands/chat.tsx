@@ -52,11 +52,22 @@ export const chatCommand = async (options: ChatCommandOptions): Promise<number> 
     React.createElement(Chat, { built }),
   )
   return new Promise<number>((resolve) => {
-    app.waitUntilExit().then(() => {
-      resolve(0)
-    }).catch((err: unknown) => {
-      process.stderr.write(`lumen chat: ${err instanceof Error ? err.message : String(err)}\n`)
-      resolve(1)
-    })
+    app.waitUntilExit()
+      .then(() => resolve(0))
+      .catch((err: unknown) => {
+        process.stderr.write(`lumen chat: ${err instanceof Error ? err.message : String(err)}\n`)
+        resolve(1)
+      })
+      // Dispose the memory store **after** the user exits
+      // the TUI. The TUI may have persisted several turns
+      // already; we want the connection closed cleanly so
+      // the WAL gets checkpointed and the next `lumen run`
+      // sees the most recent state.
+      .finally(() => {
+        built.memory?.dispose().catch(() => {
+          // The TUI is already exiting; an error here
+          // would just confuse the user. We swallow.
+        })
+      })
   })
 }
