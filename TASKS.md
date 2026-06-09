@@ -116,10 +116,12 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [ ] F5.x — Self-creation from trajectory
 
 ### G. MCP
-- [ ] G1.x — JSON-RPC framing (stdio)
+- [x] G1.x — JSON-RPC framing (stdio)
 - [ ] G2.x — JSON-RPC framing (http+sse)
-- [ ] G3.x — MCP client
-- [ ] G4.x — MCP tool proxy into ToolRegistry
+- [x] G3.x — MCP client
+- [x] G4.x — MCP tool proxy into ToolRegistry
+- [x] G5.x — CLI 装配根接入 (`buildAgent` → `connectAllMcpServers`, `--no-mcp` flag, 退出时 `closeAllMcpServers`)
+- [x] G6.x — `lumen doctor` MCP 连接 round-trip 检查（per-server 3s 超时，失败 `[WARN]`）
 
 ### E. Memory (continued)
 - [ ] E7.x — Long-term profile
@@ -172,6 +174,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 | 2026-06-08 | D7-D13 terminal + git + ShellSandbox (P1) | orchestrator | ✅ typecheck + 18 new tests pass + build + doctor OK |
 | 2026-06-08 | E1-E7 @lumen/memory (InMemory + Sqlite + FTS5 + WAL + contract suite) | orchestrator | ✅ typecheck + 39 new tests pass + build + doctor OK |
 | 2026-06-09 | F1-F2 @lumen/skills (BaseSkill + SkillRegistry + MarkdownSkill parser + FilesystemSkillSource + CLI skills/doctor) | orchestrator | ✅ typecheck + 42+7 tests pass + build + doctor OK |
+| 2026-06-09 | G1-G6 @lumen/mcp stdio + CLI 装配根 + doctor (stdio JSON-RPC, McpClient, McpToolProxy, buildAgent 接入, lumen run --no-mcp, lumen doctor MCP round-trip) | orchestrator | ✅ typecheck + 4+3 tests pass + build + doctor OK（broken + fixture 两种 round-trip 实测） |
 
 ## Architecture status (after P0-D — P0 complete)
 

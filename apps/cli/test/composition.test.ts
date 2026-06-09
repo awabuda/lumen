@@ -80,4 +80,89 @@ describe('buildAgent', () => {
     expect(got?.content).toBe('composition wired memory')
     await built.memory!.dispose()
   })
+
+  describe('MCP wiring', () => {
+    it('returns an empty mcpServers list when noMcp=true', async () => {
+      const built = await buildAgent({
+        apiKey: 'sk-fake',
+        baseUrl: 'http://127.0.0.1:1',
+        noTools: true,
+        noMemory: true,
+        noMcp: true,
+      })
+      expect(built.mcpServers).toEqual([])
+    })
+
+    it('returns an empty mcpServers list when no servers are configured', async () => {
+      // Default config (no project) has mcp.servers = [].
+      const built = await buildAgent({
+        apiKey: 'sk-fake',
+        baseUrl: 'http://127.0.0.1:1',
+        noTools: true,
+        noMemory: true,
+      })
+      expect(built.mcpServers).toEqual([])
+    })
+
+    it('skips a broken stdio server without throwing, leaving mcpServers empty', async () => {
+      // Build a config that points at a command that exits
+      // immediately. `connectAllMcpServers` is supposed to
+      // log + skip failures, not bubble them up — the CLI
+      // is meant to stay usable when an MCP server is broken.
+      const tmpDir = await import('node:fs/promises').then((m) => m.mkdtemp('/tmp/lumen-mcp-test-'))
+      const configPath = `${tmpDir}/.lumen/config.yaml`
+      await import('node:fs/promises').then((m) => m.mkdir(`${tmpDir}/.lumen`, { recursive: true }))
+      await import('node:fs/promises').then((m) =>
+        m.writeFile(
+          configPath,
+          [
+            'mcp:',
+            '  servers:',
+            '    - name: broken',
+            '      transport: stdio',
+            "      command: 'sh'",
+            "      args: ['-c', 'exit 1']",
+            '      enabled: true',
+            '',
+          ].join('\n'),
+        ),
+      )
+
+      // Capture stderr to keep test output clean.
+      const stderrChunks: string[] = []
+      const origStderr = process.stderr.write.bind(process.stderr)
+      process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+        stderrChunks.push(typeof chunk === 'string' ? chunk : chunk.toString())
+        return true
+      }) as typeof process.stderr.write
+
+      let built: Awaited<ReturnType<typeof buildAgent>> | undefined
+      try {
+        built = await buildAgent({
+          apiKey: 'sk-fake',
+          baseUrl: 'http://127.0.0.1:1',
+          // Pass the project config file directly; the
+          // loader uses it as the projectPath override.
+          configPath,
+          noTools: true,
+          noMemory: true,
+          mcpTimeoutMs: 1_000,
+        })
+        // The server is broken so nothing should be in
+        // mcpServers. The fs tools we disabled (noTools)
+        // mean the registry is otherwise empty.
+        expect(built.mcpServers).toEqual([])
+        expect(built.tools.size).toBe(0)
+        // A `[lumen mcp] failed to connect` line should
+        // have been emitted. We don't assert on its exact
+        // wording, only that the diagnostic fired.
+        const stderr = stderrChunks.join('')
+        expect(stderr).toContain('[lumen mcp]')
+        expect(stderr).toContain('broken')
+      } finally {
+        process.stderr.write = origStderr
+        await import('node:fs/promises').then((m) => m.rm(tmpDir, { recursive: true, force: true }))
+      }
+    })
+  })
 })

@@ -21,6 +21,11 @@ import { Agent, HookRegistry, type BaseProvider, ToolRegistry } from '@lumen/cor
 import { OpenAICompatibleProvider } from '@lumen/llm'
 import { createFilesystemTools } from '@lumen/tools'
 import { SqliteStore } from '@lumen/memory'
+import {
+  closeAllMcpServers,
+  connectAllMcpServers,
+  type DiscoveredMcpServer,
+} from '@lumen/mcp'
 import * as path from 'node:path'
 import * as os from 'node:os'
 
@@ -50,6 +55,20 @@ export interface CliAgentOptions {
    * Useful for one-off scripts and CI.
    */
   noMemory?: boolean
+  /**
+   * Skip MCP server discovery + connection. The default
+   * (`false`) connects to every enabled entry in
+   * `config.mcp.servers` and registers their tools. Set to
+   * `true` to run the agent with only the built-in tools.
+   */
+  noMcp?: boolean
+  /**
+   * Override the per-server connect timeout (ms). Defaults
+   * to 5000 — long enough to spawn stdio servers, short
+   * enough that a single misbehaving server can't hang the
+   * whole CLI.
+   */
+  mcpTimeoutMs?: number
 }
 
 export interface BuiltAgent {
@@ -61,12 +80,14 @@ export interface BuiltAgent {
   readonly model: string
   /**
    * The memory store the agent was wired with, or `undefined`
-   * when the caller asked for `noMemory: true`. The
-   * composition root owns the lifetime: the CLI's `run`/
-   * `chat` commands must call `memory?.dispose()` after the
-   * agent loop finishes.
+   * when the caller asked for `noMemory: true`.
    */
   readonly memory?: SqliteStore
+  /**
+   * Connected MCP servers owned by this composition root. CLI commands
+   * must close them when the run/chat session ends.
+   */
+  readonly mcpServers: DiscoveredMcpServer[]
 }
 
 /**
@@ -138,7 +159,19 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
     cwd,
   })
 
-  return { agent, provider, tools, hooks, config, model, memory }
+  // MCP server discovery. We connect AFTER the Agent is
+  // constructed so the Agent holds the registry reference
+  // (any tools registered post-construction are visible to
+  // the next `agent.run()` call). Failures are logged and
+  // skipped — one broken server must not take down the CLI.
+  let mcpServers: DiscoveredMcpServer[] = []
+  if (!options.noMcp && config.mcp?.servers?.length) {
+    mcpServers = await connectAllMcpServers(config.mcp.servers, tools, {
+      timeoutMs: options.mcpTimeoutMs ?? 5_000,
+    })
+  }
+
+  return { agent, provider, tools, hooks, config, model, memory, mcpServers }
 }
 
 /**

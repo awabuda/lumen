@@ -24,6 +24,34 @@ describe('loadConfig', () => {
     }
   })
 
+  it('maps underscore env names to camelCase config keys', async () => {
+    process.env.LUMEN_DEFAULT_MODEL = 'gpt-4o-mini'
+    try {
+      const cfg = await loadConfig({ skipUserConfig: true, skipProjectConfig: true, cwd: '/' })
+      expect(cfg.defaultModel).toBe('gpt-4o-mini')
+    } finally {
+      delete process.env.LUMEN_DEFAULT_MODEL
+    }
+  })
+
+  it('ignores runtime-only env vars consumed by the CLI composition root', async () => {
+    process.env.LUMEN_API_KEY = 'test-key'
+    process.env.LUMEN_BASE_URL = 'http://localhost:9999/v1'
+    process.env.LUMEN_MODEL = 'gpt-4o-mini'
+    process.env.LUMEN_MEMORY_PATH = ':memory:'
+    process.env.LUMEN_SKILLS_PATH = '/tmp/lumen-skills'
+    try {
+      const cfg = await loadConfig({ skipUserConfig: true, skipProjectConfig: true, cwd: '/' })
+      expect(cfg.agent.maxIterations).toBe(50)
+    } finally {
+      delete process.env.LUMEN_API_KEY
+      delete process.env.LUMEN_BASE_URL
+      delete process.env.LUMEN_MODEL
+      delete process.env.LUMEN_MEMORY_PATH
+      delete process.env.LUMEN_SKILLS_PATH
+    }
+  })
+
   it('rejects unknown keys (strict mode)', async () => {
     await expect(
       loadConfig({

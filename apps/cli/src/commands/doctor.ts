@@ -14,10 +14,16 @@
  *     support `--no-git` deployments)
  *   - Skill registry can discover from the default skill root
  *     without writing to disk
+ *   - MCP server discovery: lists configured servers, attempts
+ *     to connect to each enabled one, and reports a per-server
+ *     connect round-trip (skips the round-trip on config load
+ *     failure so the user still sees the rest of the report)
  *
  * Prints a series of `[OK]` / `[WARN]` / `[FAIL]` lines. Exits 0 if
  * everything critical passes, 1 otherwise.
  */
+
+import { loadCliConfig } from '../composition.js'
 
 export const doctorCommand = async (): Promise<number> => {
   let failed = 0
@@ -167,6 +173,50 @@ export const doctorCommand = async (): Promise<number> => {
     ok('ripgrep available (search_files fast path enabled)')
   } catch {
     warn('ripgrep not on PATH (search_files will fall back to pure-Node implementation)')
+  }
+
+  // 9. MCP server discovery + connect round-trip.
+  //    Read the config we already loaded above (or reload
+  //    if step 1 failed) and try to connect to every
+  //    enabled server. The round-trip is bounded by a
+  //    3-second per-server timeout so `lumen doctor`
+  //    stays fast even on misbehaving servers. Failures
+  //    are `[WARN]` rather than `[FAIL]` — the user may
+  //    intentionally have a server that's offline — but
+  //    a discoverability bug (we can't even *list* the
+  //    config) is a `[FAIL]`.
+  try {
+    const cfg = await loadCliConfig()
+    const servers = cfg.mcp?.servers ?? []
+    if (servers.length === 0) {
+      ok('MCP: no servers configured (run with config.mcp.servers to enable)')
+    } else {
+      const { connectAllMcpServers, closeAllMcpServers } = await import('@lumen/mcp')
+      const { ToolRegistry } = await import('@lumen/core')
+      const registry = new ToolRegistry()
+      const connected = await connectAllMcpServers(servers, registry, { timeoutMs: 3_000 })
+      try {
+        const toolCount = connected.reduce((acc, s) => acc + s.tools.length, 0)
+        if (connected.length === servers.length) {
+          ok(
+            `MCP: ${connected.length}/${servers.length} server(s) connected, ${toolCount} tool(s) registered (${connected
+              .map((s) => `${s.name}=${s.tools.length}`)
+              .join(', ')})`,
+          )
+        } else {
+          const failed = servers
+            .filter((s) => !connected.find((c) => c.name === s.name))
+            .map((s) => s.name)
+          warn(
+            `MCP: ${connected.length}/${servers.length} server(s) connected; failed: ${failed.join(', ')}`,
+          )
+        }
+      } finally {
+        await closeAllMcpServers(connected)
+      }
+    }
+  } catch (err) {
+    fail(`MCP discovery failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   process.stdout.write(`\n${failed === 0 ? 'All checks passed.' : `${failed} check(s) failed.`}\n`)

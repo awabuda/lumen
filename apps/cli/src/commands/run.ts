@@ -25,6 +25,8 @@ export interface RunCommandOptions {
    *  runs. */
   memoryPath?: string
   noMemory?: boolean
+  /** Skip MCP server discovery + connection. */
+  noMcp?: boolean
 }
 
 export const runCommand = async (options: RunCommandOptions): Promise<number> => {
@@ -69,6 +71,13 @@ export const runCommand = async (options: RunCommandOptions): Promise<number> =>
     // appended the user message; we want the connection
     // closed cleanly so WAL gets checkpointed.
     await built?.memory?.dispose()
+    // Close any MCP server connections. `closeAllMcpServers`
+    // already uses Promise.allSettled, so a single stuck
+    // server can't keep the CLI alive.
+    if (built?.mcpServers.length) {
+      const { closeAllMcpServers } = await import('@lumen/mcp')
+      await closeAllMcpServers(built.mcpServers)
+    }
   }
 }
 

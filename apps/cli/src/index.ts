@@ -23,6 +23,9 @@ program
   .option('--api-key <key>', 'Override the API key')
   .option('--base-url <url>', 'Override the API base URL')
   .option('--no-tools', 'Disable filesystem tools')
+  .option('--memory-path <path>', 'Override the SQLite memory database path')
+  .option('--no-memory', 'Run without wiring a memory store')
+  .option('--no-mcp', 'Skip MCP server discovery and connection')
   .action(async (prompt: string, opts: Record<string, unknown>) => {
     const { runCommand } = await import('./commands/run.js')
     const code = await runCommand({
@@ -33,6 +36,9 @@ program
       apiKey: opts['apiKey'] as string | undefined,
       baseUrl: opts['baseUrl'] as string | undefined,
       noTools: opts['tools'] === false,
+      memoryPath: opts['memoryPath'] as string | undefined,
+      noMemory: opts['memory'] === false,
+      noMcp: opts['mcp'] === false,
     })
     process.exit(code)
   })

@@ -65,6 +65,29 @@ describe('runCommand', () => {
     })
     expect(code).not.toBe(2)
   })
+
+  it('accepts noMemory: true without error', async () => {
+    // Regression: --no-memory must be wired through commander to the
+    // run command options without throwing.
+    const code = await runCommand({
+      prompt: 'hi',
+      apiKey: 'sk-fake',
+      baseUrl: 'http://127.0.0.1:1',
+      noMemory: true,
+    })
+    expect(code).not.toBe(2)
+  })
+
+  it('accepts an explicit memoryPath', async () => {
+    const code = await runCommand({
+      prompt: 'hi',
+      apiKey: 'sk-fake',
+      baseUrl: 'http://127.0.0.1:1',
+      memoryPath: ':memory:',
+      noTools: true,
+    })
+    expect(code).not.toBe(2)
+  })
 })
 
 // Quiet a vitest warning about unhandled handlers from commander parsing.

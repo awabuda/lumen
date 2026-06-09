@@ -77,19 +77,37 @@ const readYamlIfExists = async (path: string): Promise<Record<string, unknown> |
   return parsed as Record<string, unknown>
 }
 
+const RUNTIME_ENV_KEYS = new Set([
+  'API_KEY',
+  'BASE_URL',
+  'MODEL',
+  'MEMORY_PATH',
+  'SKILLS_PATH',
+])
+
+const envSegmentToConfigKey = (segment: string): string => {
+  const parts = segment
+    .toLowerCase()
+    .split('_')
+    .filter((part) => part.length > 0)
+  const [head, ...tail] = parts
+  if (!head) return ''
+  return [head, ...tail.map((part) => `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}`)].join('')
+}
+
 const readEnv = (prefix: string): Record<string, unknown> => {
   const out: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(process.env)) {
     if (!key.startsWith(prefix)) continue
-    const path = key
-      .slice(prefix.length)
-      .toLowerCase()
-      .split('__')
-      .map((segment) => segment.replace(/-/g, ''))
+    const rawPath = key.slice(prefix.length)
+    if (RUNTIME_ENV_KEYS.has(rawPath)) continue
+    const path = rawPath.split('__').map(envSegmentToConfigKey).filter(Boolean)
     if (path.length === 0) continue
     // Very small env-shape interpreter:
     //   LUMEN_LOGGING__LEVEL=debug  -> { logging: { level: 'debug' } }
     //   LUMEN_DEFAULT_MODEL=foo     -> { defaultModel: 'foo' }
+    // Runtime-only env vars such as LUMEN_API_KEY are consumed by the
+    // CLI composition root, not by the strict config schema.
     let cursor: Record<string, unknown> = out
     for (let i = 0; i < path.length - 1; i++) {
       const seg = path[i]!

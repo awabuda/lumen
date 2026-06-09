@@ -32,6 +32,9 @@ importers:
       '@lumen/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@lumen/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@lumen/memory':
         specifier: workspace:*
         version: link:../../packages/memory
@@ -128,6 +131,28 @@ importers:
         version: 20.19.42
       typescript:
         specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@20.19.42)
+
+  packages/mcp:
+    dependencies:
+      '@lumen/config':
+        specifier: workspace:*
+        version: link:../config
+      '@lumen/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^20.14.0
+        version: 20.19.42
+      typescript:
+        specifier: ^5.7.0
         version: 5.9.3
       vitest:
         specifier: ^2.1.0
