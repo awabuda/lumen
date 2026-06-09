@@ -1,0 +1,4 @@
+
+> @lumen/core@0.1.0 build /Users/chengpengtao/workspace/lumen/packages/core
+> tsc -b
+

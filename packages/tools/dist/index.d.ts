@@ -1,19 +1,25 @@
 /**
- * @lumen/tools — default filesystem tools for the Lumen agent framework.
+ * @lumen/tools — default tools for the Lumen agent framework.
  *
  * This package ships a small, opinionated set of {@link BaseTool}
  * subclasses that the agent loop can use out of the box. They cover
- * the most common filesystem operations an LLM needs: reading,
- * writing, patching, listing, and searching.
+ * the most common operations an LLM needs: reading, writing,
+ * patching, listing, and searching the filesystem; running shell
+ * commands inside a pluggable sandbox; and a curated subset of
+ * `git` operations.
  *
  * Quick start:
  *
  * ```ts
  * import { ToolRegistry } from '@lumen/core'
- * import { createFilesystemTools } from '@lumen/tools'
+ * import { createFilesystemTools, createShellTools, createGitTools } from '@lumen/tools'
  *
  * const registry = new ToolRegistry()
- * registry.registerAll(createFilesystemTools())
+ * registry.registerAll([
+ *   ...createFilesystemTools(),
+ *   ...createShellTools(),
+ *   ...createGitTools(),
+ * ])
  * ```
  *
  * Every tool in this package:
@@ -34,17 +40,47 @@ export { ListDirTool, ListDirInputSchema, ListDirOutputSchema } from './fs/list-
 export type { ListDirInput, ListDirOutput, ListDirEntry } from './fs/list-dir.js';
 export { SearchFilesTool, SearchFilesInputSchema, SearchFilesOutputSchema } from './fs/search-files.js';
 export type { SearchFilesInput, SearchFilesOutput, SearchMatch } from './fs/search-files.js';
+export { type ShellSandbox, type ShellSandboxConfig, type ShellSandboxFactory, type ShellSandboxRequest, type ShellSandboxResult, type ShellSandboxOutcome, type ShellSandboxRefusalReason, resolveSandbox, awaitChild, } from './shell/sandbox.js';
+export { DefaultSandbox } from './shell/default-sandbox.js';
+export { NoneSandbox } from './shell/none-sandbox.js';
+export { DEFAULT_SANDBOX_FACTORIES, withSandboxFactory, defaultShellSandboxConfig, } from './shell/factories.js';
+export { TerminalTool, TerminalInputSchema, TerminalOutputSchema } from './shell/terminal.js';
+export type { TerminalInput, TerminalOutput } from './shell/terminal.js';
+export { GitTool, GitInputSchema, GitOutputSchema } from './git/git.js';
+export type { GitInput, GitOutput, GitOp } from './git/git.js';
 export { FileNotFoundError, PathKindError } from './errors.js';
 export { BaseTool, ToolRegistry } from './base.js';
 export type { ToolContext, ToolDescriptor, ToolRisk } from './base.js';
+import type { ShellSandboxConfig } from './shell/sandbox.js';
 import type { BaseTool } from './base.js';
 /**
  * Build the default set of filesystem tools in the canonical order
  * (read, write, patch, list, search). The array is fresh on every call
  * so callers are free to mutate, slice, or extend it.
- *
- * Convenience wrapper for the CLI composition root: a single import
- * gives you the whole tool palette ready for {@link ToolRegistry.registerAll}.
  */
 export declare function createFilesystemTools(): BaseTool[];
+/**
+ * Build the shell tools. Today that's just the `terminal` tool, but
+ * the factory exists so future shell-aware tools (`run_script`,
+ * `apply_patch` on a shell, etc.) can be added here without breaking
+ * the import shape callers depend on.
+ *
+ * Pass a custom `ShellSandboxConfig` to swap the strategy (e.g.
+ * `strategy: 'none'` for a hard-disable deployment, or
+ * `strategy: 'docker'` after registering the docker factory via
+ * {@link withSandboxFactory}).
+ */
+export declare function createShellTools(sandboxConfig?: ShellSandboxConfig): BaseTool[];
+/**
+ * Build the git tools. Today that's just the `git` tool, but the
+ * factory exists for the same reason as {@link createShellTools}.
+ */
+export declare function createGitTools(): BaseTool[];
+/**
+ * Build **all** the default tools in canonical order.
+ *
+ * Composition root for the CLI: a single import gives the agent the
+ * whole tool palette ready for {@link ToolRegistry.registerAll}.
+ */
+export declare function createDefaultTools(): BaseTool[];
 //# sourceMappingURL=index.d.ts.map

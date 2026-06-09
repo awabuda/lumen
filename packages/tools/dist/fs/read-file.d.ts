@@ -43,13 +43,13 @@ export declare const ReadFileOutputSchema: z.ZodObject<{
     /** Encoding used to decode the file. */
     encoding: z.ZodLiteral<"utf8">;
 }, "strip", z.ZodTypeAny, {
+    encoding: "utf8";
     content: string;
     totalLines: number;
-    encoding: "utf8";
 }, {
+    encoding: "utf8";
     content: string;
     totalLines: number;
-    encoding: "utf8";
 }>;
 export type ReadFileOutput = z.infer<typeof ReadFileOutputSchema>;
 /**

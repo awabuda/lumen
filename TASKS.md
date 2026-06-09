@@ -69,8 +69,13 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 ## P1 — Tool completeness (target: weeks 2-3)
 
 ### D. Tools (continued)
-- [ ] D7.x — list_dir, search_files, file_info
-- [ ] D8.x — web_search, web_fetch
+- [x] D7.x — `terminal` tool + ShellSandbox 抽象层
+- [x] D8.x — `git` tool (status / diff / log / branch / commit)
+- [x] D9.x — `DefaultSandbox` (env allowlist, output cap, abort wire)
+- [x] D10.x — `NoneSandbox` (policy-disabled refusal)
+- [x] D11.x — sandbox factory registry + `withSandboxFactory`
+- [x] D12.x — `createShellTools` / `createGitTools` / `createDefaultTools` factories
+- [x] D13.x — `lumen doctor` shell round-trip + git CLI check
 - [ ] D9.x — gh CLI bridge for PR creation
 - [ ] D10.x — Time / env tools
 - [ ] D11.x — Toolset grouping + lazy loading
@@ -160,6 +165,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 | 2026-06-08 | D1-D5 @lumen/tools (filesystem) | subagent → orchestrator review | ✅ typecheck + 27 tests pass + build |
 | 2026-06-08 | I1-I6 @lumen/cli (run, doctor, chat TUI) | orchestrator | ✅ typecheck + 6 tests pass + build |
 | 2026-06-08 | I7 + J1-J5 Streaming (Agent.streamRun + TUI 适配) | orchestrator | ✅ typecheck + 6 new tests pass + build |
+| 2026-06-08 | D7-D13 terminal + git + ShellSandbox (P1) | orchestrator | ✅ typecheck + 18 new tests pass + build + doctor OK |
 
 ## Architecture status (after P0-D — P0 complete)
 

@@ -52,24 +52,24 @@ export declare const SearchFilesOutputSchema: z.ZodObject<{
         line: z.ZodNumber;
         content: z.ZodString;
     }, "strip", z.ZodTypeAny, {
-        content: string;
         file: string;
+        content: string;
         line: number;
     }, {
-        content: string;
         file: string;
+        content: string;
         line: number;
     }>, "many">;
 }, "strip", z.ZodTypeAny, {
     matches: {
-        content: string;
         file: string;
+        content: string;
         line: number;
     }[];
 }, {
     matches: {
-        content: string;
         file: string;
+        content: string;
         line: number;
     }[];
 }>;

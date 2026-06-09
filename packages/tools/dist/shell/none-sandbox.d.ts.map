@@ -1,0 +1,1 @@
+{"version":3,"file":"none-sandbox.d.ts","sourceRoot":"","sources":["../../src/shell/none-sandbox.ts"],"names":[],"mappings":"AAAA;;;;;;;;;;;;;;;;GAgBG;AACH,OAAO,KAAK,EACV,YAAY,EACZ,kBAAkB,EAClB,mBAAmB,EACnB,mBAAmB,EACpB,MAAM,cAAc,CAAA;AAErB,qBAAa,WAAY,YAAW,YAAY;gBAIlC,OAAO,EAAE,kBAAkB;IAEhC,GAAG,CAAC,QAAQ,EAAE,mBAAmB,GAAG,OAAO,CAAC,mBAAmB,CAAC;CASxE"}

@@ -1,0 +1,4 @@
+
+> @lumen/cli@0.1.0 build /Users/chengpengtao/workspace/lumen/apps/cli
+> tsc -b
+
