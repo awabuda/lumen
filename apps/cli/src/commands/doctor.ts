@@ -12,6 +12,8 @@
  *   - Git tool registers (git CLI is required for any of the
  *     `git` operations to work; we warn instead of fail to
  *     support `--no-git` deployments)
+ *   - Skill registry can discover from the default skill root
+ *     without writing to disk
  *
  * Prints a series of `[OK]` / `[WARN]` / `[FAIL]` lines. Exits 0 if
  * everything critical passes, 1 otherwise.
@@ -140,7 +142,20 @@ export const doctorCommand = async (): Promise<number> => {
     fail(`Memory store failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
-  // 7. ripgrep (best-effort)
+  // 7. Skills registry discovery (read-only).
+  //    Missing ~/.lumen/skills is OK: discovery returns an empty list.
+  try {
+    const { FilesystemSkillSource, defaultSkillsPath, SkillRegistry } = await import('@lumen/skills')
+    const source = new FilesystemSkillSource({ rootDir: defaultSkillsPath() })
+    const skills = await source.discover({ cwd: process.cwd() })
+    const registry = new SkillRegistry()
+    registry.registerAll(skills)
+    ok(`Skills registry OK (${registry.size} skill(s) discovered)`)
+  } catch (err) {
+    fail(`Skills registry failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  // 8. ripgrep (best-effort)
   try {
     const { execFile } = await import('node:child_process')
     await new Promise<void>((resolve, reject) => {

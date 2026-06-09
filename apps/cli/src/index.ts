@@ -63,6 +63,27 @@ program
     process.exit(code)
   })
 
+program
+  .command('skills')
+  .description('Inspect locally installed Lumen skills')
+  .argument('[command]', '"list" (default) or "cat <id>"', 'list')
+  .argument('[id]', 'Skill id or name (for "cat")')
+  .option('-p, --prompt <text>', 'Prompt text for activation scoring (list only)')
+  .option('--path <dir>', 'Override the skill root directory')
+  .action(async (cmd: string, id: string | undefined, opts: Record<string, unknown>) => {
+    if (cmd === 'cat' && id) {
+      const { skillsCatCommand } = await import('./commands/skills.js')
+      const code = await skillsCatCommand({ id, path: opts['path'] as string | undefined })
+      process.exit(code)
+    }
+    const { skillsListCommand } = await import('./commands/skills.js')
+    const code = await skillsListCommand({
+      path: opts['path'] as string | undefined,
+      prompt: opts['prompt'] as string | undefined,
+    })
+    process.exit(code)
+  })
+
 // Default: if no subcommand, show help
 program.action(() => {
   program.help()

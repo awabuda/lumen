@@ -109,8 +109,8 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 ## P2 — Polish (target: weeks 4-6)
 
 ### F. Skills
-- [ ] F1.x — Skill base contract
-- [ ] F2.x — SKILL.md parser
+- [x] F1.x — Skill base contract + SkillRegistry
+- [x] F2.x — SKILL.md parser + FilesystemSkillSource
 - [ ] F3.x — Triggering (embedding + LLM decide)
 - [ ] F4.x — Auto-evolution
 - [ ] F5.x — Self-creation from trajectory
@@ -171,6 +171,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 | 2026-06-08 | I7 + J1-J5 Streaming (Agent.streamRun + TUI 适配) | orchestrator | ✅ typecheck + 6 new tests pass + build |
 | 2026-06-08 | D7-D13 terminal + git + ShellSandbox (P1) | orchestrator | ✅ typecheck + 18 new tests pass + build + doctor OK |
 | 2026-06-08 | E1-E7 @lumen/memory (InMemory + Sqlite + FTS5 + WAL + contract suite) | orchestrator | ✅ typecheck + 39 new tests pass + build + doctor OK |
+| 2026-06-09 | F1-F2 @lumen/skills (BaseSkill + SkillRegistry + MarkdownSkill parser + FilesystemSkillSource + CLI skills/doctor) | orchestrator | ✅ typecheck + 42+7 tests pass + build + doctor OK |
 
 ## Architecture status (after P0-D — P0 complete)
 
