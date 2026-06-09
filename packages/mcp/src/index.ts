@@ -20,6 +20,11 @@ export {
 } from './base.js'
 export { buildSafeMcpEnv, StdioMcpTransport, type StdioMcpTransportOptions } from './stdio-transport.js'
 export {
+  HttpMcpTransport,
+  type HttpMcpTransportOptions,
+  parseSseEvent,
+} from './http-transport.js'
+export {
   closeAllMcpServers,
   connectAllMcpServers,
   connectMcpServer,

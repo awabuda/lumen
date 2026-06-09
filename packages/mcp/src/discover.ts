@@ -10,6 +10,7 @@ import { type ToolRegistry } from '@lumen/core'
 import type { McpServerConfig } from '@lumen/config'
 import { McpClient, McpToolProxy, McpTransportError } from './base.js'
 import { StdioMcpTransport } from './stdio-transport.js'
+import { HttpMcpTransport } from './http-transport.js'
 
 export interface DiscoveredMcpServer {
   name: string
@@ -43,9 +44,29 @@ export const connectMcpServer = async (
       env: config.env,
       timeoutMs: options?.timeoutMs,
     })
+  } else if (config.transport === 'http') {
+    if (!config.url) {
+      throw new McpTransportError(`MCP server "${name}" uses http transport but has no url`)
+    }
+    // Pick the right auth surface for the user. `apiKey` is the
+    // ergonomic default (Bearer token); `headers` is the escape
+    // hatch for custom schemes (mTLS, signed JWT, etc.). The
+    // `headers` field wins over `apiKey` if both are set — the
+    // user knows what they want.
+    transport = new HttpMcpTransport({
+      url: config.url,
+      ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
+      ...(config.headers !== undefined ? { headers: config.headers } : {}),
+      timeoutMs: options?.timeoutMs,
+    })
   } else {
-    // HTTP transport — not yet implemented
-    throw new McpTransportError(`MCP server "${name}" uses http transport which is not yet implemented`)
+    // Defensive: the schema is `z.enum(['stdio', 'http'])` so we
+    // can't actually reach this branch in production, but a
+    // future schema widening (e.g. `websocket`) would land here.
+    const _exhaustive: never = config.transport
+    throw new McpTransportError(
+      `MCP server "${name}" uses unsupported transport "${String(_exhaustive)}"`,
+    )
   }
 
   const client = new McpClient(transport, {
