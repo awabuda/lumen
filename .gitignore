@@ -1,2 +1,15 @@
 node_modules/
 */node_modules/*
+**/node_modules/**
+dist/
+*/dist/*
+**/dist/**
+.turbo/
+*/.turbo/
+**/.turbo/
+*.tsbuildinfo
+**/.vite/
+**/vite-cache/
+coverage/
+*.log
+.DS_Store
