@@ -70,6 +70,89 @@ program
   })
 
 program
+  .command('model')
+  .description('Inspect configured LLM models and providers')
+  .argument('[subcommand]', '"list" (default), "show <name>", or "providers"', 'list')
+  .argument('[name]', 'Model name (for "show")')
+  .option('-c, --config <path>', 'Path to a Lumen config file')
+  .action(async (subcommand: string, name: string | undefined, opts: Record<string, unknown>) => {
+    const { modelListCommand, modelShowCommand, modelProvidersCommand } = await import(
+      './commands/model.js'
+    )
+    const configPath = opts['config'] as string | undefined
+    let code = 0
+    if (subcommand === 'show') {
+      if (!name) {
+        process.stderr.write('lumen model: missing <name> for "show"\n')
+        code = 1
+      } else {
+        code = await modelShowCommand({ configPath, name })
+      }
+    } else if (subcommand === 'providers') {
+      code = await modelProvidersCommand({ configPath })
+    } else if (subcommand === 'list') {
+      code = await modelListCommand({ configPath })
+    } else {
+      process.stderr.write(`lumen model: unknown subcommand: ${subcommand}\n`)
+      code = 1
+    }
+    process.exit(code)
+  })
+
+program
+  .command('config')
+  .description('Inspect the resolved Lumen config')
+  .argument('[subcommand]', '"show" (default), "path", or "validate"', 'show')
+  .option('-c, --config <path>', 'Path to a Lumen config file')
+  .action(async (subcommand: string, opts: Record<string, unknown>) => {
+    const { configShowCommand, configPathCommand, configValidateCommand } = await import(
+      './commands/config.js'
+    )
+    const configPath = opts['config'] as string | undefined
+    let code = 0
+    if (subcommand === 'path') {
+      code = await configPathCommand({ configPath })
+    } else if (subcommand === 'validate') {
+      code = await configValidateCommand({ configPath })
+    } else if (subcommand === 'show') {
+      code = await configShowCommand({ configPath })
+    } else {
+      process.stderr.write(`lumen config: unknown subcommand: ${subcommand}\n`)
+      code = 1
+    }
+    process.exit(code)
+  })
+
+program
+  .command('tools')
+  .description('Inspect registered Lumen tools')
+  .argument('[subcommand]', '"list" (default), "show <name>", or "check"', 'list')
+  .argument('[name]', 'Tool name (for "show")')
+  .option('--approval-required', 'Only show tools that require approval at runtime')
+  .action(async (subcommand: string, name: string | undefined, opts: Record<string, unknown>) => {
+    const { toolsListCommand, toolsShowCommand, toolsCheckCommand } = await import(
+      './commands/tools.js'
+    )
+    let code = 0
+    if (subcommand === 'show') {
+      if (!name) {
+        process.stderr.write('lumen tools: missing <name> for "show"\n')
+        code = 1
+      } else {
+        code = await toolsShowCommand({ name })
+      }
+    } else if (subcommand === 'check') {
+      code = await toolsCheckCommand()
+    } else if (subcommand === 'list') {
+      code = await toolsListCommand({ approvalRequiredOnly: opts['approvalRequired'] === true })
+    } else {
+      process.stderr.write(`lumen tools: unknown subcommand: ${subcommand}\n`)
+      code = 1
+    }
+    process.exit(code)
+  })
+
+program
   .command('skills')
   .description('Inspect locally installed Lumen skills')
   .argument('[command]', '"list" (default) or "cat <id>"', 'list')
