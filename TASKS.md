@@ -77,7 +77,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] D12.x — `createShellTools` / `createGitTools` / `createDefaultTools` factories
 - [x] D13.x — `lumen doctor` shell round-trip + git CLI check
 - [ ] D9.x — gh CLI bridge for PR creation
-- [ ] D10.x — Time / env tools
+- [x] D10.x — Time / env tools (date, env, whoami, 8 tests)
 - [ ] D11.x — Toolset grouping + lazy loading
 - [ ] D12.x — Sandboxing (Docker)
 

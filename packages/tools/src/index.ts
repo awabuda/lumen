@@ -73,6 +73,15 @@ export type { TerminalInput, TerminalOutput } from './shell/terminal.js'
 export { GitTool, GitInputSchema, GitOutputSchema } from './git/git.js'
 export type { GitInput, GitOutput, GitOp } from './git/git.js'
 
+export { DateTool, DateInputSchema, DateOutputSchema } from './meta/date.js'
+export type { DateInput, DateOutput } from './meta/date.js'
+
+export { EnvTool, EnvInputSchema, EnvOutputSchema } from './meta/env.js'
+export type { EnvInput, EnvOutput } from './meta/env.js'
+
+export { WhoamiTool, WhoamiInputSchema, WhoamiOutputSchema } from './meta/whoami.js'
+export type { WhoamiInput, WhoamiOutput } from './meta/whoami.js'
+
 export { FileNotFoundError, PathKindError } from './errors.js'
 
 export { BaseTool, ToolRegistry } from './base.js'
@@ -85,6 +94,9 @@ import { ListDirTool } from './fs/list-dir.js'
 import { SearchFilesTool } from './fs/search-files.js'
 import { TerminalTool } from './shell/terminal.js'
 import { GitTool } from './git/git.js'
+import { DateTool } from './meta/date.js'
+import { EnvTool } from './meta/env.js'
+import { WhoamiTool } from './meta/whoami.js'
 import type { ShellSandboxConfig } from './shell/sandbox.js'
 import { defaultShellSandboxConfig } from './shell/factories.js'
 import type { BaseTool } from './base.js'
@@ -134,5 +146,13 @@ export function createGitTools(): BaseTool[] {
  * whole tool palette ready for {@link ToolRegistry.registerAll}.
  */
 export function createDefaultTools(): BaseTool[] {
-  return [...createFilesystemTools(), ...createShellTools(), ...createGitTools()]
+  return [...createFilesystemTools(), ...createShellTools(), ...createGitTools(), ...createMetaTools()]
+}
+
+/**
+ * Build the meta / utility tools (date, env, whoami).
+ * These are small, safe tools that help the agent orient itself.
+ */
+export function createMetaTools(): BaseTool[] {
+  return [new DateTool(), new EnvTool(), new WhoamiTool()]
 }
