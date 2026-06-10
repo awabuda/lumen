@@ -61,8 +61,8 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 ### H. Config
 - [x] H1.1 — `@lumen/config` package (schema, loader, errors, define)
 - [x] H1.2 — Tests for loader
-- [ ] H1.3 — Hot-reload support
-- [ ] H1.4 — Profile switching
+- [x] H1.3 — Hot-reload support (watchConfig, fs.watch + debounce, 5 tests)
+- [x] H1.4 — Profile switching (loadConfigWithProfile, `profiles:` map + sibling files, 14 tests)
 
 ---
 

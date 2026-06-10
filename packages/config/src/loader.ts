@@ -40,7 +40,7 @@ const DEFAULT_PROJECT_LOCATIONS = ['.lumen/config.yaml', '.lumen/config.yml', 'l
 const DEFAULT_USER_PATH = join(homedir(), '.lumen', 'config.yaml')
 
 /** Deep merge plain objects. Arrays and other non-plain values are replaced. */
-const deepMerge = (
+export const deepMerge = (
   base: Record<string, unknown>,
   override: Record<string, unknown>,
 ): Record<string, unknown> => {

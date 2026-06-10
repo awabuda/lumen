@@ -131,6 +131,12 @@ export const LumenConfigSchema = z
     skills: SkillsConfigSchema.default({}),
     mcp: McpConfigSchema.default({}),
     logging: LoggingConfigSchema.default({}),
+    // Profile-switching metadata. These keys are reserved by
+    // `loadConfigWithProfile` / `resolveProfile`; they are not part
+    // of the runtime config but must pass strict validation so users
+    // can declare them in their YAML without surprises.
+    profiles: z.record(z.record(z.unknown())).optional(),
+    defaultProfile: z.string().min(1).optional(),
   })
   .strict()
 
