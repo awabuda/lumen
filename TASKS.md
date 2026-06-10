@@ -33,7 +33,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] C2.x — OpenAI-compatible concrete provider
 - [x] C3.x — `packages/llm` package
 - [x] C4.x — Anthropic concrete provider (28 tests)
-- [ ] C5.x — Ollama/local provider
+- [x] C5.x — Ollama/local provider (26 tests)
 
 ### D. Tools
 - [x] D1.x — BaseTool contract (in @lumen/core)

@@ -12,6 +12,12 @@
  *     (`/v1/messages`). Used by Claude Sonnet, Opus, and Haiku, and by
  *     any Anthropic-compatible gateway.
  *
+ *   - {@link OllamaProvider} — talks Ollama's native `/api/chat`,
+ *     `/api/embed`, and `/api/embeddings` endpoints. Used for local
+ *     inference against llama.cpp-backed models (llama3.1, mistral,
+ *     qwen2.5, gemma2, etc.). Note: OpenAI-compatible gateways in front
+ *     of Ollama should use {@link OpenAICompatibleProvider} instead.
+ *
  * The providers are fully stand-alone: they depend only on `@lumen/core`
  * for the {@link BaseProvider} contract. The rest of the agent runtime
  * is not required to use them.
@@ -37,6 +43,16 @@
  *   defaultModel: 'claude-sonnet-4-5',
  * })
  * ```
+ *
+ * Quick start (Ollama, local):
+ *
+ * ```ts
+ * import { createOllamaProvider } from '@lumen/llm'
+ *
+ * const provider = createOllamaProvider({
+ *   defaultModel: 'llama3.1',
+ * })
+ * ```
  */
 
 export { OpenAICompatibleProvider, createOpenAIProvider } from './openai-compatible.js'
@@ -48,4 +64,6 @@ export {
   DEFAULT_MAX_TOKENS,
 } from './anthropic.js'
 export type { AnthropicOptions } from './anthropic.js'
+export { OllamaProvider, createOllamaProvider, DEFAULT_OLLAMA_BASE_URL, parseNdjsonLines } from './ollama.js'
+export type { OllamaOptions } from './ollama.js'
 export { HttpStatusError, ResponseShapeError, StreamParseError, isRetryableStatus } from './errors.js'
