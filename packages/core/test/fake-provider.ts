@@ -41,7 +41,12 @@ export class FakeProvider extends BaseProvider {
   }
 
   public override async chat(_request: ChatRequest, _options?: StreamOptions): Promise<ChatResponse> {
-    this.calls.push(_request)
+    // Clone the request so the stored copy doesn't mutate when the
+    // agent loop appends more messages after this call returns.
+    this.calls.push({
+      ..._request,
+      messages: [..._request.messages],
+    })
     const step = this.script[this.callIndex]
     if (!step) {
       throw new Error(`FakeProvider: script exhausted at call ${this.callIndex}`)

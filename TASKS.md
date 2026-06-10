@@ -102,7 +102,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 ### L. Testing
 - [ ] L1.x — Vitest configured in all packages
 - [ ] L2.x — Contract tests for every base
-- [ ] L3.x — Integration test: agent loop end-to-end
+- [x] L3.x — Integration test: agent loop end-to-end (6 tests, agent+provider+tools+memory+hooks 全链路)
 
 ---
 
