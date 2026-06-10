@@ -82,6 +82,9 @@ export type { EnvInput, EnvOutput } from './meta/env.js'
 export { WhoamiTool, WhoamiInputSchema, WhoamiOutputSchema } from './meta/whoami.js'
 export type { WhoamiInput, WhoamiOutput } from './meta/whoami.js'
 
+export { GhTool, GhInputSchema, GhOutputSchema } from './github/gh.js'
+export type { GhInput, GhOutput, GhOp } from './github/gh.js'
+
 export { FileNotFoundError, PathKindError } from './errors.js'
 
 export { BaseTool, ToolRegistry } from './base.js'
@@ -97,6 +100,7 @@ import { GitTool } from './git/git.js'
 import { DateTool } from './meta/date.js'
 import { EnvTool } from './meta/env.js'
 import { WhoamiTool } from './meta/whoami.js'
+import { GhTool } from './github/gh.js'
 import type { ShellSandboxConfig } from './shell/sandbox.js'
 import { defaultShellSandboxConfig } from './shell/factories.js'
 import type { BaseTool } from './base.js'
@@ -146,7 +150,7 @@ export function createGitTools(): BaseTool[] {
  * whole tool palette ready for {@link ToolRegistry.registerAll}.
  */
 export function createDefaultTools(): BaseTool[] {
-  return [...createFilesystemTools(), ...createShellTools(), ...createGitTools(), ...createMetaTools()]
+  return [...createFilesystemTools(), ...createShellTools(), ...createGitTools(), ...createMetaTools(), ...createGithubTools()]
 }
 
 /**
@@ -155,4 +159,11 @@ export function createDefaultTools(): BaseTool[] {
  */
 export function createMetaTools(): BaseTool[] {
   return [new DateTool(), new EnvTool(), new WhoamiTool()]
+}
+
+/**
+ * Build the GitHub tools. Today that's just the `gh` tool.
+ */
+export function createGithubTools(): BaseTool[] {
+  return [new GhTool()]
 }
