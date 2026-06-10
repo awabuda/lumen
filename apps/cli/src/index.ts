@@ -12,6 +12,9 @@ program
   .name('lumen')
   .description('A self-improving TypeScript agent framework')
   .version('0.1.0')
+  .option('-m, --model <model>', 'Override the LLM model (default: chat)')
+  .option('-c, --config <path>', 'Path to a Lumen config file (default: chat)')
+  .option('--cwd <path>', 'Working directory for tool execution (default: chat)')
 
 program
   .command('run')
@@ -173,9 +176,24 @@ program
     process.exit(code)
   })
 
-// Default: if no subcommand, show help
-program.action(() => {
-  program.help()
+// `lumen` (no subcommand) — alias for `lumen chat`. Allows `lumen -m foo`
+// to drop into the TUI without remembering the explicit `chat` keyword.
+// We keep the two entry points wired to the *same* handler so a future
+// redesign of the chat surface only has to touch one place.
+program.action(async (opts: Record<string, unknown>) => {
+  // Commander emits this action for both the "no subcommand" and the
+  // "subcommand provided" case. Subcommands have their own .action()
+  // attached and short-circuit before this fires, so reaching here
+  // means the user typed `lumen` (or `lumen --foo`) with nothing else.
+  // We deliberately do NOT call program.help() here — the user is
+  // trying to chat, not read docs.
+  const { chatCommand } = await import('./commands/chat.js')
+  const code = await chatCommand({
+    model: opts['model'] as string | undefined,
+    configPath: opts['config'] as string | undefined,
+    cwd: opts['cwd'] as string | undefined,
+  })
+  process.exit(code)
 })
 
 program.parseAsync(process.argv).catch((err: unknown) => {

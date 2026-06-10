@@ -95,7 +95,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 
 ### I. CLI (continued)
 - [ ] I4.x — TUI with Ink
-- [ ] I5.x — `lumen` (default TUI command)
+- [x] **I5.x** — `lumen` (default TUI command)  *(done 2026-06-10)*
 - [ ] I6.x — `lumen model`, `lumen config`, `lumen tools`
 - [ ] I7.x — `lumen session`, `lumen doctor`, `lumen update`
 
