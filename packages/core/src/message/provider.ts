@@ -17,6 +17,7 @@
 import type { z } from 'zod'
 import type { Message } from './index.js'
 import type { AssistantMessage, StreamEvent, StreamOptions } from './index.js'
+import type { ToolDescriptor } from '../tools/index.js'
 
 export interface ProviderCapabilities {
   /** Provider can stream responses incrementally. */
@@ -56,6 +57,13 @@ export interface ChatRequest {
    * schema. If unsupported, the provider throws.
    */
   readonly responseSchema?: z.ZodType<unknown>
+  /**
+   * Tools the model may invoke this turn. Providers translate each
+   * {@link ToolDescriptor} into the backend's native tool schema
+   * (OpenAI `tools`, Anthropic `tools` with `input_schema`, etc.). If
+   * omitted, the model receives no tool definitions for this turn.
+   */
+  readonly tools?: ReadonlyArray<ToolDescriptor>
   /**
    * Bag for provider-specific options. Untyped by design — providers
    * document their own keys.

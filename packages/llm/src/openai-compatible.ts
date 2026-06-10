@@ -43,8 +43,15 @@ import {
   type TextPart,
   type ToolResult,
   type UserMessage,
+  type ToolDescriptor,
 } from '@lumen/core'
-import { HttpStatusError, ResponseShapeError, StreamParseError, isRetryableStatus } from './errors.js'
+import {
+  HttpStatusError,
+  ResponseShapeError,
+  StreamParseError,
+  isRetryableStatus,
+  parseResponseJson,
+} from './errors.js'
 
 // ---------------------------------------------------------------------------
 // Zod schemas for the OpenAI wire format
@@ -587,6 +594,16 @@ export class OpenAICompatibleProvider extends BaseProvider {
     if (request.maxTokens !== undefined) body.max_tokens = request.maxTokens
     if (request.topP !== undefined) body.top_p = request.topP
     if (request.stop !== undefined) body.stop = request.stop.length === 1 ? request.stop[0] : [...request.stop]
+    if (request.tools && request.tools.length > 0) {
+      body.tools = request.tools.map((t: ToolDescriptor) => ({
+        type: 'function' as const,
+        function: {
+          name: t.name,
+          ...(t.description ? { description: t.description } : {}),
+          parameters: t.inputJsonSchema,
+        },
+      }))
+    }
     if (stream) body.stream = true
     return body
   }
@@ -710,25 +727,6 @@ function extractDataPayloads(block: string): string[] {
 // ---------------------------------------------------------------------------
 // Misc utilities
 // ---------------------------------------------------------------------------
-
-/** Parse a JSON string into a Zod-validated shape, throwing a typed error. */
-export function parseResponseJson<S extends z.ZodTypeAny>(text: string, schema: S): z.infer<S> {
-  let raw: unknown
-  try {
-    raw = JSON.parse(text)
-  } catch (_cause) {
-    throw new ResponseShapeError([{ path: '<root>', message: 'response is not valid JSON' }], text)
-  }
-  const result = schema.safeParse(raw)
-  if (!result.success) {
-    const issues = result.error.issues.map((i) => ({
-      path: i.path.join('.') || '<root>',
-      message: i.message,
-    }))
-    throw new ResponseShapeError(issues, text)
-  }
-  return result.data
-}
 
 /** Pull a friendly `error.message` out of an OpenAI-style error body. */
 function extractUpstreamMessage(body: string): string | undefined {

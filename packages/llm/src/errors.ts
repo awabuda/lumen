@@ -1,11 +1,13 @@
 /**
- * LLM-specific error types.
+ * LLM-specific error types and shared parsing helpers.
  *
  * The provider contract in `@lumen/core` already exports a generic
  * {@link ProviderError} that wraps any LLM backend failure with `providerId`,
  * `statusCode`, and `retryable` metadata. This file adds the few sub-types
  * and helpers that are useful when implementing a concrete provider.
  */
+
+import type { z } from 'zod'
 
 /** Thrown when an OpenAI-compatible provider returns a non-2xx HTTP response. */
 export class HttpStatusError extends Error {
@@ -64,6 +66,30 @@ export class StreamParseError extends Error {
 export function isRetryableStatus(status: number): boolean {
   if (status === 408 || status === 429) return true
   return status >= 500 && status < 600
+}
+
+/**
+ * Parse a JSON string into a Zod-validated shape, throwing a typed error
+ * on either failure. Lives in `errors.ts` (not in any provider module)
+ * because every LLM provider does exactly this dance and we don't want
+ * each one to reinvent the catch / rethrow logic.
+ */
+export function parseResponseJson<S extends z.ZodTypeAny>(text: string, schema: S): z.infer<S> {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch (_cause) {
+    throw new ResponseShapeError([{ path: '<root>', message: 'response is not valid JSON' }], text)
+  }
+  const result = schema.safeParse(raw)
+  if (!result.success) {
+    const issues = result.error.issues.map((i) => ({
+      path: i.path.join('.') || '<root>',
+      message: i.message,
+    }))
+    throw new ResponseShapeError(issues, text)
+  }
+  return result.data
 }
 
 function truncate(s: string, max: number): string {
