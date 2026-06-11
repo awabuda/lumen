@@ -154,7 +154,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [ ] K4.x — Multi-user collaboration
 
 ### M. Docs & release
-- [ ] M1.x — User docs (zh + en)
+- [x] **M1.x** — User docs (zh + en)  *(done 2026-06-10, see README.md)*
 - [ ] M2.x — Developer docs
 - [ ] M3.x — npm + binary + Docker + Homebrew
 - [ ] M4.x — Security audit

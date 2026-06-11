@@ -35,7 +35,7 @@ import type {
 import { BaseProvider } from '../message/provider.js'
 import { ToolRegistry } from '../tools/index.js'
 import { BaseMemoryStore } from '../memory/index.js'
-import { BaseLogger } from '../logging/index.js'
+import { BaseLogger, ConsoleLogger } from '../logging/index.js'
 import { HookRegistry } from '../hooks/index.js'
 import { Budget } from '../budget/index.js'
 import { AbortError, MaxIterationsExceededError, ProviderError, ToolError } from '../errors/index.js'
@@ -584,10 +584,11 @@ export class Agent {
         cwd: this.cwd,
         signal: signal ?? new AbortController().signal,
         sessionId: '',
-        log: (level, msg, ctx) => {
-          if (level === 'error') this.logger.error(msg, ctx)
-          else if (level === 'warn') this.logger.warn(msg, ctx)
-          else this.logger.info(msg, ctx)
+        log: {
+          debug: (msg, meta) => this.logger.debug(msg, meta),
+          info: (msg, meta) => this.logger.info(msg, meta),
+          warn: (msg, meta) => this.logger.warn(msg, meta),
+          error: (msg, meta) => this.logger.error(msg, meta),
         },
       })
       return {
