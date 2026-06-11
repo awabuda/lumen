@@ -135,7 +135,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 
 ### L. Testing (continued)
 - [x] **L4.x** — Snapshot tests for TUI  *(done 2026-06-10)*
-- [ ] L5.x — Real-scenario scripts
+- [x] **L5.x** — Real-scenario scripts  *(done 2026-06-11)*
 
 ---
 
