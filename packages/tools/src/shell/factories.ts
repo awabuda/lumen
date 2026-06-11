@@ -13,11 +13,13 @@
 import type { ShellSandboxConfig, ShellSandboxFactory } from './sandbox.js'
 import { DefaultSandbox } from './default-sandbox.js'
 import { NoneSandbox } from './none-sandbox.js'
+import { dockerSandboxFactory } from './docker-sandbox.js'
 
-/** Built-in factories keyed by strategy name. */
+/** All built-in sandbox factories, keyed by strategy name. */
 export const DEFAULT_SANDBOX_FACTORIES: Readonly<Record<string, ShellSandboxFactory>> = {
   default: (config) => new DefaultSandbox(config),
   none: (config) => new NoneSandbox(config),
+  docker: dockerSandboxFactory,
 }
 
 /**
