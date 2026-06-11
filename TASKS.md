@@ -112,7 +112,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] F1.x — Skill base contract + SkillRegistry
 - [x] F2.x — SKILL.md parser + FilesystemSkillSource
 - [x] **F3.x** — Skill triggering (keyword + embedding)  *(done 2026-06-10)*
-- [ ] F4.x — Auto-evolution
+- [x] **F4.x** — Skill auto-evolution  *(done 2026-06-11)*
 - [ ] F5.x — Self-creation from trajectory
 
 ### G. MCP
