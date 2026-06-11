@@ -89,7 +89,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] E5.x — SqliteStore 文件持久化 + readonly + 多连接（WAL 验证）
 - [x] E6.x — CLI composition root 接入默认 `~/.lumen/memory.db`
 - [x] E7.x — `lumen doctor` memory round-trip 检查
-- [ ] E8.x — sqlite-vec vector store
+- [x] **E8.x** — sqlite-vec vector backend  *(done 2026-06-10, see packages/memory/src/vector-backend.ts)*
 - [ ] E9.x — Working memory
 - [ ] E10.x — Cross-session retrieval
 

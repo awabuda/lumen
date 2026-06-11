@@ -42,6 +42,12 @@
  */
 import { BaseMemoryStore, type MemoryQuery, type MemoryRecord, type MemorySearchResult, type SessionMessage, type SessionRecord } from '@lumen/core'
 import BetterSqlite3, { type Database as BetterSqlite3Database, type Statement } from 'better-sqlite3'
+import {
+  BaseVectorBackend,
+  BruteForceVectorBackend,
+  SqliteVecBackend,
+  type VectorHit,
+} from './vector-backend.js'
 
 /** Bumped when the schema shape changes incompatibly. */
 const SCHEMA_VERSION = 1
@@ -78,6 +84,18 @@ export class SqliteStore extends BaseMemoryStore {
    */
   private stmts: PreparedStatements | null = null
   private initialized = false
+  /**
+   * Vector backend, set in {@link init}. The contract is:
+   *   - `BruteForceVectorBackend` if `sqlite-vec` could not
+   *     be loaded.
+   *   - `SqliteVecBackend` if the extension was found and
+   *     loaded successfully.
+   *
+   * Callers should not assume which one is active; use
+   * {@link vectorBackendId} to inspect if you need to
+   * (e.g. to log the active strategy in `lumen doctor`).
+   */
+  private vector: BaseVectorBackend | null = null
 
   constructor(config: SqliteStoreConfig) {
     super()
@@ -110,12 +128,104 @@ export class SqliteStore extends BaseMemoryStore {
       this.db.exec(ROLLBACK)
       throw err
     }
+    // Set up the vector backend. We try the sqlite-vec
+    // extension first; on any failure (package not
+    // installed, ABI mismatch, vec0 unsupported on this
+    // SQLite build) we silently fall back to the
+    // brute-force backend. The active backend's id is
+    // exposed via {@link vectorBackendId} so `lumen doctor`
+    // can surface the choice to the operator.
+    this.vector = this.buildVectorBackend()
+  }
+
+  /**
+   * Build the active vector backend. Public for testing
+   * (a test that does not want the sqlite-vec path can
+   * override this via a subclass); production code
+   * should leave it alone.
+   */
+  private buildVectorBackend(): BaseVectorBackend {
+    // The default dimensionality is 1536 (text-embedding-3-small).
+    // We do not hard-code this; an operator embedding
+    // 384-dim vectors (sentence-transformers/all-MiniLM-L6-v2)
+    // can change it via a derived class.
+    const dimensions = 1536
+    const loaded = SqliteVecBackend.tryLoad(this.db)
+    if (loaded) {
+      const backend = new SqliteVecBackend(this.db, dimensions)
+      backend.init()
+      return backend
+    }
+    return new BruteForceVectorBackend(dimensions)
+  }
+
+  /** Identifier of the active vector backend (`'sqlite-vec'` or `'brute-force'`). */
+  public get vectorBackendId(): string {
+    return this.vector?.id ?? '(uninitialized)'
   }
 
   public async dispose(): Promise<void> {
     // better-sqlite3's `close()` is synchronous; we wrap it in a
     // resolved promise to satisfy the async contract.
+    await this.vector?.dispose()
+    this.vector = null
     this.db.close()
+  }
+
+  /**
+   * Top-K vector similarity search.
+   *
+   * @param embedding Float32-packed query embedding, same
+   *   dimensionality as the active backend.
+   * @param k Maximum hits to return. Defaults to 10.
+   * @returns Up to `k` `MemorySearchResult` records ordered
+   *   by descending similarity. Records without a stored
+   *   embedding are NOT returned by this method; use
+   *   {@link search} for hybrid text+vector queries.
+   */
+  public async vectorSearch(
+    embedding: Uint8Array,
+    k = 10,
+  ): Promise<ReadonlyArray<MemorySearchResult>> {
+    if (!this.vector) {
+      throw new Error('SqliteStore used before init() completed. Call init() first.')
+    }
+    if (embedding.byteLength === 0) return []
+    const hits = await this.vector.topK(embedding, k)
+    if (hits.length === 0) return []
+    // Join vector hits back onto the records table so the
+    // caller gets the full MemoryRecord, not just the id.
+    // We do a single parameterised IN-clause round-trip.
+    const ids = hits.map((h) => h.id)
+    const placeholders = ids.map(() => '?').join(', ')
+    const sql =
+      'SELECT id, kind, content, trust, created_at, updated_at, tags, metadata ' +
+      `FROM records WHERE id IN (${placeholders})`
+    const rows = this.db.prepare(sql).all(...ids) as Array<{
+      id: string
+      kind: string
+      content: string
+      trust: number
+      created_at: number
+      updated_at: number
+      tags: string
+      metadata: string
+    }>
+    const byId = new Map<string, (typeof rows)[number]>()
+    for (const r of rows) byId.set(r.id, r)
+    // Preserve the vector backend's similarity order, not
+    // the row table's natural order.
+    const out: MemorySearchResult[] = []
+    for (const h of hits) {
+      const row = byId.get(h.id)
+      if (!row) {
+        // Stale hit: the row was deleted between the
+        // vector scan and the join. Drop it.
+        continue
+      }
+      out.push({ record: rowToRecord(row), score: h.score })
+    }
+    return out
   }
 
   /**
