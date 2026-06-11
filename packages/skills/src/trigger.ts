@@ -69,14 +69,14 @@ export class KeywordTrigger extends BaseSkillTrigger {
     const scored: SkillTriggerResult[] = []
 
     for (const skill of skills) {
-      const words = skill.triggerWords
-      if (!words || words.length === 0) continue
+      const keywordTriggers = skill.triggers.filter((t) => t.kind === 'keyword')
+      if (keywordTriggers.length === 0) continue
       let matches = 0
-      for (const word of words) {
-        if (lower.includes(word.toLowerCase())) matches += 1
+      for (const trigger of keywordTriggers) {
+        if (lower.includes(trigger.value.toLowerCase())) matches += 1
       }
       if (matches > 0) {
-        scored.push({ skill, score: matches / words.length })
+        scored.push({ skill, score: matches / keywordTriggers.length })
       }
     }
 

@@ -20,7 +20,18 @@
  */
 
 import type { BaseMemoryStore, MemoryRecord } from '@lumen/core'
-import type { BaseProvider, ChatMessage } from '@lumen/core'
+
+/** Minimal message type — mirrors @lumen/core's message types. */
+interface ChatMessage {
+  readonly role: string
+  readonly content: string
+  readonly toolName?: string
+}
+
+/** Minimal provider type — mirrors @lumen/core's BaseProvider. */
+interface MinimalProvider {
+  chat(opts: { model: string; messages: ChatMessage[]; temperature?: number }): Promise<{ content: string }>
+}
 
 /** A single extracted fact. */
 export interface ExtractedFact {
@@ -127,10 +138,10 @@ export class RuleBasedReflector extends BaseReflector {
  */
 export class LLMReflector extends BaseReflector {
   public readonly id = 'llm'
-  private readonly provider: BaseProvider
+  private readonly provider: MinimalProvider
   private readonly model: string
 
-  public constructor(provider: BaseProvider, model = 'gpt-4o-mini') {
+  public constructor(provider: MinimalProvider, model = 'gpt-4o-mini') {
     super()
     this.provider = provider
     this.model = model

@@ -2,7 +2,10 @@
 
 import { describe, expect, it } from 'vitest'
 import { KeywordTrigger, EmbeddingTrigger } from '../src/trigger.js'
-import type { BaseSkill } from '../src/base.js'
+import type { BaseSkill, SkillTrigger } from '../src/base.js'
+
+const toTriggers = (words: string[]): SkillTrigger[] =>
+  words.map((w) => ({ kind: 'keyword' as const, value: w, weight: 0.7 }))
 
 // Minimal fake skill for testing.
 const fakeSkill = (name: string, triggerWords: string[], description: string): BaseSkill => ({
@@ -10,7 +13,7 @@ const fakeSkill = (name: string, triggerWords: string[], description: string): B
   name,
   description,
   version: '1.0.0',
-  triggerWords,
+  triggers: toTriggers(triggerWords),
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   outputSchema: { type: 'object', properties: {}, additionalProperties: false },
   async execute(): Promise<unknown> {
@@ -49,9 +52,16 @@ describe('KeywordTrigger', () => {
     expect(results[0]?.score).toBe(0.5)
   })
 
-  it('skips skills with no trigger words', async () => {
+  it('skips skills with no keyword triggers', async () => {
     const trigger = new KeywordTrigger()
-    const skills = [fakeSkill('empty', [], 'No triggers')]
+    const skills: BaseSkill[] = [{
+      id: 'empty', name: 'empty', description: 'No triggers',
+      version: '1.0.0',
+      triggers: [],
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      outputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      async execute(): Promise<unknown> { return { ok: true } },
+    }]
     const results = await trigger.trigger('anything', skills)
     expect(results).toEqual([])
   })
@@ -71,7 +81,6 @@ describe('KeywordTrigger', () => {
 describe('EmbeddingTrigger', () => {
   it('returns results when embed returns valid vectors', async () => {
     const embed = async (text: string): Promise<ReadonlyArray<number>> => {
-      // Simple 2-dim embedding: first char code as proxy.
       return [text.charCodeAt(0) % 10, text.length % 10]
     }
     const trigger = new EmbeddingTrigger(embed)

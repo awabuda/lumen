@@ -1,6 +1,6 @@
 /** Tests for the telemetry collector. */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ConsoleTelemetryBackend, NoopTelemetryBackend, TelemetryCollector } from '../src/telemetry/index.js'
 
 describe('NoopTelemetryBackend', () => {

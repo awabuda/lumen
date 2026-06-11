@@ -16,7 +16,11 @@
  */
 
 import type { BaseMemoryStore, MemoryRecord } from '@lumen/core'
-import type { BaseProvider } from '@lumen/core'
+
+/** Minimal provider type — mirrors @lumen/core's BaseProvider. */
+interface MinimalProvider {
+  chat(opts: { model: string; messages: Array<{ role: string; content: string }>; temperature?: number }): Promise<{ content: string }>
+}
 
 /** A detected conflict between two records. */
 export interface Conflict {
@@ -129,10 +133,10 @@ export class KeywordConflictDetector extends BaseConflictDetector {
  */
 export class LLMConflictDetector extends BaseConflictDetector {
   public readonly id = 'llm'
-  private readonly provider: BaseProvider
+  private readonly provider: MinimalProvider
   private readonly model: string
 
-  public constructor(provider: BaseProvider, model = 'gpt-4o-mini') {
+  public constructor(provider: MinimalProvider, model = 'gpt-4o-mini') {
     super()
     this.provider = provider
     this.model = model
