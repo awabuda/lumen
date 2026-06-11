@@ -125,7 +125,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 
 ### E. Memory (continued)
 - [ ] E7.x — Long-term profile
-- [ ] E8.x — Reflection + fact extraction
+- [x] **E8.x** — Reflection + fact extraction  *(done 2026-06-10)*
 - [ ] E9.x — Conflict detection
 
 ### H. Config (continued)

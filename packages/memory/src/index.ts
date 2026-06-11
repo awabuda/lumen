@@ -54,3 +54,9 @@ export {
   type RetrievalQuery,
   type RetrievalResult,
 } from './retriever.js'
+export {
+  BaseReflector,
+  RuleBasedReflector,
+  LLMReflector,
+  type ExtractedFact,
+} from './reflector.js'
