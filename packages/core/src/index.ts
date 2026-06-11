@@ -127,6 +127,15 @@ export {
   type TelemetryEvent,
 } from './telemetry/index.js'
 
+// Sub-agent delegation
+export {
+  BaseSubAgent,
+  SingleRunSubAgent,
+  createSubAgent,
+  SubAgentOptionsSchema,
+  type SubAgentOptions,
+} from './agent/sub-agent.js'
+
 // Budget
 export { Budget, type BudgetState } from './budget/index.js'
 

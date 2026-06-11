@@ -18,11 +18,23 @@
 
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
-import type { BaseProvider, ChatMessage } from '@lumen/core'
 import type { BaseSkill } from './base.js'
 import type { SkillRegistry } from './registry.js'
 import { MarkdownSkill } from './markdown-skill.js'
 import { parseSkillMarkdown } from './parser.js'
+
+/** Minimal message type — mirrors @lumen/core's ChatMessage. */
+interface ChatMessage {
+  readonly role: string
+  readonly content: string
+  readonly toolName?: string
+  readonly toolCallId?: string
+}
+
+/** Minimal provider type — mirrors @lumen/core's BaseProvider. */
+interface MinimalProvider {
+  chat(opts: { model: string; messages: ChatMessage[]; temperature?: number }): Promise<{ content: string }>
+}
 
 /** Result of an evolution attempt. */
 export interface EvolutionResult {
@@ -161,10 +173,10 @@ export class HeuristicEvolver extends BaseEvolver {
  */
 export class LLMEvolver extends BaseEvolver {
   public readonly id = 'llm'
-  private readonly provider: BaseProvider
+  private readonly provider: MinimalProvider
   private readonly model: string
 
-  public constructor(provider: BaseProvider, model = 'gpt-4o-mini') {
+  public constructor(provider: MinimalProvider, model = 'gpt-4o-mini') {
     super()
     this.provider = provider
     this.model = model
