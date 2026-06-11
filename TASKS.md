@@ -134,7 +134,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [ ] H4.x — `lumen doctor`, `lumen replay`
 
 ### L. Testing (continued)
-- [ ] L4.x — Snapshot tests for TUI
+- [x] **L4.x** — Snapshot tests for TUI  *(done 2026-06-10)*
 - [ ] L5.x — Real-scenario scripts
 
 ---
