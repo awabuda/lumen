@@ -90,7 +90,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] E6.x — CLI composition root 接入默认 `~/.lumen/memory.db`
 - [x] E7.x — `lumen doctor` memory round-trip 检查
 - [x] **E8.x** — sqlite-vec vector backend  *(done 2026-06-10, see packages/memory/src/vector-backend.ts)*
-- [ ] E9.x — Working memory
+- [x] **E9.x** — Working memory  *(done 2026-06-10, see packages/core/src/memory/working-memory.ts)*
 - [ ] E10.x — Cross-session retrieval
 
 ### I. CLI (continued)

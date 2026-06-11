@@ -87,6 +87,12 @@ export type {
   SessionMessage,
 } from './memory/index.js'
 export { BaseMemoryStore } from './memory/index.js'
+export {
+  BaseWorkingMemory,
+  RingBufferWorkingMemory,
+  renderWorkingMemory,
+  type WorkingMemoryEntry,
+} from './memory/working-memory.js'
 
 // Hooks
 export {

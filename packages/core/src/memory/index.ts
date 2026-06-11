@@ -131,3 +131,10 @@ export abstract class BaseMemoryStore {
   /** Prune records older than `olderThanMs`. Returns count removed. */
   public abstract prune(olderThanMs: number): Promise<number>
 }
+
+export {
+  BaseWorkingMemory,
+  RingBufferWorkingMemory,
+  renderWorkingMemory,
+  type WorkingMemoryEntry,
+} from './working-memory.js'
