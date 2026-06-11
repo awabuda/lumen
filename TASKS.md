@@ -113,7 +113,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] F2.x — SKILL.md parser + FilesystemSkillSource
 - [x] **F3.x** — Skill triggering (keyword + embedding)  *(done 2026-06-10)*
 - [x] **F4.x** — Skill auto-evolution  *(done 2026-06-11)*
-- [ ] F5.x — Self-creation from trajectory
+- [x] **F5.x** — Self-creation from trajectory  *(done 2026-06-11)*
 
 ### G. MCP
 - [x] G1.x — JSON-RPC framing (stdio)
