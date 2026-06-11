@@ -101,7 +101,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 
 ### L. Testing
 - [x] **L1.x** — Vitest configured in all packages (audit)  *(done 2026-06-10, see docs/L1-AUDIT.md)*
-- [ ] L2.x — Contract tests for every base
+- [x] **L2.x** — Contract tests for every base  *(done 2026-06-10, see contracts/)*
 - [x] L3.x — Integration test: agent loop end-to-end (6 tests, agent+provider+tools+memory+hooks 全链路)
 
 ---
