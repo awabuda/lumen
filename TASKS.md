@@ -130,7 +130,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 
 ### H. Config (continued)
 - [x] **H2.x** — pino structured logging  *(done 2026-06-10)*
-- [ ] H3.x — Telemetry
+- [x] **H3.x** — Telemetry  *(done 2026-06-11)*
 - [x] **H4.x** — `lumen replay`  *(done 2026-06-10)*
 
 ### L. Testing (continued)

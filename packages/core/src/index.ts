@@ -118,6 +118,15 @@ export {
   type LogLevel,
 } from './logging/index.js'
 
+// Telemetry
+export {
+  BaseTelemetryBackend,
+  NoopTelemetryBackend,
+  ConsoleTelemetryBackend,
+  TelemetryCollector,
+  type TelemetryEvent,
+} from './telemetry/index.js'
+
 // Budget
 export { Budget, type BudgetState } from './budget/index.js'
 
