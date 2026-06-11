@@ -47,3 +47,10 @@ export {
   type VectorHit,
   type VectorPoint,
 } from './vector-backend.js'
+export {
+  BaseRetriever,
+  HybridRetriever,
+  TextOnlyRetriever,
+  type RetrievalQuery,
+  type RetrievalResult,
+} from './retriever.js'

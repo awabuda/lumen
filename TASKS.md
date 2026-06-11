@@ -91,7 +91,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] E7.x — `lumen doctor` memory round-trip 检查
 - [x] **E8.x** — sqlite-vec vector backend  *(done 2026-06-10, see packages/memory/src/vector-backend.ts)*
 - [x] **E9.x** — Working memory  *(done 2026-06-10, see packages/core/src/memory/working-memory.ts)*
-- [ ] E10.x — Cross-session retrieval
+- [x] **E10.x** — Cross-session retrieval  *(done 2026-06-10, see packages/memory/src/retriever.ts)*
 
 ### I. CLI (continued)
 - [x] **I4.x** — TUI Ink enhancements: history, slash commands  *(done 2026-06-10)*
