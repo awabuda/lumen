@@ -22,6 +22,7 @@ import type { BaseProvider, ChatMessage } from '@lumen/core'
 import type { BaseSkill } from './base.js'
 import type { SkillRegistry } from './registry.js'
 import { MarkdownSkill } from './markdown-skill.js'
+import { parseSkillMarkdown } from './parser.js'
 
 /** Result of an evolution attempt. */
 export interface EvolutionResult {
@@ -106,10 +107,8 @@ export class HeuristicEvolver extends BaseEvolver {
       `id: ${skillId}`,
       `name: ${skillName}`,
       `version: 1.0.0`,
-      'triggers:',
-      `  - kind: keyword`,
-      `    value: "${triggerWord}"`,
-      `    weight: 0.6`,
+      'keywords:',
+      `  - "${triggerWord}"`,
       '---',
       '',
       `# ${skillName}`,
@@ -136,10 +135,11 @@ export class HeuristicEvolver extends BaseEvolver {
     await fs.writeFile(path.join(skillDir, 'SKILL.md'), markdown, 'utf-8')
 
     // Parse and register.
+    const parsed = parseSkillMarkdown(markdown)
     const skill = new MarkdownSkill({
-      id: skillId,
+      frontmatter: parsed.frontmatter,
+      body: parsed.body,
       sourcePath: skillDir,
-      markdown,
     })
     registry.register(skill)
 
@@ -229,10 +229,11 @@ export class LLMEvolver extends BaseEvolver {
       await fs.mkdir(skillDir, { recursive: true })
       await fs.writeFile(path.join(skillDir, 'SKILL.md'), text, 'utf-8')
 
+      const parsed = parseSkillMarkdown(text)
       const skill = new MarkdownSkill({
-        id: skillId,
+        frontmatter: parsed.frontmatter,
+        body: parsed.body,
         sourcePath: skillDir,
-        markdown: text,
       })
       registry.register(skill)
 

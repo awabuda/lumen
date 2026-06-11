@@ -60,3 +60,9 @@ export {
   LLMReflector,
   type ExtractedFact,
 } from './reflector.js'
+export {
+  BaseConflictDetector,
+  KeywordConflictDetector,
+  LLMConflictDetector,
+  type Conflict,
+} from './conflict-detector.js'
