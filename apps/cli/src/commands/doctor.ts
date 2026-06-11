@@ -25,7 +25,16 @@
 
 import { loadCliConfig } from '../composition.js'
 
-export const doctorCommand = async (): Promise<number> => {
+export interface DoctorOptions {
+  /**
+   * Print extra detail for each check (e.g. raw environment
+   * values, full MCP tool names, the resolved `defaultModel`).
+   * Defaults to `false`.
+   */
+  readonly verbose?: boolean
+}
+
+export const doctorCommand = async (opts: DoctorOptions = {}): Promise<number> => {
   let failed = 0
   const ok = (msg: string): void => {
     process.stdout.write(`  [OK]   ${msg}\n`)
@@ -39,6 +48,11 @@ export const doctorCommand = async (): Promise<number> => {
   }
 
   process.stdout.write('Lumen doctor\n\n')
+  if (opts.verbose) {
+    process.stdout.write(`  cwd:      ${process.cwd()}\n`)
+    process.stdout.write(`  node:     ${process.version}\n`)
+    process.stdout.write(`  platform: ${process.platform} ${process.arch}\n\n`)
+  }
 
   // 1. Config
   try {
@@ -62,6 +76,12 @@ export const doctorCommand = async (): Promise<number> => {
     const { createFilesystemTools } = await import('@lumen/tools')
     const tools = createFilesystemTools()
     ok(`Filesystem tools registered: ${tools.map((t) => t.name).join(', ')}`)
+    if (opts.verbose) {
+      for (const t of tools) {
+        const d = t.describe()
+        process.stdout.write(`    ${d.name}  v${d.version}  risk=${d.risk}\n`)
+      }
+    }
   } catch (err) {
     fail(`Failed to load filesystem tools: ${err instanceof Error ? err.message : String(err)}`)
   }

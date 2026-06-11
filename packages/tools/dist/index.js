@@ -42,6 +42,10 @@ export { NoneSandbox } from './shell/none-sandbox.js';
 export { DEFAULT_SANDBOX_FACTORIES, withSandboxFactory, defaultShellSandboxConfig, } from './shell/factories.js';
 export { TerminalTool, TerminalInputSchema, TerminalOutputSchema } from './shell/terminal.js';
 export { GitTool, GitInputSchema, GitOutputSchema } from './git/git.js';
+export { DateTool, DateInputSchema, DateOutputSchema } from './meta/date.js';
+export { EnvTool, EnvInputSchema, EnvOutputSchema } from './meta/env.js';
+export { WhoamiTool, WhoamiInputSchema, WhoamiOutputSchema } from './meta/whoami.js';
+export { GhTool, GhInputSchema, GhOutputSchema } from './github/gh.js';
 export { FileNotFoundError, PathKindError } from './errors.js';
 export { BaseTool, ToolRegistry } from './base.js';
 import { ReadFileTool } from './fs/read-file.js';
@@ -51,6 +55,10 @@ import { ListDirTool } from './fs/list-dir.js';
 import { SearchFilesTool } from './fs/search-files.js';
 import { TerminalTool } from './shell/terminal.js';
 import { GitTool } from './git/git.js';
+import { DateTool } from './meta/date.js';
+import { EnvTool } from './meta/env.js';
+import { WhoamiTool } from './meta/whoami.js';
+import { GhTool } from './github/gh.js';
 import { defaultShellSandboxConfig } from './shell/factories.js';
 /**
  * Build the default set of filesystem tools in the canonical order
@@ -94,6 +102,19 @@ export function createGitTools() {
  * whole tool palette ready for {@link ToolRegistry.registerAll}.
  */
 export function createDefaultTools() {
-    return [...createFilesystemTools(), ...createShellTools(), ...createGitTools()];
+    return [...createFilesystemTools(), ...createShellTools(), ...createGitTools(), ...createMetaTools(), ...createGithubTools()];
+}
+/**
+ * Build the meta / utility tools (date, env, whoami).
+ * These are small, safe tools that help the agent orient itself.
+ */
+export function createMetaTools() {
+    return [new DateTool(), new EnvTool(), new WhoamiTool()];
+}
+/**
+ * Build the GitHub tools. Today that's just the `gh` tool.
+ */
+export function createGithubTools() {
+    return [new GhTool()];
 }
 //# sourceMappingURL=index.js.map

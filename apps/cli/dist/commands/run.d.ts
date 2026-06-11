@@ -22,6 +22,8 @@ export interface RunCommandOptions {
      *  runs. */
     memoryPath?: string;
     noMemory?: boolean;
+    /** Skip MCP server discovery + connection. */
+    noMcp?: boolean;
 }
 export declare const runCommand: (options: RunCommandOptions) => Promise<number>;
 //# sourceMappingURL=run.d.ts.map

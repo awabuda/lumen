@@ -52,6 +52,16 @@ export const chatCommand = async (options) => {
                 // The TUI is already exiting; an error here
                 // would just confuse the user. We swallow.
             });
+            // Same story for MCP — close any connected
+            // servers so the TUI can exit promptly. A
+            // single stuck server still can't keep us alive
+            // because `closeAllMcpServers` uses
+            // `Promise.allSettled` internally.
+            if (built.mcpServers.length) {
+                import('@lumen/mcp').then(({ closeAllMcpServers }) => {
+                    closeAllMcpServers(built.mcpServers).catch(() => { });
+                });
+            }
         });
     });
 };

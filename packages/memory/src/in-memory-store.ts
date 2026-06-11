@@ -208,6 +208,20 @@ export class InMemoryStore extends BaseMemoryStore {
     return Promise.resolve(out)
   }
 
+  public deleteSession(id: string): Promise<boolean> {
+    return this.mutate(async () => {
+      const hadSession = this.sessions.delete(id)
+      if (!hadSession) return false
+      // Cascade: drop every message attached to the deleted
+      // session so a subsequent `getSessionMessages` doesn't
+      // return orphan rows.
+      for (const [mid, m] of this.messages) {
+        if (m.sessionId === id) this.messages.delete(mid)
+      }
+      return true
+    })
+  }
+
   public prune(olderThanMs: number): Promise<number> {
     return this.mutate(async () => {
       const cutoff = Date.now() - olderThanMs

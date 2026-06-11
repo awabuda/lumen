@@ -20,6 +20,7 @@ import { Agent, HookRegistry, ToolRegistry } from '@lumen/core';
 import { OpenAICompatibleProvider } from '@lumen/llm';
 import { createFilesystemTools } from '@lumen/tools';
 import { SqliteStore } from '@lumen/memory';
+import { connectAllMcpServers, } from '@lumen/mcp';
 import * as path from 'node:path';
 import * as os from 'node:os';
 /**
@@ -81,7 +82,18 @@ export const buildAgent = async (options = {}) => {
         model,
         cwd,
     });
-    return { agent, provider, tools, hooks, config, model, memory };
+    // MCP server discovery. We connect AFTER the Agent is
+    // constructed so the Agent holds the registry reference
+    // (any tools registered post-construction are visible to
+    // the next `agent.run()` call). Failures are logged and
+    // skipped — one broken server must not take down the CLI.
+    let mcpServers = [];
+    if (!options.noMcp && config.mcp?.servers?.length) {
+        mcpServers = await connectAllMcpServers(config.mcp.servers, tools, {
+            timeoutMs: options.mcpTimeoutMs ?? 5_000,
+        });
+    }
+    return { agent, provider, tools, hooks, config, model, memory, mcpServers };
 };
 /**
  * Default location for the CLI's SQLite memory database.

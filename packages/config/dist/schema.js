@@ -67,6 +67,19 @@ const McpServerConfigSchema = z
     args: z.array(z.string()).default([]),
     env: z.record(z.string()).default({}),
     url: z.string().url().optional(),
+    /**
+     * Bearer token for HTTP transport. We automatically attach it
+     * as `Authorization: Bearer *** when this is set, UNLESS the
+     * `headers` field already contains an `Authorization` entry
+     * (in which case the user-provided value wins).
+     */
+    apiKey: z.string().min(1).optional(),
+    /**
+     * Custom HTTP headers for HTTP transport. Use this to plug in
+     * non-Bearer auth schemes (mTLS-issued tokens, custom header
+     * names, signed JWTs) without us having to special-case them.
+     */
+    headers: z.record(z.string()).default({}),
     enabled: z.boolean().default(true),
 })
     .strict()
@@ -105,4 +118,5 @@ export const LumenConfigSchema = z
     logging: LoggingConfigSchema.default({}),
 })
     .strict();
+export { McpServerConfigSchema, };
 //# sourceMappingURL=schema.js.map

@@ -66,9 +66,79 @@ program
 program
   .command('doctor')
   .description('Diagnose the local Lumen install')
-  .action(async () => {
+  .option('-v, --verbose', 'Print extra detail for each check')
+  .action(async (opts: Record<string, unknown>) => {
     const { doctorCommand } = await import('./commands/doctor.js')
-    const code = await doctorCommand()
+    const code = await doctorCommand({ verbose: opts['verbose'] === true })
+    process.exit(code)
+  })
+
+program
+  .command('session')
+  .description('Inspect and manage stored agent sessions')
+  .argument('[subcommand]', '"list" (default), "show <id>", "delete <id>", or "prune"', 'list')
+  .argument('[id]', 'Session id (for "show" and "delete")')
+  .option('--memory-path <path>', 'Override the SQLite memory database path')
+  .option('--force', 'Confirm destructive operations (delete, prune)')
+  .option('--older-than <days>', 'prune: cut-off age in days (default 30)', '30')
+  .option('--limit <n>', 'show: limit messages returned (default 100)', '100')
+  .action(
+    async (subcommand: string, id: string | undefined, opts: Record<string, unknown>) => {
+      const {
+        sessionListCommand,
+        sessionShowCommand,
+        sessionDeleteCommand,
+        sessionPruneCommand,
+      } = await import('./commands/session.js')
+      const memoryPath = opts['memoryPath'] as string | undefined
+      const force = opts['force'] === true
+      let code = 0
+      if (subcommand === 'list') {
+        code = await sessionListCommand({ memoryPath })
+      } else if (subcommand === 'show') {
+        if (!id) {
+          process.stderr.write('lumen session: missing <id> for "show"\n')
+          code = 1
+        } else {
+          const limitRaw = opts['limit']
+          const limit = typeof limitRaw === 'string' ? Number.parseInt(limitRaw, 10) : undefined
+          code = await sessionShowCommand(id, { memoryPath, limit })
+        }
+      } else if (subcommand === 'delete') {
+        if (!id) {
+          process.stderr.write('lumen session: missing <id> for "delete"\n')
+          code = 1
+        } else {
+          code = await sessionDeleteCommand(id, { memoryPath, force })
+        }
+      } else if (subcommand === 'prune') {
+        const daysRaw = opts['olderThan']
+        const days = typeof daysRaw === 'string' ? Number.parseInt(daysRaw, 10) : 30
+        code = await sessionPruneCommand({ memoryPath, force, olderThanDays: days })
+      } else {
+        process.stderr.write(`lumen session: unknown subcommand: ${subcommand}\n`)
+        code = 1
+      }
+      process.exit(code)
+    },
+  )
+
+program
+  .command('update')
+  .description('Check for newer Lumen releases')
+  .argument('[subcommand]', '"check" (default) or "print-version"', 'check')
+  .option('--quiet', 'Skip the "you are up to date" recommendation')
+  .action(async (subcommand: string, opts: Record<string, unknown>) => {
+    const { updateCheckCommand, updatePrintVersionCommand } = await import('./commands/update.js')
+    let code = 0
+    if (subcommand === 'print-version') {
+      code = await updatePrintVersionCommand()
+    } else if (subcommand === 'check') {
+      code = await updateCheckCommand({ quiet: opts['quiet'] === true })
+    } else {
+      process.stderr.write(`lumen update: unknown subcommand: ${subcommand}\n`)
+      code = 1
+    }
     process.exit(code)
   })
 

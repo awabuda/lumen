@@ -5,18 +5,21 @@
 
  RUN  v2.1.9 /Users/chengpengtao/workspace/lumen/packages/tools
 
- ✓ test/none-sandbox.test.ts (2 tests) 3ms
- ✓ test/default-sandbox.test.ts (5 tests) 90ms
- ✓ test/read-file.test.ts (5 tests) 12ms
- ✓ test/terminal.test.ts (6 tests) 8ms
- ✓ test/write-file.test.ts (5 tests) 39ms
- ✓ test/patch.test.ts (6 tests) 37ms
- ✓ test/list-dir.test.ts (5 tests) 31ms
- ✓ test/search-files.test.ts (6 tests) 160ms
- ✓ test/git.test.ts (7 tests) 1157ms
+ ✓ test/none-sandbox.test.ts (2 tests) 11ms
+ ✓ test/default-sandbox.test.ts (5 tests) 75ms
+ ✓ test/read-file.test.ts (5 tests) 15ms
+ ✓ test/terminal.test.ts (6 tests) 17ms
+ ✓ test/list-dir.test.ts (5 tests) 21ms
+ ✓ test/patch.test.ts (6 tests) 35ms
+ ✓ test/write-file.test.ts (5 tests) 40ms
+ ✓ test/search-files.test.ts (6 tests) 184ms
+ ✓ test/git.test.ts (7 tests) 1752ms
+   ✓ GitTool > status: returns an empty file list on a clean tree 365ms
+   ✓ GitTool > status: detects an unstaged modification 379ms
+   ✓ GitTool > log: returns commits in reverse-chronological order 300ms
 
  Test Files  9 passed (9)
       Tests  47 passed (47)
-   Start at  13:19:22
-   Duration  3.25s (transform 1.10s, setup 0ms, collect 3.30s, tests 1.54s, environment 1ms, prepare 1.52s)
+   Start at  14:53:53
+   Duration  2.78s (transform 770ms, setup 0ms, collect 3.08s, tests 2.15s, environment 1ms, prepare 1.29s)
 

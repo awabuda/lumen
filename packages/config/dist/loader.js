@@ -18,7 +18,7 @@ import { LumenConfigSchema } from './schema.js';
 const DEFAULT_PROJECT_LOCATIONS = ['.lumen/config.yaml', '.lumen/config.yml', 'lumen.config.yaml'];
 const DEFAULT_USER_PATH = join(homedir(), '.lumen', 'config.yaml');
 /** Deep merge plain objects. Arrays and other non-plain values are replaced. */
-const deepMerge = (base, override) => {
+export const deepMerge = (base, override) => {
     const result = { ...base };
     for (const key of Object.keys(override)) {
         const overrideVal = override[key];
@@ -49,21 +49,39 @@ const readYamlIfExists = async (path) => {
     }
     return parsed;
 };
+const RUNTIME_ENV_KEYS = new Set([
+    'API_KEY',
+    'BASE_URL',
+    'MODEL',
+    'MEMORY_PATH',
+    'SKILLS_PATH',
+]);
+const envSegmentToConfigKey = (segment) => {
+    const parts = segment
+        .toLowerCase()
+        .split('_')
+        .filter((part) => part.length > 0);
+    const [head, ...tail] = parts;
+    if (!head)
+        return '';
+    return [head, ...tail.map((part) => `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}`)].join('');
+};
 const readEnv = (prefix) => {
     const out = {};
     for (const [key, value] of Object.entries(process.env)) {
         if (!key.startsWith(prefix))
             continue;
-        const path = key
-            .slice(prefix.length)
-            .toLowerCase()
-            .split('__')
-            .map((segment) => segment.replace(/-/g, ''));
+        const rawPath = key.slice(prefix.length);
+        if (RUNTIME_ENV_KEYS.has(rawPath))
+            continue;
+        const path = rawPath.split('__').map(envSegmentToConfigKey).filter(Boolean);
         if (path.length === 0)
             continue;
         // Very small env-shape interpreter:
         //   LUMEN_LOGGING__LEVEL=debug  -> { logging: { level: 'debug' } }
         //   LUMEN_DEFAULT_MODEL=foo     -> { defaultModel: 'foo' }
+        // Runtime-only env vars such as LUMEN_API_KEY are consumed by the
+        // CLI composition root, not by the strict config schema.
         let cursor = out;
         for (let i = 0; i < path.length - 1; i++) {
             const seg = path[i];

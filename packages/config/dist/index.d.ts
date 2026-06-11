@@ -15,8 +15,10 @@
  * Downstream packages import `LumenConfig` and helper accessors; they should
  * never read `process.env` directly.
  */
-export { loadConfig, type LoadConfigOptions } from './loader.js';
+export { loadConfig, deepMerge, type LoadConfigOptions } from './loader.js';
 export { defineConfig, type ConfigDefinition } from './define.js';
-export { LumenConfigSchema, type LumenConfig } from './schema.js';
+export { LumenConfigSchema, McpServerConfigSchema, type LumenConfig, type McpServerConfig } from './schema.js';
 export { ConfigError } from './errors.js';
+export { watchConfig, type ConfigWatcher, type ConfigWatchEvent, type WatchConfigOptions, } from './watcher.js';
+export { loadConfigWithProfile, listProfiles, resolveProfile, DEFAULT_PROFILE, type LoadConfigWithProfileOptions, } from './profile.js';
 //# sourceMappingURL=index.d.ts.map

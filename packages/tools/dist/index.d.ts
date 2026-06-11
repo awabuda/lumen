@@ -48,6 +48,14 @@ export { TerminalTool, TerminalInputSchema, TerminalOutputSchema } from './shell
 export type { TerminalInput, TerminalOutput } from './shell/terminal.js';
 export { GitTool, GitInputSchema, GitOutputSchema } from './git/git.js';
 export type { GitInput, GitOutput, GitOp } from './git/git.js';
+export { DateTool, DateInputSchema, DateOutputSchema } from './meta/date.js';
+export type { DateInput, DateOutput } from './meta/date.js';
+export { EnvTool, EnvInputSchema, EnvOutputSchema } from './meta/env.js';
+export type { EnvInput, EnvOutput } from './meta/env.js';
+export { WhoamiTool, WhoamiInputSchema, WhoamiOutputSchema } from './meta/whoami.js';
+export type { WhoamiInput, WhoamiOutput } from './meta/whoami.js';
+export { GhTool, GhInputSchema, GhOutputSchema } from './github/gh.js';
+export type { GhInput, GhOutput, GhOp } from './github/gh.js';
 export { FileNotFoundError, PathKindError } from './errors.js';
 export { BaseTool, ToolRegistry } from './base.js';
 export type { ToolContext, ToolDescriptor, ToolRisk } from './base.js';
@@ -83,4 +91,13 @@ export declare function createGitTools(): BaseTool[];
  * whole tool palette ready for {@link ToolRegistry.registerAll}.
  */
 export declare function createDefaultTools(): BaseTool[];
+/**
+ * Build the meta / utility tools (date, env, whoami).
+ * These are small, safe tools that help the agent orient itself.
+ */
+export declare function createMetaTools(): BaseTool[];
+/**
+ * Build the GitHub tools. Today that's just the `gh` tool.
+ */
+export declare function createGithubTools(): BaseTool[];
 //# sourceMappingURL=index.d.ts.map

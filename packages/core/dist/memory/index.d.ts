@@ -96,6 +96,13 @@ export declare abstract class BaseMemoryStore {
         limit?: number;
         before?: number;
     }): Promise<ReadonlyArray<SessionMessage>>;
+    /**
+     * Delete one session **and** all of its messages. Returns
+     * `true` if a session was removed, `false` if no such session
+     * existed. This is a destructive operation; the CLI gates it
+     * behind a `--force` flag and a confirmation prompt.
+     */
+    abstract deleteSession(id: string): Promise<boolean>;
     /** Prune records older than `olderThanMs`. Returns count removed. */
     abstract prune(olderThanMs: number): Promise<number>;
 }

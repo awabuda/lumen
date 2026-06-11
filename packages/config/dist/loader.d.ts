@@ -25,5 +25,7 @@ export interface LoadConfigOptions {
     /** Skip loading the project config. */
     skipProjectConfig?: boolean;
 }
+/** Deep merge plain objects. Arrays and other non-plain values are replaced. */
+export declare const deepMerge: (base: Record<string, unknown>, override: Record<string, unknown>) => Record<string, unknown>;
 export declare const loadConfig: (options?: LoadConfigOptions) => Promise<LumenConfig>;
 //# sourceMappingURL=loader.d.ts.map

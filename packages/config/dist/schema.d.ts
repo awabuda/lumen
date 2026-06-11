@@ -17,18 +17,18 @@ declare const ProviderConfigSchema: z.ZodObject<{
     headers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
     timeoutMs: z.ZodOptional<z.ZodNumber>;
 }, "strict", z.ZodTypeAny, {
-    id: "openai" | "anthropic" | "google" | "ollama" | "custom";
+    id: "custom" | "openai" | "anthropic" | "google" | "ollama";
     apiKey?: string | undefined;
+    headers?: Record<string, string> | undefined;
     baseUrl?: string | undefined;
     defaultModel?: string | undefined;
-    headers?: Record<string, string> | undefined;
     timeoutMs?: number | undefined;
 }, {
-    id: "openai" | "anthropic" | "google" | "ollama" | "custom";
+    id: "custom" | "openai" | "anthropic" | "google" | "ollama";
     apiKey?: string | undefined;
+    headers?: Record<string, string> | undefined;
     baseUrl?: string | undefined;
     defaultModel?: string | undefined;
-    headers?: Record<string, string> | undefined;
     timeoutMs?: number | undefined;
 }>;
 declare const ModelConfigSchema: z.ZodObject<{
@@ -39,15 +39,15 @@ declare const ModelConfigSchema: z.ZodObject<{
     topP: z.ZodOptional<z.ZodNumber>;
     reasoning: z.ZodOptional<z.ZodBoolean>;
 }, "strict", z.ZodTypeAny, {
-    provider: "openai" | "anthropic" | "google" | "ollama" | "custom";
     name: string;
+    provider: "custom" | "openai" | "anthropic" | "google" | "ollama";
     temperature?: number | undefined;
     maxTokens?: number | undefined;
     topP?: number | undefined;
     reasoning?: boolean | undefined;
 }, {
-    provider: "openai" | "anthropic" | "google" | "ollama" | "custom";
     name: string;
+    provider: "custom" | "openai" | "anthropic" | "google" | "ollama";
     temperature?: number | undefined;
     maxTokens?: number | undefined;
     topP?: number | undefined;
@@ -60,39 +60,60 @@ declare const McpServerConfigSchema: z.ZodEffects<z.ZodObject<{
     args: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
     env: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodString>>;
     url: z.ZodOptional<z.ZodString>;
+    /**
+     * Bearer token for HTTP transport. We automatically attach it
+     * as `Authorization: Bearer *** when this is set, UNLESS the
+     * `headers` field already contains an `Authorization` entry
+     * (in which case the user-provided value wins).
+     */
+    apiKey: z.ZodOptional<z.ZodString>;
+    /**
+     * Custom HTTP headers for HTTP transport. Use this to plug in
+     * non-Bearer auth schemes (mTLS-issued tokens, custom header
+     * names, signed JWTs) without us having to special-case them.
+     */
+    headers: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodString>>;
     enabled: z.ZodDefault<z.ZodBoolean>;
 }, "strict", z.ZodTypeAny, {
     name: string;
-    enabled: boolean;
     transport: "stdio" | "http";
     args: string[];
     env: Record<string, string>;
+    headers: Record<string, string>;
+    enabled: boolean;
     command?: string | undefined;
     url?: string | undefined;
+    apiKey?: string | undefined;
 }, {
     name: string;
     transport: "stdio" | "http";
-    enabled?: boolean | undefined;
     command?: string | undefined;
     args?: string[] | undefined;
     env?: Record<string, string> | undefined;
     url?: string | undefined;
+    apiKey?: string | undefined;
+    headers?: Record<string, string> | undefined;
+    enabled?: boolean | undefined;
 }>, {
     name: string;
-    enabled: boolean;
     transport: "stdio" | "http";
     args: string[];
     env: Record<string, string>;
+    headers: Record<string, string>;
+    enabled: boolean;
     command?: string | undefined;
     url?: string | undefined;
+    apiKey?: string | undefined;
 }, {
     name: string;
     transport: "stdio" | "http";
-    enabled?: boolean | undefined;
     command?: string | undefined;
     args?: string[] | undefined;
     env?: Record<string, string> | undefined;
     url?: string | undefined;
+    apiKey?: string | undefined;
+    headers?: Record<string, string> | undefined;
+    enabled?: boolean | undefined;
 }>;
 export declare const LumenConfigSchema: z.ZodObject<{
     agent: z.ZodDefault<z.ZodObject<{
@@ -122,18 +143,18 @@ export declare const LumenConfigSchema: z.ZodObject<{
         headers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
         timeoutMs: z.ZodOptional<z.ZodNumber>;
     }, "strict", z.ZodTypeAny, {
-        id: "openai" | "anthropic" | "google" | "ollama" | "custom";
+        id: "custom" | "openai" | "anthropic" | "google" | "ollama";
         apiKey?: string | undefined;
+        headers?: Record<string, string> | undefined;
         baseUrl?: string | undefined;
         defaultModel?: string | undefined;
-        headers?: Record<string, string> | undefined;
         timeoutMs?: number | undefined;
     }, {
-        id: "openai" | "anthropic" | "google" | "ollama" | "custom";
+        id: "custom" | "openai" | "anthropic" | "google" | "ollama";
         apiKey?: string | undefined;
+        headers?: Record<string, string> | undefined;
         baseUrl?: string | undefined;
         defaultModel?: string | undefined;
-        headers?: Record<string, string> | undefined;
         timeoutMs?: number | undefined;
     }>, "many">>;
     models: z.ZodDefault<z.ZodArray<z.ZodObject<{
@@ -144,15 +165,15 @@ export declare const LumenConfigSchema: z.ZodObject<{
         topP: z.ZodOptional<z.ZodNumber>;
         reasoning: z.ZodOptional<z.ZodBoolean>;
     }, "strict", z.ZodTypeAny, {
-        provider: "openai" | "anthropic" | "google" | "ollama" | "custom";
         name: string;
+        provider: "custom" | "openai" | "anthropic" | "google" | "ollama";
         temperature?: number | undefined;
         maxTokens?: number | undefined;
         topP?: number | undefined;
         reasoning?: boolean | undefined;
     }, {
-        provider: "openai" | "anthropic" | "google" | "ollama" | "custom";
         name: string;
+        provider: "custom" | "openai" | "anthropic" | "google" | "ollama";
         temperature?: number | undefined;
         maxTokens?: number | undefined;
         topP?: number | undefined;
@@ -212,59 +233,84 @@ export declare const LumenConfigSchema: z.ZodObject<{
             args: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
             env: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodString>>;
             url: z.ZodOptional<z.ZodString>;
+            /**
+             * Bearer token for HTTP transport. We automatically attach it
+             * as `Authorization: Bearer *** when this is set, UNLESS the
+             * `headers` field already contains an `Authorization` entry
+             * (in which case the user-provided value wins).
+             */
+            apiKey: z.ZodOptional<z.ZodString>;
+            /**
+             * Custom HTTP headers for HTTP transport. Use this to plug in
+             * non-Bearer auth schemes (mTLS-issued tokens, custom header
+             * names, signed JWTs) without us having to special-case them.
+             */
+            headers: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodString>>;
             enabled: z.ZodDefault<z.ZodBoolean>;
         }, "strict", z.ZodTypeAny, {
             name: string;
-            enabled: boolean;
             transport: "stdio" | "http";
             args: string[];
             env: Record<string, string>;
+            headers: Record<string, string>;
+            enabled: boolean;
             command?: string | undefined;
             url?: string | undefined;
+            apiKey?: string | undefined;
         }, {
             name: string;
             transport: "stdio" | "http";
-            enabled?: boolean | undefined;
             command?: string | undefined;
             args?: string[] | undefined;
             env?: Record<string, string> | undefined;
             url?: string | undefined;
+            apiKey?: string | undefined;
+            headers?: Record<string, string> | undefined;
+            enabled?: boolean | undefined;
         }>, {
             name: string;
-            enabled: boolean;
             transport: "stdio" | "http";
             args: string[];
             env: Record<string, string>;
+            headers: Record<string, string>;
+            enabled: boolean;
             command?: string | undefined;
             url?: string | undefined;
+            apiKey?: string | undefined;
         }, {
             name: string;
             transport: "stdio" | "http";
-            enabled?: boolean | undefined;
             command?: string | undefined;
             args?: string[] | undefined;
             env?: Record<string, string> | undefined;
             url?: string | undefined;
+            apiKey?: string | undefined;
+            headers?: Record<string, string> | undefined;
+            enabled?: boolean | undefined;
         }>, "many">>;
     }, "strict", z.ZodTypeAny, {
         servers: {
             name: string;
-            enabled: boolean;
             transport: "stdio" | "http";
             args: string[];
             env: Record<string, string>;
+            headers: Record<string, string>;
+            enabled: boolean;
             command?: string | undefined;
             url?: string | undefined;
+            apiKey?: string | undefined;
         }[];
     }, {
         servers?: {
             name: string;
             transport: "stdio" | "http";
-            enabled?: boolean | undefined;
             command?: string | undefined;
             args?: string[] | undefined;
             env?: Record<string, string> | undefined;
             url?: string | undefined;
+            apiKey?: string | undefined;
+            headers?: Record<string, string> | undefined;
+            enabled?: boolean | undefined;
         }[] | undefined;
     }>>;
     logging: z.ZodDefault<z.ZodObject<{
@@ -289,16 +335,16 @@ export declare const LumenConfigSchema: z.ZodObject<{
         budgetCostUsd?: number | undefined;
     };
     providers: {
-        id: "openai" | "anthropic" | "google" | "ollama" | "custom";
+        id: "custom" | "openai" | "anthropic" | "google" | "ollama";
         apiKey?: string | undefined;
+        headers?: Record<string, string> | undefined;
         baseUrl?: string | undefined;
         defaultModel?: string | undefined;
-        headers?: Record<string, string> | undefined;
         timeoutMs?: number | undefined;
     }[];
     models: {
-        provider: "openai" | "anthropic" | "google" | "ollama" | "custom";
         name: string;
+        provider: "custom" | "openai" | "anthropic" | "google" | "ollama";
         temperature?: number | undefined;
         maxTokens?: number | undefined;
         topP?: number | undefined;
@@ -324,12 +370,14 @@ export declare const LumenConfigSchema: z.ZodObject<{
     mcp: {
         servers: {
             name: string;
-            enabled: boolean;
             transport: "stdio" | "http";
             args: string[];
             env: Record<string, string>;
+            headers: Record<string, string>;
+            enabled: boolean;
             command?: string | undefined;
             url?: string | undefined;
+            apiKey?: string | undefined;
         }[];
     };
     logging: {
@@ -348,16 +396,16 @@ export declare const LumenConfigSchema: z.ZodObject<{
     } | undefined;
     defaultModel?: string | undefined;
     providers?: {
-        id: "openai" | "anthropic" | "google" | "ollama" | "custom";
+        id: "custom" | "openai" | "anthropic" | "google" | "ollama";
         apiKey?: string | undefined;
+        headers?: Record<string, string> | undefined;
         baseUrl?: string | undefined;
         defaultModel?: string | undefined;
-        headers?: Record<string, string> | undefined;
         timeoutMs?: number | undefined;
     }[] | undefined;
     models?: {
-        provider: "openai" | "anthropic" | "google" | "ollama" | "custom";
         name: string;
+        provider: "custom" | "openai" | "anthropic" | "google" | "ollama";
         temperature?: number | undefined;
         maxTokens?: number | undefined;
         topP?: number | undefined;
@@ -384,11 +432,13 @@ export declare const LumenConfigSchema: z.ZodObject<{
         servers?: {
             name: string;
             transport: "stdio" | "http";
-            enabled?: boolean | undefined;
             command?: string | undefined;
             args?: string[] | undefined;
             env?: Record<string, string> | undefined;
             url?: string | undefined;
+            apiKey?: string | undefined;
+            headers?: Record<string, string> | undefined;
+            enabled?: boolean | undefined;
         }[] | undefined;
     } | undefined;
     logging?: {
@@ -401,5 +451,5 @@ export type LumenConfig = z.infer<typeof LumenConfigSchema>;
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
 export type ModelConfig = z.infer<typeof ModelConfigSchema>;
 export type McpServerConfig = z.infer<typeof McpServerConfigSchema>;
-export {};
+export { McpServerConfigSchema, };
 //# sourceMappingURL=schema.d.ts.map

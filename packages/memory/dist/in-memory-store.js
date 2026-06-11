@@ -190,6 +190,21 @@ export class InMemoryStore extends BaseMemoryStore {
             : filtered.slice(-options.limit); // last N in chronological order
         return Promise.resolve(out);
     }
+    deleteSession(id) {
+        return this.mutate(async () => {
+            const hadSession = this.sessions.delete(id);
+            if (!hadSession)
+                return false;
+            // Cascade: drop every message attached to the deleted
+            // session so a subsequent `getSessionMessages` doesn't
+            // return orphan rows.
+            for (const [mid, m] of this.messages) {
+                if (m.sessionId === id)
+                    this.messages.delete(mid);
+            }
+            return true;
+        });
+    }
     prune(olderThanMs) {
         return this.mutate(async () => {
             const cutoff = Date.now() - olderThanMs;

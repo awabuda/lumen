@@ -361,6 +361,28 @@ export class SqliteStore extends BaseMemoryStore {
         const rows = this.s.getMessagesBefore.all(sessionId, before, limit);
         return Promise.resolve(rows.map(rowToMessage));
     }
+    deleteSession(id) {
+        return new Promise((resolve, reject) => {
+            // We open a write transaction (not readonly) — refusing
+            // the call here would surprise a CLI user who passes
+            // `--memory-path ~/.lumen/memory.db` expecting writes.
+            // A read-only SqliteStore throws synchronously inside the
+            // transaction; we let that bubble up.
+            try {
+                const removed = this.db.transaction(() => {
+                    // Cascade messages first so we never leak orphan rows
+                    // when the FK-less schema is the active one.
+                    this.s.deleteMessagesForSession.run(id);
+                    const info = this.s.deleteSessionById.run(id);
+                    return info.changes > 0;
+                })();
+                resolve(removed);
+            }
+            catch (err) {
+                reject(err);
+            }
+        });
+    }
     // ---- Maintenance --------------------------------------------------------
     prune(olderThanMs) {
         return new Promise((resolve, reject) => {
@@ -492,6 +514,7 @@ function prepareStatements(db) {
         // index small.
         'SELECT id, session_id, role, content, tool_name, created_at FROM messages WHERE session_id = ? AND id < ? ORDER BY id ASC LIMIT ?'),
         deleteMessagesForSession: db.prepare('DELETE FROM messages WHERE session_id = ?'),
+        deleteSessionById: db.prepare('DELETE FROM sessions WHERE id = ?'),
     };
 }
 function rowToRecord(row) {

@@ -93,6 +93,18 @@ export class FakeMemoryStore extends BaseMemoryStore {
     return msgs
   }
 
+  public async deleteSession(id: string): Promise<boolean> {
+    if (!this.sessions.delete(id)) return false
+    // Cascade: drop every message attached to the deleted
+    // session. We rebuild `messages` rather than mutating in
+    // place so the test's `expect(messages).toEqual([])`
+    // assertion matches the public contract.
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i]?.sessionId === id) this.messages.splice(i, 1)
+    }
+    return true
+  }
+
   public async prune(_olderThanMs: number): Promise<number> {
     return 0
   }

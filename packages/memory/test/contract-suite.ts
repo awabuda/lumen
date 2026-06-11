@@ -202,6 +202,31 @@ export function runStoreContractTests(
       expect(await store.getSession('s1')).toBeUndefined()
     })
 
+    it('deleteSession removes the session and cascades its messages', async () => {
+      await store.createSession({ id: 's1' })
+      await store.appendMessage({ sessionId: 's1', role: 'user', content: 'a' })
+      await store.appendMessage({ sessionId: 's1', role: 'assistant', content: 'b' })
+      expect(await store.deleteSession('s1')).toBe(true)
+      expect(await store.getSession('s1')).toBeUndefined()
+      // Subsequent getSessionMessages must NOT return the
+      // deleted session's messages (cascaded).
+      expect(await store.getSessionMessages('s1')).toEqual([])
+    })
+
+    it('deleteSession returns false for an unknown id', async () => {
+      expect(await store.deleteSession('does-not-exist')).toBe(false)
+    })
+
+    it('deleteSession does not touch other sessions', async () => {
+      await store.createSession({ id: 's1' })
+      await store.createSession({ id: 's2' })
+      await store.appendMessage({ sessionId: 's1', role: 'user', content: 'a' })
+      await store.appendMessage({ sessionId: 's2', role: 'user', content: 'b' })
+      expect(await store.deleteSession('s1')).toBe(true)
+      expect(await store.getSession('s2')).toBeDefined()
+      expect(await store.getSessionMessages('s2')).toHaveLength(1)
+    })
+
     it('dispose + init round-trip is clean', async () => {
       await store.put({ id: 'r1', kind: 'fact', content: 'x', trust: 0.5, tags: [] })
       await store.dispose()

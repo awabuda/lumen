@@ -471,6 +471,28 @@ export class SqliteStore extends BaseMemoryStore {
     return Promise.resolve(rows.map(rowToMessage))
   }
 
+  public deleteSession(id: string): Promise<boolean> {
+    return new Promise<boolean>((resolve, reject) => {
+      // We open a write transaction (not readonly) — refusing
+      // the call here would surprise a CLI user who passes
+      // `--memory-path ~/.lumen/memory.db` expecting writes.
+      // A read-only SqliteStore throws synchronously inside the
+      // transaction; we let that bubble up.
+      try {
+        const removed = this.db.transaction(() => {
+          // Cascade messages first so we never leak orphan rows
+          // when the FK-less schema is the active one.
+          this.s.deleteMessagesForSession.run(id)
+          const info = this.s.deleteSessionById.run(id)
+          return info.changes > 0
+        })()
+        resolve(removed)
+      } catch (err) {
+        reject(err)
+      }
+    })
+  }
+
   // ---- Maintenance --------------------------------------------------------
 
   public prune(olderThanMs: number): Promise<number> {
@@ -576,6 +598,7 @@ interface PreparedStatements {
   insertMessage: Statement
   getMessagesBefore: Statement
   deleteMessagesForSession: Statement
+  deleteSessionById: Statement
 }
 
 function prepareStatements(db: BetterSqlite3Database): PreparedStatements {
@@ -649,6 +672,7 @@ function prepareStatements(db: BetterSqlite3Database): PreparedStatements {
       'SELECT id, session_id, role, content, tool_name, created_at FROM messages WHERE session_id = ? AND id < ? ORDER BY id ASC LIMIT ?',
     ),
     deleteMessagesForSession: db.prepare('DELETE FROM messages WHERE session_id = ?'),
+    deleteSessionById: db.prepare('DELETE FROM sessions WHERE id = ?'),
   }
 }
 

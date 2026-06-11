@@ -96,8 +96,8 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 ### I. CLI (continued)
 - [ ] I4.x — TUI with Ink
 - [x] **I5.x** — `lumen` (default TUI command)  *(done 2026-06-10)*
-- [ ] I6.x — `lumen model`, `lumen config`, `lumen tools`
-- [ ] I7.x — `lumen session`, `lumen doctor`, `lumen update`
+- [x] **I6.x** — `lumen model`, `lumen config`, `lumen tools`  *(done 2026-06-10)*
+- [x] **I7.x** — `lumen session` / `lumen doctor --verbose` / `lumen update`  *(done 2026-06-10)*
 
 ### L. Testing
 - [ ] L1.x — Vitest configured in all packages

@@ -8,7 +8,10 @@ const program = new Command();
 program
     .name('lumen')
     .description('A self-improving TypeScript agent framework')
-    .version('0.1.0');
+    .version('0.1.0')
+    .option('-m, --model <model>', 'Override the LLM model (default: chat)')
+    .option('-c, --config <path>', 'Path to a Lumen config file (default: chat)')
+    .option('--cwd <path>', 'Working directory for tool execution (default: chat)');
 program
     .command('run')
     .description('Run a single prompt and print the result, then exit')
@@ -19,6 +22,9 @@ program
     .option('--api-key <key>', 'Override the API key')
     .option('--base-url <url>', 'Override the API base URL')
     .option('--no-tools', 'Disable filesystem tools')
+    .option('--memory-path <path>', 'Override the SQLite memory database path')
+    .option('--no-memory', 'Run without wiring a memory store')
+    .option('--no-mcp', 'Skip MCP server discovery and connection')
     .action(async (prompt, opts) => {
     const { runCommand } = await import('./commands/run.js');
     const code = await runCommand({
@@ -29,6 +35,9 @@ program
         apiKey: opts['apiKey'],
         baseUrl: opts['baseUrl'],
         noTools: opts['tools'] === false,
+        memoryPath: opts['memoryPath'],
+        noMemory: opts['memory'] === false,
+        noMcp: opts['mcp'] === false,
     });
     process.exit(code);
 });
@@ -51,14 +60,203 @@ program
 program
     .command('doctor')
     .description('Diagnose the local Lumen install')
-    .action(async () => {
+    .option('-v, --verbose', 'Print extra detail for each check')
+    .action(async (opts) => {
     const { doctorCommand } = await import('./commands/doctor.js');
-    const code = await doctorCommand();
+    const code = await doctorCommand({ verbose: opts['verbose'] === true });
     process.exit(code);
 });
-// Default: if no subcommand, show help
-program.action(() => {
-    program.help();
+program
+    .command('session')
+    .description('Inspect and manage stored agent sessions')
+    .argument('[subcommand]', '"list" (default), "show <id>", "delete <id>", or "prune"', 'list')
+    .argument('[id]', 'Session id (for "show" and "delete")')
+    .option('--memory-path <path>', 'Override the SQLite memory database path')
+    .option('--force', 'Confirm destructive operations (delete, prune)')
+    .option('--older-than <days>', 'prune: cut-off age in days (default 30)', '30')
+    .option('--limit <n>', 'show: limit messages returned (default 100)', '100')
+    .action(async (subcommand, id, opts) => {
+    const { sessionListCommand, sessionShowCommand, sessionDeleteCommand, sessionPruneCommand, } = await import('./commands/session.js');
+    const memoryPath = opts['memoryPath'];
+    const force = opts['force'] === true;
+    let code = 0;
+    if (subcommand === 'list') {
+        code = await sessionListCommand({ memoryPath });
+    }
+    else if (subcommand === 'show') {
+        if (!id) {
+            process.stderr.write('lumen session: missing <id> for "show"\n');
+            code = 1;
+        }
+        else {
+            const limitRaw = opts['limit'];
+            const limit = typeof limitRaw === 'string' ? Number.parseInt(limitRaw, 10) : undefined;
+            code = await sessionShowCommand(id, { memoryPath, limit });
+        }
+    }
+    else if (subcommand === 'delete') {
+        if (!id) {
+            process.stderr.write('lumen session: missing <id> for "delete"\n');
+            code = 1;
+        }
+        else {
+            code = await sessionDeleteCommand(id, { memoryPath, force });
+        }
+    }
+    else if (subcommand === 'prune') {
+        const daysRaw = opts['olderThan'];
+        const days = typeof daysRaw === 'string' ? Number.parseInt(daysRaw, 10) : 30;
+        code = await sessionPruneCommand({ memoryPath, force, olderThanDays: days });
+    }
+    else {
+        process.stderr.write(`lumen session: unknown subcommand: ${subcommand}\n`);
+        code = 1;
+    }
+    process.exit(code);
+});
+program
+    .command('update')
+    .description('Check for newer Lumen releases')
+    .argument('[subcommand]', '"check" (default) or "print-version"', 'check')
+    .option('--quiet', 'Skip the "you are up to date" recommendation')
+    .action(async (subcommand, opts) => {
+    const { updateCheckCommand, updatePrintVersionCommand } = await import('./commands/update.js');
+    let code = 0;
+    if (subcommand === 'print-version') {
+        code = await updatePrintVersionCommand();
+    }
+    else if (subcommand === 'check') {
+        code = await updateCheckCommand({ quiet: opts['quiet'] === true });
+    }
+    else {
+        process.stderr.write(`lumen update: unknown subcommand: ${subcommand}\n`);
+        code = 1;
+    }
+    process.exit(code);
+});
+program
+    .command('model')
+    .description('Inspect configured LLM models and providers')
+    .argument('[subcommand]', '"list" (default), "show <name>", or "providers"', 'list')
+    .argument('[name]', 'Model name (for "show")')
+    .option('-c, --config <path>', 'Path to a Lumen config file')
+    .action(async (subcommand, name, opts) => {
+    const { modelListCommand, modelShowCommand, modelProvidersCommand } = await import('./commands/model.js');
+    const configPath = opts['config'];
+    let code = 0;
+    if (subcommand === 'show') {
+        if (!name) {
+            process.stderr.write('lumen model: missing <name> for "show"\n');
+            code = 1;
+        }
+        else {
+            code = await modelShowCommand({ configPath, name });
+        }
+    }
+    else if (subcommand === 'providers') {
+        code = await modelProvidersCommand({ configPath });
+    }
+    else if (subcommand === 'list') {
+        code = await modelListCommand({ configPath });
+    }
+    else {
+        process.stderr.write(`lumen model: unknown subcommand: ${subcommand}\n`);
+        code = 1;
+    }
+    process.exit(code);
+});
+program
+    .command('config')
+    .description('Inspect the resolved Lumen config')
+    .argument('[subcommand]', '"show" (default), "path", or "validate"', 'show')
+    .option('-c, --config <path>', 'Path to a Lumen config file')
+    .action(async (subcommand, opts) => {
+    const { configShowCommand, configPathCommand, configValidateCommand } = await import('./commands/config.js');
+    const configPath = opts['config'];
+    let code = 0;
+    if (subcommand === 'path') {
+        code = await configPathCommand({ configPath });
+    }
+    else if (subcommand === 'validate') {
+        code = await configValidateCommand({ configPath });
+    }
+    else if (subcommand === 'show') {
+        code = await configShowCommand({ configPath });
+    }
+    else {
+        process.stderr.write(`lumen config: unknown subcommand: ${subcommand}\n`);
+        code = 1;
+    }
+    process.exit(code);
+});
+program
+    .command('tools')
+    .description('Inspect registered Lumen tools')
+    .argument('[subcommand]', '"list" (default), "show <name>", or "check"', 'list')
+    .argument('[name]', 'Tool name (for "show")')
+    .option('--approval-required', 'Only show tools that require approval at runtime')
+    .action(async (subcommand, name, opts) => {
+    const { toolsListCommand, toolsShowCommand, toolsCheckCommand } = await import('./commands/tools.js');
+    let code = 0;
+    if (subcommand === 'show') {
+        if (!name) {
+            process.stderr.write('lumen tools: missing <name> for "show"\n');
+            code = 1;
+        }
+        else {
+            code = await toolsShowCommand({ name });
+        }
+    }
+    else if (subcommand === 'check') {
+        code = await toolsCheckCommand();
+    }
+    else if (subcommand === 'list') {
+        code = await toolsListCommand({ approvalRequiredOnly: opts['approvalRequired'] === true });
+    }
+    else {
+        process.stderr.write(`lumen tools: unknown subcommand: ${subcommand}\n`);
+        code = 1;
+    }
+    process.exit(code);
+});
+program
+    .command('skills')
+    .description('Inspect locally installed Lumen skills')
+    .argument('[command]', '"list" (default) or "cat <id>"', 'list')
+    .argument('[id]', 'Skill id or name (for "cat")')
+    .option('-p, --prompt <text>', 'Prompt text for activation scoring (list only)')
+    .option('--path <dir>', 'Override the skill root directory')
+    .action(async (cmd, id, opts) => {
+    if (cmd === 'cat' && id) {
+        const { skillsCatCommand } = await import('./commands/skills.js');
+        const code = await skillsCatCommand({ id, path: opts['path'] });
+        process.exit(code);
+    }
+    const { skillsListCommand } = await import('./commands/skills.js');
+    const code = await skillsListCommand({
+        path: opts['path'],
+        prompt: opts['prompt'],
+    });
+    process.exit(code);
+});
+// `lumen` (no subcommand) — alias for `lumen chat`. Allows `lumen -m foo`
+// to drop into the TUI without remembering the explicit `chat` keyword.
+// We keep the two entry points wired to the *same* handler so a future
+// redesign of the chat surface only has to touch one place.
+program.action(async (opts) => {
+    // Commander emits this action for both the "no subcommand" and the
+    // "subcommand provided" case. Subcommands have their own .action()
+    // attached and short-circuit before this fires, so reaching here
+    // means the user typed `lumen` (or `lumen --foo`) with nothing else.
+    // We deliberately do NOT call program.help() here — the user is
+    // trying to chat, not read docs.
+    const { chatCommand } = await import('./commands/chat.js');
+    const code = await chatCommand({
+        model: opts['model'],
+        configPath: opts['config'],
+        cwd: opts['cwd'],
+    });
+    process.exit(code);
 });
 program.parseAsync(process.argv).catch((err) => {
     const message = err instanceof Error ? err.message : String(err);

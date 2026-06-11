@@ -12,11 +12,18 @@
  *   - Git tool registers (git CLI is required for any of the
  *     `git` operations to work; we warn instead of fail to
  *     support `--no-git` deployments)
+ *   - Skill registry can discover from the default skill root
+ *     without writing to disk
+ *   - MCP server discovery: lists configured servers, attempts
+ *     to connect to each enabled one, and reports a per-server
+ *     connect round-trip (skips the round-trip on config load
+ *     failure so the user still sees the rest of the report)
  *
  * Prints a series of `[OK]` / `[WARN]` / `[FAIL]` lines. Exits 0 if
  * everything critical passes, 1 otherwise.
  */
-export const doctorCommand = async () => {
+import { loadCliConfig } from '../composition.js';
+export const doctorCommand = async (opts = {}) => {
     let failed = 0;
     const ok = (msg) => {
         process.stdout.write(`  [OK]   ${msg}\n`);
@@ -29,6 +36,11 @@ export const doctorCommand = async () => {
         failed += 1;
     };
     process.stdout.write('Lumen doctor\n\n');
+    if (opts.verbose) {
+        process.stdout.write(`  cwd:      ${process.cwd()}\n`);
+        process.stdout.write(`  node:     ${process.version}\n`);
+        process.stdout.write(`  platform: ${process.platform} ${process.arch}\n\n`);
+    }
     // 1. Config
     try {
         const { loadCliConfig } = await import('../composition.js');
@@ -51,6 +63,12 @@ export const doctorCommand = async () => {
         const { createFilesystemTools } = await import('@lumen/tools');
         const tools = createFilesystemTools();
         ok(`Filesystem tools registered: ${tools.map((t) => t.name).join(', ')}`);
+        if (opts.verbose) {
+            for (const t of tools) {
+                const d = t.describe();
+                process.stdout.write(`    ${d.name}  v${d.version}  risk=${d.risk}\n`);
+            }
+        }
     }
     catch (err) {
         fail(`Failed to load filesystem tools: ${err instanceof Error ? err.message : String(err)}`);
@@ -137,7 +155,20 @@ export const doctorCommand = async () => {
     catch (err) {
         fail(`Memory store failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-    // 7. ripgrep (best-effort)
+    // 7. Skills registry discovery (read-only).
+    //    Missing ~/.lumen/skills is OK: discovery returns an empty list.
+    try {
+        const { FilesystemSkillSource, defaultSkillsPath, SkillRegistry } = await import('@lumen/skills');
+        const source = new FilesystemSkillSource({ rootDir: defaultSkillsPath() });
+        const skills = await source.discover({ cwd: process.cwd() });
+        const registry = new SkillRegistry();
+        registry.registerAll(skills);
+        ok(`Skills registry OK (${registry.size} skill(s) discovered)`);
+    }
+    catch (err) {
+        fail(`Skills registry failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    // 8. ripgrep (best-effort)
     try {
         const { execFile } = await import('node:child_process');
         await new Promise((resolve, reject) => {
@@ -152,6 +183,49 @@ export const doctorCommand = async () => {
     }
     catch {
         warn('ripgrep not on PATH (search_files will fall back to pure-Node implementation)');
+    }
+    // 9. MCP server discovery + connect round-trip.
+    //    Read the config we already loaded above (or reload
+    //    if step 1 failed) and try to connect to every
+    //    enabled server. The round-trip is bounded by a
+    //    3-second per-server timeout so `lumen doctor`
+    //    stays fast even on misbehaving servers. Failures
+    //    are `[WARN]` rather than `[FAIL]` — the user may
+    //    intentionally have a server that's offline — but
+    //    a discoverability bug (we can't even *list* the
+    //    config) is a `[FAIL]`.
+    try {
+        const cfg = await loadCliConfig();
+        const servers = cfg.mcp?.servers ?? [];
+        if (servers.length === 0) {
+            ok('MCP: no servers configured (run with config.mcp.servers to enable)');
+        }
+        else {
+            const { connectAllMcpServers, closeAllMcpServers } = await import('@lumen/mcp');
+            const { ToolRegistry } = await import('@lumen/core');
+            const registry = new ToolRegistry();
+            const connected = await connectAllMcpServers(servers, registry, { timeoutMs: 3_000 });
+            try {
+                const toolCount = connected.reduce((acc, s) => acc + s.tools.length, 0);
+                if (connected.length === servers.length) {
+                    ok(`MCP: ${connected.length}/${servers.length} server(s) connected, ${toolCount} tool(s) registered (${connected
+                        .map((s) => `${s.name}=${s.tools.length}`)
+                        .join(', ')})`);
+                }
+                else {
+                    const failed = servers
+                        .filter((s) => !connected.find((c) => c.name === s.name))
+                        .map((s) => s.name);
+                    warn(`MCP: ${connected.length}/${servers.length} server(s) connected; failed: ${failed.join(', ')}`);
+                }
+            }
+            finally {
+                await closeAllMcpServers(connected);
+            }
+        }
+    }
+    catch (err) {
+        fail(`MCP discovery failed: ${err instanceof Error ? err.message : String(err)}`);
     }
     process.stdout.write(`\n${failed === 0 ? 'All checks passed.' : `${failed} check(s) failed.`}\n`);
     return failed === 0 ? 0 : 1;

@@ -378,7 +378,15 @@ export class Agent {
     // -------------------------------------------------------------------------
     async callProvider(messages, _budget, signal) {
         try {
-            return await this.provider.chat({ messages, model: this.model }, signal ? { signal } : undefined);
+            return await this.provider.chat({
+                messages,
+                model: this.model,
+                // Pass the live tool descriptors so the provider can render
+                // them into the wire format the model expects (OpenAI `tools`,
+                // Anthropic `tools` with `input_schema`, etc.). Providers that
+                // don't support tool use simply ignore this field.
+                tools: this.tools.list(),
+            }, signal ? { signal } : undefined);
         }
         catch (err) {
             if (err instanceof ProviderError)

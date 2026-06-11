@@ -49,6 +49,13 @@ export const runCommand = async (options) => {
         // appended the user message; we want the connection
         // closed cleanly so WAL gets checkpointed.
         await built?.memory?.dispose();
+        // Close any MCP server connections. `closeAllMcpServers`
+        // already uses Promise.allSettled, so a single stuck
+        // server can't keep the CLI alive.
+        if (built?.mcpServers.length) {
+            const { closeAllMcpServers } = await import('@lumen/mcp');
+            await closeAllMcpServers(built.mcpServers);
+        }
     }
 };
 // Mark the side-effect import as used; the command delegates to buildAgent.

@@ -76,35 +76,35 @@ export declare const GitInputSchema: z.ZodEffects<z.ZodObject<{
     stageAll: z.ZodOptional<z.ZodBoolean>;
 }, "strip", z.ZodTypeAny, {
     op: "status" | "diff" | "log" | "branch" | "commit";
+    message?: string | undefined;
     ref?: string | undefined;
     ref2?: string | undefined;
     maxCount?: number | undefined;
     maxBytes?: number | undefined;
-    message?: string | undefined;
     stageAll?: boolean | undefined;
 }, {
     op: "status" | "diff" | "log" | "branch" | "commit";
+    message?: string | undefined;
     ref?: string | undefined;
     ref2?: string | undefined;
     maxCount?: number | undefined;
     maxBytes?: number | undefined;
-    message?: string | undefined;
     stageAll?: boolean | undefined;
 }>, {
     op: "status" | "diff" | "log" | "branch" | "commit";
+    message?: string | undefined;
     ref?: string | undefined;
     ref2?: string | undefined;
     maxCount?: number | undefined;
     maxBytes?: number | undefined;
-    message?: string | undefined;
     stageAll?: boolean | undefined;
 }, {
     op: "status" | "diff" | "log" | "branch" | "commit";
+    message?: string | undefined;
     ref?: string | undefined;
     ref2?: string | undefined;
     maxCount?: number | undefined;
     maxBytes?: number | undefined;
-    message?: string | undefined;
     stageAll?: boolean | undefined;
 }>;
 export type GitInput = z.infer<typeof GitInputSchema>;

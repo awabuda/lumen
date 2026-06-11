@@ -116,6 +116,7 @@ export declare class SqliteStore extends BaseMemoryStore {
         limit?: number;
         before?: number;
     }): Promise<ReadonlyArray<SessionMessage>>;
+    deleteSession(id: string): Promise<boolean>;
     prune(olderThanMs: number): Promise<number>;
     private pruneSync;
 }
