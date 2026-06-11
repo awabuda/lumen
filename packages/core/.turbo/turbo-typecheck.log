@@ -1,4 +1,0 @@
-
-> @lumen/core@0.1.0 typecheck /Users/chengpengtao/workspace/lumen/packages/core
-> tsc --noEmit && tsc -p tsconfig.test.json --noEmit
-

@@ -1,1 +1,0 @@
-{"version":3,"file":"none-sandbox.js","sourceRoot":"","sources":["../../src/shell/none-sandbox.ts"],"names":[],"mappings":"AAwBA,MAAM,OAAO,WAAW;IACtB,2DAA2D;IAC3D,kDAAkD;IAClD,6DAA6D;IAC7D,YAAY,OAA2B,IAAG,CAAC;IAEpC,GAAG,CAAC,QAA6B;QACtC,OAAO,OAAO,CAAC,OAAO,CAAC;YACrB,IAAI,EAAE,SAAkB;YACxB,MAAM,EAAE,iBAA0B;YAClC,OAAO,EACL,oFAAoF;gBACpF,6FAA6F;SAChG,CAAC,CAAA;IACJ,CAAC;CACF"}
