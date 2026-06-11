@@ -109,6 +109,15 @@ export {
   type ToolsetFactory,
 } from './tools/toolset.js'
 
+// Logging
+export {
+  BaseLogger,
+  ConsoleLogger,
+  PinoLogger,
+  type LogEntry,
+  type LogLevel,
+} from './logging/index.js'
+
 // Budget
 export { Budget, type BudgetState } from './budget/index.js'
 

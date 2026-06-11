@@ -35,6 +35,7 @@ import type {
 import { BaseProvider } from '../message/provider.js'
 import { ToolRegistry } from '../tools/index.js'
 import { BaseMemoryStore } from '../memory/index.js'
+import { BaseLogger } from '../logging/index.js'
 import { HookRegistry } from '../hooks/index.js'
 import { Budget } from '../budget/index.js'
 import { AbortError, MaxIterationsExceededError, ProviderError, ToolError } from '../errors/index.js'
@@ -56,6 +57,8 @@ export interface AgentConfig {
   readonly systemPrompt?: string
   /** Working directory (passed to tools via ToolContext). */
   readonly cwd?: string
+  /** Logger. Defaults to a no-op ConsoleLogger. */
+  readonly logger?: BaseLogger
 }
 
 export interface AgentRunOptions {
@@ -156,6 +159,7 @@ export class Agent {
   private readonly model: string
   private readonly systemPrompt: string
   private readonly cwd: string
+  private readonly logger: BaseLogger
 
   constructor(config: AgentConfig) {
     this.provider = config.provider
@@ -165,6 +169,7 @@ export class Agent {
     this.model = config.model ?? config.config?.defaultModel ?? 'gpt-4o-mini'
     this.systemPrompt = config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT
     this.cwd = config.cwd ?? process.cwd()
+    this.logger = config.logger ?? new ConsoleLogger({ component: 'agent' })
   }
 
   /**
@@ -579,7 +584,11 @@ export class Agent {
         cwd: this.cwd,
         signal: signal ?? new AbortController().signal,
         sessionId: '',
-        log: undefined,
+        log: (level, msg, ctx) => {
+          if (level === 'error') this.logger.error(msg, ctx)
+          else if (level === 'warn') this.logger.warn(msg, ctx)
+          else this.logger.info(msg, ctx)
+        },
       })
       return {
         toolCallId: call.id,

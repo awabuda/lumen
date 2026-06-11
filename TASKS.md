@@ -129,7 +129,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [ ] E9.x — Conflict detection
 
 ### H. Config (continued)
-- [ ] H2.x — pino structured logging
+- [x] **H2.x** — pino structured logging  *(done 2026-06-10)*
 - [ ] H3.x — Telemetry
 - [ ] H4.x — `lumen doctor`, `lumen replay`
 
