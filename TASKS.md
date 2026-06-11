@@ -94,7 +94,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [ ] E10.x — Cross-session retrieval
 
 ### I. CLI (continued)
-- [ ] I4.x — TUI with Ink
+- [x] **I4.x** — TUI Ink enhancements: history, slash commands  *(done 2026-06-10)*
 - [x] **I5.x** — `lumen` (default TUI command)  *(done 2026-06-10)*
 - [x] **I6.x** — `lumen model`, `lumen config`, `lumen tools`  *(done 2026-06-10)*
 - [x] **I7.x** — `lumen session` / `lumen doctor --verbose` / `lumen update`  *(done 2026-06-10)*

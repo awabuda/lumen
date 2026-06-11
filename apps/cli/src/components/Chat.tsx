@@ -15,17 +15,21 @@
  *     which one is running)
  *   - Capture user input and submit to the agent
  *   - Handle Ctrl+C to abort a run (AbortController)
- *
- * We keep the component small on purpose — all the heavy lifting
- * happens in {@link Agent}. The component is just a bridge.
+ *   - History: Up/Down arrows cycle through previously-submitted
+ *     commands. New (un-submitted) edits do NOT pollute history
+ *     until Enter is pressed.
+ *   - Slash commands: /clear empties the visible turn log,
+ *     /exit and /quit call the Ink `useApp().exit()` to leave
+ *     the TUI cleanly.
  */
 
 import { Box, Text, useApp, useInput } from 'ink'
 import Spinner from 'ink-spinner'
 import TextInput from 'ink-text-input'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AssistantMessage, Message, ToolCall, ToolResult } from '@lumen/core'
+import type { AssistantMessage, ToolCall, ToolResult } from '@lumen/core'
 import type { BuiltAgent } from '../composition.js'
+
 /** A single turn (user + assistant) in the conversation log. */
 interface Turn {
   readonly key: number
@@ -54,13 +58,47 @@ export function Chat({ built }: ChatProps): JSX.Element {
   // Per-run AbortController so Ctrl+C can cancel an in-flight run.
   const abortRef = useRef<AbortController | null>(null)
 
+  // History buffer (most-recent first). The text currently in
+  // the input box is *not* part of history until Enter is
+  // pressed; Up/Down arrows navigate this array. The first
+  // entry is a sentinel `''` representing the "new line" the
+  // user is composing when they press Up to start recalling.
+  const [history, setHistory] = useState<readonly string[]>([])
+  const [historyCursor, setHistoryCursor] = useState<number>(-1)
+  // When the user starts navigating history, snapshot what
+  // they had typed so Down-arrow can restore it.
+  const draftRef = useRef<string>('')
+
   const submit = useCallback(
     async (prompt: string) => {
-      if (status === 'thinking' || prompt.trim().length === 0) return
+      const trimmed = prompt.trim()
+      if (status === 'thinking' || trimmed.length === 0) return
+
+      // Slash commands. We only handle the ones that affect UI
+      // here; anything else is sent to the agent unchanged.
+      if (trimmed === '/clear') {
+        setTurns([])
+        setInput('')
+        setHistoryCursor(-1)
+        draftRef.current = ''
+        return
+      }
+      if (trimmed === '/exit' || trimmed === '/quit') {
+        exit()
+        return
+      }
+
+      // Push to history (most-recent first, dedup consecutive).
+      setHistory((prev) => {
+        if (prev[0] === trimmed) return prev
+        return [trimmed, ...prev].slice(0, 200)
+      })
+      setHistoryCursor(-1)
+      draftRef.current = ''
 
       turnCounter.current += 1
       const myKey = turnCounter.current
-      const turn: Turn = { key: myKey, user: prompt }
+      const turn: Turn = { key: myKey, user: trimmed }
       setTurns((prev) => [...prev, turn])
       setStatus('thinking')
       setStreamingText('')
@@ -75,7 +113,7 @@ export function Chat({ built }: ChatProps): JSX.Element {
       // re-render the affected subtree.
       try {
         for await (const ev of built.agent.streamRun({
-          userMessage: prompt,
+          userMessage: trimmed,
           signal: ctrl.signal,
         })) {
           switch (ev.type) {
@@ -135,10 +173,17 @@ export function Chat({ built }: ChatProps): JSX.Element {
         setStreamingText('')
       }
     },
-    [built.agent, status],
+    [built.agent, exit, status],
   )
 
-  // Ctrl+C handling: abort the in-flight run, or exit if idle.
+  // Keyboard input:
+  //   - Ctrl+C: abort the in-flight run, or exit if idle
+  //   - Up arrow: recall the previous command (older)
+  //   - Down arrow: recall the next command (newer)
+  //
+  // The arrow keys are intercepted BEFORE the TextInput
+  // component sees them. We do this by listening on the Ink
+  // app-level `useInput` hook, which fires for every key.
   useInput((inputChar, key) => {
     if (key.ctrl && inputChar === 'c') {
       if (abortRef.current) {
@@ -146,6 +191,39 @@ export function Chat({ built }: ChatProps): JSX.Element {
       } else {
         exit()
       }
+      return
+    }
+    // History navigation only when the user is composing
+    // (status !== 'thinking' — we do not want arrow keys to
+    // fire while the agent is in flight; the TextInput is
+    // hidden then anyway).
+    if (status === 'thinking') return
+    if (key.upArrow) {
+      // First Up press: snapshot whatever the user typed.
+      if (historyCursor === -1) draftRef.current = input
+      const next = Math.min(history.length - 1, historyCursor + 1)
+      const recalled = history[next]
+      if (recalled !== undefined) {
+        setHistoryCursor(next)
+        setInput(recalled)
+      }
+      return
+    }
+    if (key.downArrow) {
+      if (historyCursor === -1) return
+      const next = historyCursor - 1
+      if (next < 0) {
+        // Back to the user's draft
+        setHistoryCursor(-1)
+        setInput(draftRef.current)
+      } else {
+        const recalled = history[next]
+        if (recalled !== undefined) {
+          setHistoryCursor(next)
+          setInput(recalled)
+        }
+      }
+      return
     }
   })
 
@@ -177,7 +255,7 @@ export function Chat({ built }: ChatProps): JSX.Element {
       <Box flexDirection="column" marginBottom={1}>
         {turns.length === 0 ? (
           <Text dimColor>
-            Ask me anything. Try: "list the files in the current directory" or "read package.json".
+            Ask me anything. Slash commands: /clear, /exit, /quit. Up/Down for history.
           </Text>
         ) : (
           turns.map((turn) => (
