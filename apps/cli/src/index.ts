@@ -202,6 +202,7 @@ program
   .argument('[subcommand]', '"list" (default), "show <name>", or "check"', 'list')
   .argument('[name]', 'Tool name (for "show")')
   .option('--approval-required', 'Only show tools that require approval at runtime')
+  .option('--toolset', 'List built-in toolsets instead of individual tools')
   .action(async (subcommand: string, name: string | undefined, opts: Record<string, unknown>) => {
     const { toolsListCommand, toolsShowCommand, toolsCheckCommand } = await import(
       './commands/tools.js'
@@ -217,7 +218,10 @@ program
     } else if (subcommand === 'check') {
       code = await toolsCheckCommand()
     } else if (subcommand === 'list') {
-      code = await toolsListCommand({ approvalRequiredOnly: opts['approvalRequired'] === true })
+      code = await toolsListCommand({
+        approvalRequiredOnly: opts['approvalRequired'] === true,
+        toolset: opts['toolset'] === true,
+      })
     } else {
       process.stderr.write(`lumen tools: unknown subcommand: ${subcommand}\n`)
       code = 1

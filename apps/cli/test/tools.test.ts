@@ -51,6 +51,15 @@ describe('toolsListCommand', () => {
     // safe tools like `date` should NOT appear in the filtered listing
     expect(stdout).not.toMatch(/^  date /m)
   })
+
+  it('--toolset lists built-in toolsets', async () => {
+    const code = await toolsListCommand({ toolset: true })
+    expect(code).toBe(0)
+    expect(stdout).toContain('Lumen toolsets')
+    expect(stdout).toContain('fs')
+    expect(stdout).toContain('meta')
+    expect(stdout).toContain('github')
+  })
 })
 
 describe('toolsShowCommand', () => {

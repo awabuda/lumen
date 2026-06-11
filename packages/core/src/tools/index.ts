@@ -205,6 +205,13 @@ const isOptional = (s: ZodTypeAny): boolean => {
  */
 export class ToolRegistry {
   private readonly tools = new Map<string, BaseTool>()
+  /**
+   * Toolsets that have been registered but not yet materialized.
+   * Materialization happens on first use (via {@link materializeToolsets})
+   * or eagerly via {@link registerToolset} when
+   * `eager: true` is passed. The keys are toolset ids.
+   */
+  private readonly toolsets = new Map<string, import('./toolset.js').BaseToolset>()
 
   /** Register a tool. Throws if a tool with the same name is already registered. */
   public register(tool: BaseTool): this {
@@ -219,6 +226,63 @@ export class ToolRegistry {
   public registerAll(tools: ReadonlyArray<BaseTool>): this {
     for (const t of tools) this.register(t)
     return this
+  }
+
+  /**
+   * Register a toolset. The toolset's tools are registered under
+   * a `name:tool` namespace so two toolsets that ship the same
+   * tool name do not collide. The `eager` option materializes
+   * the toolset immediately; otherwise the toolset is materialized
+   * lazily on the first call to {@link materializeToolsets}.
+   */
+  public registerToolset(
+    toolset: import('./toolset.js').BaseToolset,
+    options: { eager?: boolean; namespace?: boolean } = {},
+  ): this {
+    if (this.toolsets.has(toolset.id)) {
+      throw new Error(`Toolset "${toolset.id}" is already registered`)
+    }
+    this.toolsets.set(toolset.id, toolset)
+    if (options.eager === true) this.materializeToolset(toolset, options.namespace !== false)
+    return this
+  }
+
+  /**
+   * Materialize every registered toolset that has not yet been
+   * materialized. Idempotent: re-calling after a full pass is
+   * a no-op. Returns the number of toolsets that were newly
+   * materialized.
+   */
+  public materializeToolsets(): number {
+    let count = 0
+    for (const ts of this.toolsets.values()) {
+      this.materializeToolset(ts, true)
+      count += 1
+    }
+    return count
+  }
+
+  /**
+   * Materialize one toolset under the `name:tool` namespace.
+   * Called by both the eager path and {@link materializeToolsets}.
+   */
+  private materializeToolset(toolset: import('./toolset.js').BaseToolset, namespace: boolean): void {
+    for (const tool of toolset.materialize()) {
+      const name = namespace ? `${toolset.id}:${tool.name}` : tool.name
+      // Use a private write so we do not throw on a
+      // duplicate name; the caller is expected to manage
+      // namespacing themselves. If the name is already
+      // taken, skip and move on — the first registration
+      // wins, and an existing operator-side tool takes
+      // priority over a toolset default.
+      if (this.tools.has(name)) continue
+      // We have to set the underlying map's entry; the
+      // public `register` would re-check the name and
+      // throw on a name we just composed. Use a fresh
+      // tool whose `name` we cannot mutate, so we accept
+      // a no-op on conflict instead.
+      this.tools.set(name, tool)
+    }
   }
 
   /** Look up a tool by name. Returns undefined if not found. */

@@ -78,7 +78,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] D13.x — `lumen doctor` shell round-trip + git CLI check
 - [x] D9.x — gh CLI bridge for PR creation (pr_create/list/view/status, issue_create/list, 8 tests)
 - [x] D10.x — Time / env tools (date, env, whoami, 8 tests)
-- [ ] D11.x — Toolset grouping + lazy loading
+- [x] **D11.x** — Toolset grouping + lazy loading  *(done 2026-06-10)*
 - [ ] D12.x — Sandboxing (Docker)
 
 ### E. Memory

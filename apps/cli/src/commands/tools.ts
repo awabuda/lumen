@@ -16,11 +16,13 @@
  * `lumen doctor` (which does a connect round-trip).
  */
 
-import { createDefaultTools } from '@lumen/tools'
+import { BUILT_IN_TOOLSETS, createDefaultTools } from '@lumen/tools'
 
 export interface ToolsListOptions {
   /** Optional flag — only show tools that require approval. */
   readonly approvalRequiredOnly?: boolean
+  /** Show toolsets instead of individual tools. */
+  readonly toolset?: boolean
 }
 
 /** Options for `lumen tools show`. */
@@ -33,6 +35,8 @@ export interface ToolsShowOptions {
  * Each tool is printed on its own line as: `name  v<version>  risk=<risk>`.
  */
 export const toolsListCommand = async (opts: ToolsListOptions = {}): Promise<number> => {
+  if (opts.toolset) return toolsToolsetCommand()
+
   const tools = createDefaultTools()
   const filtered = opts.approvalRequiredOnly
     ? tools.filter((t) => t.describe().risk === 'approval-required')
@@ -47,6 +51,18 @@ export const toolsListCommand = async (opts: ToolsListOptions = {}): Promise<num
   for (const tool of filtered) {
     const desc = tool.describe()
     process.stdout.write(`  ${desc.name.padEnd(14)} v${desc.version.padEnd(6)} risk=${desc.risk}\n`)
+  }
+  return 0
+}
+
+/**
+ * `lumen tools --toolset` — list every built-in toolset.
+ */
+const toolsToolsetCommand = async (): Promise<number> => {
+  process.stdout.write(`Lumen toolsets (${BUILT_IN_TOOLSETS.length})\n\n`)
+  for (const ts of BUILT_IN_TOOLSETS) {
+    process.stdout.write(`  ${ts.id.padEnd(10)} ${ts.name}\n`)
+    process.stdout.write(`            ${ts.description}\n`)
   }
   return 0
 }

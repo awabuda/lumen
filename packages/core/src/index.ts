@@ -69,15 +69,7 @@ export {
   type EmbedResponse,
 } from './message/provider.js'
 
-// Tool contract
-export {
-  BaseTool,
-  ToolRegistry,
-  type ToolDescriptor,
-  type ToolContext,
-  type ToolRisk,
-} from './tools/index.js'
-
+// Tool contract (re-exported below in the unified Tools block)
 // Memory contract
 export type {
   MemoryRecord,
@@ -101,6 +93,21 @@ export {
   type HookContext,
   type HookEvent,
 } from './hooks/index.js'
+
+// Tools (registry + base + toolset)
+export {
+  BaseTool,
+  ToolRegistry,
+  type ToolContext,
+  type ToolDescriptor,
+  type ToolRisk,
+} from './tools/index.js'
+export {
+  BaseToolset,
+  StaticToolset,
+  LazyToolset,
+  type ToolsetFactory,
+} from './tools/toolset.js'
 
 // Budget
 export { Budget, type BudgetState } from './budget/index.js'

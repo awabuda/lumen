@@ -90,6 +90,13 @@ export { FileNotFoundError, PathKindError } from './errors.js'
 export { BaseTool, ToolRegistry } from './base.js'
 export type { ToolContext, ToolDescriptor, ToolRisk } from './base.js'
 
+export {
+  BUILT_IN_TOOLSETS,
+  FS_TOOLSET,
+  META_TOOLSET,
+  GITHUB_TOOLSET,
+} from './toolsets.js'
+
 import { ReadFileTool } from './fs/read-file.js'
 import { WriteFileTool } from './fs/write-file.js'
 import { PatchTool } from './fs/patch.js'
