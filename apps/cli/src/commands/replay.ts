@@ -54,7 +54,7 @@ export const replayCommand = async (opts: ReplayOptions): Promise<number> => {
     process.stdout.write(`[turn ${turn}] user: ${msg.content}\n`)
 
     try {
-      const result = await agent.run(msg.content)
+      const result = await agent.agent.run({ userMessage: msg.content })
       process.stdout.write(`[turn ${turn}] assistant: ${result.finalMessage.content}\n\n`)
     } catch (err) {
       process.stderr.write(`[turn ${turn}] error: ${err instanceof Error ? err.message : String(err)}\n`)
