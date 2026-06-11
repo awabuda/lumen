@@ -131,7 +131,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 ### H. Config (continued)
 - [x] **H2.x** — pino structured logging  *(done 2026-06-10)*
 - [ ] H3.x — Telemetry
-- [ ] H4.x — `lumen doctor`, `lumen replay`
+- [x] **H4.x** — `lumen replay`  *(done 2026-06-10)*
 
 ### L. Testing (continued)
 - [x] **L4.x** — Snapshot tests for TUI  *(done 2026-06-10)*
