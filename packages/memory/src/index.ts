@@ -66,3 +66,8 @@ export {
   LLMConflictDetector,
   type Conflict,
 } from './conflict-detector.js'
+export {
+  ProfileBuilder,
+  type ProfileEntry,
+  type UserProfile,
+} from './profile.js'

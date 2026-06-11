@@ -124,7 +124,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] G6.x — `lumen doctor` MCP 连接 round-trip 检查（per-server 3s 超时，失败 `[WARN]`，stdio + http 两条路径都实测）
 
 ### E. Memory (continued)
-- [ ] E7.x — Long-term profile
+- [x] **E7.x** — Long-term profile  *(done 2026-06-11)*
 - [x] **E8.x** — Reflection + fact extraction  *(done 2026-06-10)*
 - [x] **E9.x** — Conflict detection  *(done 2026-06-11)*
 
