@@ -249,3 +249,7 @@ Subagent review notes for @lumen/llm:
 - ✅ Retryable status classification (5xx/408/429)
 - ❌ Dead code, missing types, missing index.ts, missing tests — all fixed in review
 
+
+## P4 — Extensions (post-3-release)
+
+- [x] **P4.1** — Web search + fetch tools  *(done 2026-06-11, see packages/tools/src/web/)*
