@@ -145,7 +145,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] **J1.x** — HTTP/WebSocket server adapter  *(done 2026-06-11, see @lumen/server)*
 - [x] **J2.x** — Desktop bridge  *(done 2026-06-11, see @lumen/desktop-bridge)*
 - [x] **J3.x** — VSCode editor bridge  *(done 2026-06-11, see @lumen/editor-bridge)*
-- [ ] J4.x — JetBrains plugin
+- [x] **J4.x** — JetBrains editor bridge  *(done 2026-06-11, included in @lumen/editor-bridge)*
 
 ### K. Advanced capabilities
 - [ ] K1.x — Subagent delegation
