@@ -144,7 +144,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 ### J. Multi-surface
 - [x] **J1.x** — HTTP/WebSocket server adapter  *(done 2026-06-11, see @lumen/server)*
 - [x] **J2.x** — Desktop bridge  *(done 2026-06-11, see @lumen/desktop-bridge)*
-- [ ] J3.x — VSCode extension
+- [x] **J3.x** — VSCode editor bridge  *(done 2026-06-11, see @lumen/editor-bridge)*
 - [ ] J4.x — JetBrains plugin
 
 ### K. Advanced capabilities
