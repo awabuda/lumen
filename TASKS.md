@@ -150,7 +150,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 ### K. Advanced capabilities
 - [ ] K1.x — Subagent delegation
 - [x] **K2.x** — Cron scheduler  *(done 2026-06-11)*
-- [ ] K3.x — Plan/act mode
+- [x] **K3.x** — Plan/act mode  *(done 2026-06-11)*
 - [ ] K4.x — Multi-user collaboration
 
 ### M. Docs & release

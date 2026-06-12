@@ -156,6 +156,22 @@ export {
   type CronExpressionCronOptions,
 } from './cron/index.js'
 
+// Plan/act mode
+export {
+  BasePlanner,
+  StaticPlanner,
+  LLMPlanner,
+  PlanStore,
+  PlanSchema,
+  PlanStepSchema,
+  ModeSchema,
+  type Plan,
+  type PlanStep,
+  type Mode,
+  type StaticPlannerOptions,
+  type LLMPlannerOptions,
+} from './plan/index.js'
+
 // Budget
 export { Budget, type BudgetState } from './budget/index.js'
 
