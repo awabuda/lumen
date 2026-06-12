@@ -66,4 +66,6 @@ export {
 export type { AnthropicOptions } from './anthropic.js'
 export { OllamaProvider, createOllamaProvider, DEFAULT_OLLAMA_BASE_URL, parseNdjsonLines } from './ollama.js'
 export type { OllamaOptions } from './ollama.js'
+export { GeminiProvider, createGeminiProvider, DEFAULT_GEMINI_BASE_URL, GeminiOptionsSchema } from './gemini.js'
+export type { GeminiOptions } from './gemini.js'
 export { HttpStatusError, ResponseShapeError, StreamParseError, isRetryableStatus } from './errors.js'

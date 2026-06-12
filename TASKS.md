@@ -253,3 +253,4 @@ Subagent review notes for @lumen/llm:
 ## P4 — Extensions (post-3-release)
 
 - [x] **P4.1** — Web search + fetch tools  *(done 2026-06-11, see packages/tools/src/web/)*
+- [x] **P4.2** — Google Gemini provider  *(done 2026-06-11, see packages/llm/src/gemini.ts)*
