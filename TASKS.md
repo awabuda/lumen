@@ -143,7 +143,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 
 ### J. Multi-surface
 - [x] **J1.x** — HTTP/WebSocket server adapter  *(done 2026-06-11, see @lumen/server)*
-- [ ] J2.x — Desktop (Tauri)
+- [x] **J2.x** — Desktop bridge  *(done 2026-06-11, see @lumen/desktop-bridge)*
 - [ ] J3.x — VSCode extension
 - [ ] J4.x — JetBrains plugin
 
