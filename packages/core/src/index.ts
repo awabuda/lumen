@@ -172,6 +172,29 @@ export {
   type LLMPlannerOptions,
 } from './plan/index.js'
 
+// Multi-user collaboration
+export {
+  BasePermissionPolicy,
+  BaseUserStore,
+  RoleBasedPolicy,
+  ApprovalRequiredPolicy,
+  InMemoryUserStore,
+  SessionGate,
+  MultiUserRuntime,
+  CreateUserInputSchema,
+  UpdateUserInputSchema,
+  UserRoleSchema,
+  UserSessionSchema,
+  type User,
+  type UserRole,
+  type UserSession,
+  type PermissionDecision,
+  type PermissionContext,
+  type RoleBasedPolicyOptions,
+  type InMemoryUserStoreOptions,
+  type MultiUserRuntimeOptions,
+} from './multi-user/index.js'
+
 // Budget
 export { Budget, type BudgetState } from './budget/index.js'
 

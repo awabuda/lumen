@@ -151,7 +151,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [ ] K1.x — Subagent delegation
 - [x] **K2.x** — Cron scheduler  *(done 2026-06-11)*
 - [x] **K3.x** — Plan/act mode  *(done 2026-06-11)*
-- [ ] K4.x — Multi-user collaboration
+- [x] **K4.x** — Multi-user collaboration  *(done 2026-06-11)*
 
 ### M. Docs & release
 - [x] **M1.x** — User docs (zh + en)  *(done 2026-06-10, see README.md)*
