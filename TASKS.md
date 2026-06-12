@@ -157,7 +157,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] **M1.x** — User docs (zh + en)  *(done 2026-06-10, see README.md)*
 - [x] **M2.x** — Developer docs  *(done 2026-06-11, see docs/DEVELOPER.md)*
 - [x] **M3.x** — npm + binary + Docker + Homebrew  *(done 2026-06-11)*
-- [ ] M4.x — Security audit
+- [x] **M4.x** — Security audit  *(done 2026-06-11, see docs/SECURITY.md)*
 
 ---
 
