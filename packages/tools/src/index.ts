@@ -174,3 +174,23 @@ export function createMetaTools(): BaseTool[] {
 export function createGithubTools(): BaseTool[] {
   return [new GhTool()]
 }
+
+// Web tools
+export {
+  BaseSearchProvider,
+  DuckDuckGoSearchProvider,
+  DuckDuckGoSearchProviderOptionsSchema,
+  InMemorySearchProvider,
+  WebFetchInputSchema,
+  WebFetchOutputSchema,
+  WebFetchTool,
+  WebSearchInputSchema,
+  WebSearchOutputSchema,
+  WebSearchTool,
+  SearchResultSchema,
+  createWebTools,
+  type CreateWebToolsOptions,
+  type DuckDuckGoSearchProviderOptions,
+  type InMemorySearchProviderOptions,
+  type SearchResult,
+} from './web/index.js'
