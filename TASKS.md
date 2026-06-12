@@ -148,7 +148,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 - [x] **J4.x** — JetBrains editor bridge  *(done 2026-06-11, included in @lumen/editor-bridge)*
 
 ### K. Advanced capabilities
-- [ ] K1.x — Subagent delegation
+- [x] **K1.x** — Subagent delegation  *(done 2026-06-11, see @lumen/core)*
 - [x] **K2.x** — Cron scheduler  *(done 2026-06-11)*
 - [x] **K3.x** — Plan/act mode  *(done 2026-06-11)*
 - [x] **K4.x** — Multi-user collaboration  *(done 2026-06-11)*
