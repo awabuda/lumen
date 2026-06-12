@@ -142,7 +142,7 @@ Legend: `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked
 ## P3 — Advanced (ongoing)
 
 ### J. Multi-surface
-- [ ] J1.x — Web dashboard (Next.js)
+- [x] **J1.x** — HTTP/WebSocket server adapter  *(done 2026-06-11, see @lumen/server)*
 - [ ] J2.x — Desktop (Tauri)
 - [ ] J3.x — VSCode extension
 - [ ] J4.x — JetBrains plugin
