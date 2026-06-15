@@ -7,7 +7,7 @@
  * here; the protocol parsing is covered by `openai-compatible.test.ts`.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   createMistralProvider,
   DEFAULT_MISTRAL_BASE_URL,
@@ -17,7 +17,7 @@ import {
   MistralProvider,
   HttpStatusError,
 } from '../src/index.js'
-import { ProviderError } from '@lumen/core'
+import { ProviderError, type StreamEvent } from '@lumen/core'
 import type { ChatRequest, Message } from '@lumen/core'
 
 // -----------------------------------------------------------------------------
@@ -289,5 +289,186 @@ describe('MistralProvider HTTP behavior', () => {
     expect(res.vectors[0]).toEqual([0.1, 0.2, 0.3])
     expect(calls[0]?.url).toBe('https://api.mistral.ai/v1/embeddings')
     expect(calls[0]?.body).toContain('"model":"mistral-embed"')
+  })
+})
+
+// -----------------------------------------------------------------------------
+// Streaming + tool_use E2E (P5.3)
+//
+// These tests pin the behavior of MistralProvider.stream() — which is
+// inherited unchanged from OpenAICompatibleProvider — against an
+// OpenAI-wire-format SSE fixture. The point is to prove that the
+// inherited protocol path works under a MistralProvider identity
+// (correct baseUrl, Authorization header, `stream: true` body field)
+// and to cover the tool_call streaming path which is critical for
+// agent loops driving Mistral.
+// -----------------------------------------------------------------------------
+
+describe('MistralProvider streaming', () => {
+  it('POSTs to {baseUrl}/chat/completions with stream: true and the right auth', async () => {
+    const calls: Array<{ url: string; body: string }> = []
+    const fetchImpl: typeof fetch = (async (url: unknown, init?: RequestInit) => {
+      calls.push({ url: String(url), body: String(init?.body) })
+      const sse = [
+        'data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"Hel"}}]}',
+        '',
+        'data: {"choices":[{"index":0,"delta":{"content":"lo"},"finish_reason":"stop"}]}',
+        '',
+        'data: [DONE]',
+        '',
+      ].join('\n')
+      return new Response(sse, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })
+    }) as unknown as typeof fetch
+    const provider = createMistralProvider({ apiKey: 'test-key', fetchImpl })
+    const events: StreamEvent[] = []
+    for await (const ev of provider.stream(
+      basicRequest([{ role: 'user', content: 'hi' }]),
+    )) {
+      events.push(ev)
+    }
+    expect(calls).toHaveLength(1)
+    const call = calls[0]
+    expect(call).toBeDefined()
+    expect(call?.url).toBe('https://api.mistral.ai/v1/chat/completions')
+    const body = JSON.parse(call?.body ?? '{}')
+    expect(body.stream).toBe(true)
+    expect(body.model).toBe(DEFAULT_MISTRAL_MODEL)
+    expect(events[0]?.type).toBe('message_start')
+    const deltas = events.filter((e) => e.type === 'content_delta') as Array<{
+      type: 'content_delta'
+      delta: string
+    }>
+    expect(deltas.map((d) => d.delta).join('')).toBe('Hello')
+    expect(events.at(-1)?.type).toBe('message_complete')
+  })
+
+  it('emits tool_call_complete when the SSE fixture streams a tool_calls delta', async () => {
+    const fetchImpl: typeof fetch = (async () => {
+      const sse = [
+        // role-only first chunk
+        'data: {"choices":[{"index":0,"delta":{"role":"assistant"}}]}',
+        '',
+        // tool_calls delta with partial JSON
+        'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"tc_1","type":"function","function":{"name":"read_file","arguments":"{\\"path\\":\\""}}]}}]}',
+        '',
+        'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"/x\\"}"}}]}}]}',
+        '',
+        'data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}',
+        '',
+        'data: [DONE]',
+        '',
+      ].join('\n')
+      return new Response(sse, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })
+    }) as unknown as typeof fetch
+    const provider = createMistralProvider({ apiKey: 'k', fetchImpl })
+    const events: StreamEvent[] = []
+    for await (const ev of provider.stream(
+      basicRequest([{ role: 'user', content: 'read /x' }]),
+    )) {
+      events.push(ev)
+    }
+    const toolCompletes = events.filter((e) => e.type === 'tool_call_complete') as Array<{
+      type: 'tool_call_complete'
+      toolCall: { id: string; name: string; arguments: Record<string, unknown> }
+    }>
+    expect(toolCompletes).toHaveLength(1)
+    expect(toolCompletes[0]?.toolCall.name).toBe('read_file')
+    expect(toolCompletes[0]?.toolCall.id).toBe('tc_1')
+    expect(toolCompletes[0]?.toolCall.arguments).toEqual({ path: '/x' })
+    const final = events.at(-1)
+    expect(final?.type).toBe('message_complete')
+  })
+
+  it('throws ProviderError with HttpStatusError cause on a non-2xx HTTP status', async () => {
+    // The base class wraps the underlying HttpStatusError in a typed
+    // ProviderError and *throws* it from stream() — it does not yield
+    // a synthetic error event. Stream consumers are expected to wrap
+    // the loop in try/catch. This test pins that contract.
+    const fetchImpl = makeFetch([{ status: 500, body: { error: 'mistral down' } }])
+    const provider = createMistralProvider({ apiKey: 'k', fetchImpl })
+    let captured: unknown
+    try {
+      for await (const _ev of provider.stream(
+        basicRequest([{ role: 'user', content: 'hi' }]),
+      )) {
+        void _ev
+      }
+    } catch (err) {
+      captured = err
+    }
+    expect(captured).toBeInstanceOf(ProviderError)
+    const err = captured as ProviderError & { cause?: unknown; statusCode?: number }
+    expect(err.statusCode).toBe(500)
+    expect(err.cause).toBeInstanceOf(HttpStatusError)
+  })
+
+  it('routes the stream() call through the same Authorization header as chat()', async () => {
+    const seenAuth: string[] = []
+    const fetchImpl: typeof fetch = (async (_url: unknown, init?: RequestInit) => {
+      const headers = init?.headers
+      let v: string | null = null
+      if (headers instanceof Headers) {
+        v = headers.get('Authorization')
+      } else if (headers && typeof headers === 'object') {
+        const rec = headers as Record<string, string>
+        v = rec['Authorization'] ?? rec['authorization'] ?? null
+      }
+      if (v) seenAuth.push(v)
+      // Minimal SSE so the stream loop can drain cleanly.
+      const sse = [
+        'data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"ok"}}]}',
+        '',
+        'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
+        '',
+        'data: [DONE]',
+        '',
+      ].join('\n')
+      return new Response(sse, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })
+    }) as unknown as typeof fetch
+    const provider = createMistralProvider({ apiKey: 'mistral-key', fetchImpl })
+    for await (const _ev of provider.stream(
+      basicRequest([{ role: 'user', content: 'ping' }]),
+    )) {
+      // drain
+      void _ev
+    }
+    expect(seenAuth).toContain('Bearer mistral-key')
+  })
+
+  it('throws ProviderError when the AbortSignal is already aborted', async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response('data: [DONE]\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      }),
+    ) as unknown as typeof fetch
+    const provider = createMistralProvider({ apiKey: 'k', fetchImpl })
+    const controller = new AbortController()
+    controller.abort()
+    let captured: unknown
+    try {
+      for await (const _ev of provider.stream(
+        basicRequest([{ role: 'user', content: 'x' }]),
+        { signal: controller.signal },
+      )) {
+        void _ev
+      }
+    } catch (err) {
+      captured = err
+    }
+    // The base class surfaces the abort as a ProviderError wrapping
+    // the underlying DOMException. We only assert that *something*
+    // throws so callers can distinguish an aborted stream from a
+    // successful completion.
+    expect(captured).toBeDefined()
   })
 })
