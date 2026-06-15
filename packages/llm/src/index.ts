@@ -68,4 +68,13 @@ export { OllamaProvider, createOllamaProvider, DEFAULT_OLLAMA_BASE_URL, parseNdj
 export type { OllamaOptions } from './ollama.js'
 export { GeminiProvider, createGeminiProvider, DEFAULT_GEMINI_BASE_URL, GeminiOptionsSchema } from './gemini.js'
 export type { GeminiOptions } from './gemini.js'
+export {
+  MistralProvider,
+  createMistralProvider,
+  DEFAULT_MISTRAL_BASE_URL,
+  DEFAULT_MISTRAL_MODEL,
+  DEFAULT_MISTRAL_EMBED_MODEL,
+  MISTRAL_PROVIDER_ID,
+} from './mistral.js'
+export type { MistralProviderOptions } from './mistral.js'
 export { HttpStatusError, ResponseShapeError, StreamParseError, isRetryableStatus } from './errors.js'
