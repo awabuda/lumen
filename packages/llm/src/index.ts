@@ -70,6 +70,8 @@ export type {
 } from './anthropic.js'
 export { OllamaProvider, createOllamaProvider, DEFAULT_OLLAMA_BASE_URL, parseNdjsonLines } from './ollama.js'
 export type { OllamaOptions } from './ollama.js'
+export { LlamaCppProvider, createLlamaCppProvider } from './llama-cpp.js'
+export type { LlamaCppOptions } from './llama-cpp.js'
 export { GeminiProvider, createGeminiProvider, DEFAULT_GEMINI_BASE_URL, GeminiOptionsSchema } from './gemini.js'
 export type { GeminiOptions } from './gemini.js'
 export {

@@ -658,3 +658,143 @@ describe('OllamaProvider', () => {
     expect(out).toEqual(['{"a":1}', '{"a":2}', '{"a":3}'])
   })
 })
+
+// ---------------------------------------------------------------------------
+// P6.2 fixtures — Ollama streaming edge cases + chat robustness
+// ---------------------------------------------------------------------------
+
+describe('OllamaProvider P6.2 fixtures', () => {
+  // NDJSON stream body builder.
+  const ndjsonStream = (lines: ReadonlyArray<string>): ReadableStream<Uint8Array> => {
+    const enc = new TextEncoder()
+    const data = lines.map((l) => (l.endsWith('\n') ? l : `${l}\n`)).join('')
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(enc.encode(data))
+        controller.close()
+      },
+    })
+  }
+
+  it('streams multiple content deltas and coalesces them into a single message_complete', async () => {
+    const lines = [
+      JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: 'Hello' }, done: false }),
+      JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: ' ' }, done: false }),
+      JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: 'world' }, done: false }),
+      JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: '' }, done: true, done_reason: 'stop', total_duration: 0 }),
+    ]
+    const fetchImpl = vi.fn(async () => {
+      return new Response(ndjsonStream(lines), {
+        status: 200,
+        headers: { 'content-type': 'application/x-ndjson' },
+      })
+    }) as unknown as typeof fetch
+    const p = makeProvider(fetchImpl)
+
+    const events: StreamEvent[] = []
+    for await (const ev of p.stream(basicRequest([{ role: 'user', content: 'hi' }]))) {
+      events.push(ev)
+    }
+    const deltas = events.filter((e): e is { type: 'content_delta'; delta: string; id?: string } => e.type === 'content_delta')
+    expect(deltas.map((d) => d.delta).join('')).toBe('Hello world')
+    const last = events[events.length - 1]
+    expect(last?.type).toBe('message_complete')
+  })
+
+  it('throws ProviderError when the stream returns HTTP 5xx', async () => {
+    const fetchImpl = vi.fn(async () => {
+      return new Response(JSON.stringify({ error: 'model loading' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as unknown as typeof fetch
+    const p = makeProvider(fetchImpl)
+    const iter = p.stream(basicRequest([{ role: 'user', content: 'hi' }]))
+    await expect(iter.next()).rejects.toThrow()
+  })
+
+  it('skips NDJSON lines that lack a `message` field, only emitting deltas from content-carrying lines', async () => {
+    const lines = [
+      JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: 'one' }, done: false }),
+      // A heartbeat / status line with no message — should be ignored.
+      JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: '' }, done: false }),
+      JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: ' two' }, done: false }),
+      JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: '' }, done: true, done_reason: 'stop' }),
+    ]
+    const fetchImpl = vi.fn(async () => {
+      return new Response(ndjsonStream(lines), {
+        status: 200,
+        headers: { 'content-type': 'application/x-ndjson' },
+      })
+    }) as unknown as typeof fetch
+    const p = makeProvider(fetchImpl)
+    const events: StreamEvent[] = []
+    for await (const ev of p.stream(basicRequest([{ role: 'user', content: 'x' }]))) {
+      events.push(ev)
+    }
+    const deltas = events.filter((e): e is { type: 'content_delta'; delta: string } => e.type === 'content_delta')
+    expect(deltas.map((d) => d.delta).join('')).toBe('one two')
+  })
+
+  it('chat() carries a multi-turn conversation (system + user + assistant) unchanged', async () => {
+    const capturedBody: unknown[] = []
+    const fetchImpl = vi.fn(async (_url: unknown, init?: unknown) => {
+      const body = JSON.parse(String((init as { body?: string } | undefined)?.body ?? '{}'))
+      capturedBody.push(body)
+      return new Response(
+        JSON.stringify({
+          id: 'cmpl-1',
+          model: 'llama3',
+          message: { role: 'assistant', content: 'pong' },
+          done: true,
+          done_reason: 'stop',
+          prompt_eval_count: 5,
+          eval_count: 2,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }) as unknown as typeof fetch
+    const p = makeProvider(fetchImpl)
+    const messages: Message[] = [
+      { role: 'system', content: 'You are helpful.' },
+      { role: 'user', content: 'ping' },
+      { role: 'assistant', content: 'pong', toolCalls: [] },
+      { role: 'user', content: 'ping again' },
+    ]
+    await p.chat({ messages, model: 'llama3' })
+    expect(capturedBody.length).toBe(1)
+    const body = capturedBody[0] as { messages: Array<{ role: string; content: string; toolCalls?: unknown[] }> }
+    // Round-trip: every message's role + content survives, regardless
+    // of any Lumen-internal-only fields (Ollama drops empty toolCalls).
+    expect(body.messages.map((m) => ({ role: m.role, content: m.content }))).toEqual(
+      messages.map((m) => ({ role: m.role, content: m.content })),
+    )
+  })
+
+  it('chat() sends a system message even when only system content is present', async () => {
+    const capturedBody: unknown[] = []
+    const fetchImpl = vi.fn(async (_url: unknown, init?: unknown) => {
+      capturedBody.push(JSON.parse(String((init as { body?: string } | undefined)?.body ?? '{}')))
+      return new Response(
+        JSON.stringify({
+          id: 'cmpl-1',
+          model: 'llama3',
+          message: { role: 'assistant', content: 'ok' },
+          done: true,
+          done_reason: 'stop',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }) as unknown as typeof fetch
+    const p = makeProvider(fetchImpl)
+    await p.chat({
+      messages: [
+        { role: 'system', content: 'be terse' },
+        { role: 'user', content: 'go' },
+      ],
+      model: 'llama3',
+    })
+    const body = capturedBody[0] as { messages: Array<{ role: string; content: string }> }
+    expect(body.messages[0]).toEqual({ role: 'system', content: 'be terse' })
+  })
+})
