@@ -194,3 +194,19 @@ export {
   type InMemorySearchProviderOptions,
   type SearchResult,
 } from './web/index.js'
+
+// Text tools (P5.2)
+export {
+  ChunkTextTool,
+  ChunkTextInputSchema,
+  ChunkTextOutputSchema,
+} from './text/chunk-text.js'
+export type { ChunkTextInput, ChunkTextOutput } from './text/chunk-text.js'
+export {
+  chunkText,
+  DEFAULT_CHUNK_MAX_SIZE,
+  DEFAULT_CHUNK_OVERLAP,
+  type ChunkOptions,
+  type ChunkStrategy,
+  type TextChunk,
+} from './text/chunker.js'
