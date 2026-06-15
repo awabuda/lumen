@@ -80,3 +80,16 @@ export {
   float32ToBytes,
   bytesToFloat32,
 } from './embedder.js'
+
+export {
+  BaseRagPipeline,
+  RagPipeline,
+  type ChunkerFunction,
+  type IngestInput,
+  type IngestResult,
+  type RagChunk,
+  type RagHit,
+  type RagPipelineOptions,
+  type RetrieveInput,
+  type RetrieveResult,
+} from './rag.js'
