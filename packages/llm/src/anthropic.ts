@@ -179,6 +179,45 @@ const AnthropicStreamEventSchema = z.discriminatedUnion('type', [
 ])
 
 // ---------------------------------------------------------------------------
+// Prompt caching
+// ---------------------------------------------------------------------------
+
+/**
+ * A single text block in the Anthropic `system` array. The
+ * `cache_control` marker tells Anthropic to cache the prefix of the
+ * system prompt up to and including this block. Only the *last*
+ * marker is honored per request, so place it on the final block of
+ * the prefix you want cached.
+ *
+ * Reference: https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
+ */
+export interface AnthropicSystemBlock {
+  readonly type: 'text'
+  readonly text: string
+  readonly cache_control?: AnthropicCacheControl
+}
+
+/**
+ * `cache_control` marker. Today only `type: 'ephemeral'` (5-minute
+ * cache) is supported by Anthropic; the union is kept narrow so a
+ * future `type: 'persistent'` addition can extend without breaking
+ * the public type.
+ */
+export interface AnthropicCacheControl {
+  readonly type: 'ephemeral'
+}
+
+/** Zod schema for a single system block; used at runtime to validate
+ *  whatever the caller put in `providerOptions`. */
+const AnthropicSystemBlockSchema = z.object({
+  type: z.literal('text'),
+  text: z.string(),
+  cache_control: z
+    .object({ type: z.literal('ephemeral') })
+    .optional(),
+})
+
+// ---------------------------------------------------------------------------
 // Options
 // ---------------------------------------------------------------------------
 
@@ -245,15 +284,26 @@ function defaultCapabilities(): ProviderCapabilities {
 }
 
 /**
- * Split a flat message list into the top-level `system` string and the
+ * Split a flat message list into the top-level `system` field and the
  * `messages` array. Anthropic takes the system prompt out of the message
  * stream; the rest of the messages must alternate `user` / `assistant`.
  *
- * Multiple consecutive system messages are joined with a blank line. If
- * the resulting `system` is empty, it's omitted entirely.
+ * Two shapes of `system` are supported:
+ *   - string (default) — multiple consecutive system messages are
+ *     joined with a blank line. Used when the caller did not opt
+ *     into prompt caching.
+ *   - structured blocks — used when the caller passes
+ *     `request.providerOptions.anthropicSystemBlocks`. Each block
+ *     may carry a `cache_control: { type: 'ephemeral' }` marker so
+ *     Anthropic caches the prefix of the system prompt across
+ *     requests. An empty array is treated as "no system prompt" and
+ *     drops the `system` field from the body entirely.
  */
-function splitSystemAndMessages(messages: ReadonlyArray<Message>): {
-  system: string | undefined
+function splitSystemAndMessages(
+  messages: ReadonlyArray<Message>,
+  systemBlocks?: ReadonlyArray<AnthropicSystemBlock>,
+): {
+  system: string | ReadonlyArray<AnthropicSystemBlock> | undefined
   anthropicMessages: Array<Record<string, unknown>>
 } {
   const systemParts: string[] = []
@@ -282,6 +332,14 @@ function splitSystemAndMessages(messages: ReadonlyArray<Message>): {
         break
       }
     }
+  }
+  // When the caller supplied structured system blocks, those take
+  // precedence over the implicit system-prompt string from the
+  // messages. We do not concatenate the two — Anthropic treats the
+  // explicit blocks as the canonical system prompt and the implicit
+  // string would just bloat the wire size without being cacheable.
+  if (systemBlocks !== undefined) {
+    return { system: systemBlocks.length === 0 ? undefined : systemBlocks, anthropicMessages: out }
   }
   const system = systemParts.length === 0 ? undefined : systemParts.join('\n\n')
   return { system, anthropicMessages: out }
@@ -650,7 +708,15 @@ export class AnthropicProvider extends BaseProvider {
         retryable: false,
       })
     }
-    const { system, anthropicMessages } = splitSystemAndMessages(request.messages)
+    // Resolve structured system blocks from providerOptions, validate
+    // the shape (so a typo in `cache_control.type` fails fast at
+    // request time rather than 400ing on the wire), and hand them to
+    // the splitter. An invalid shape throws a typed ProviderError.
+    const systemBlocks = this.resolveSystemBlocks(request)
+    const { system, anthropicMessages } = splitSystemAndMessages(
+      request.messages,
+      systemBlocks,
+    )
     if (anthropicMessages.length === 0) {
       throw new ProviderError(
         'Anthropic requires at least one non-system message in `messages`',
@@ -669,16 +735,61 @@ export class AnthropicProvider extends BaseProvider {
       body.stop_sequences = request.stop.length === 1 ? request.stop[0] : [...request.stop]
     }
     if (request.tools && request.tools.length > 0) {
-      body.tools = request.tools.map((t) => ({
-        name: t.name,
-        ...(t.description ? { description: t.description } : {}),
-        // Anthropic takes a JSON Schema object directly as `input_schema`,
-        // not a wrapped `parameters` envelope like OpenAI does.
-        input_schema: t.inputJsonSchema ?? { type: 'object', properties: {} },
-      }))
+      body.tools = request.tools.map((t, i) => {
+        const toolBody: Record<string, unknown> = {
+          name: t.name,
+          ...(t.description ? { description: t.description } : {}),
+          // Anthropic takes a JSON Schema object directly as `input_schema`,
+          // not a wrapped `parameters` envelope like OpenAI does.
+          input_schema: t.inputJsonSchema ?? { type: 'object', properties: {} },
+        }
+        // Prompt-caching marker on a tool definition. Anthropic caches
+        // the tool definition prefix up to and including the marked
+        // tool; place the marker on the last tool whose definition
+        // you want to cache.
+        const cacheTools = this.resolveToolCacheControl(request)
+        if (cacheTools.includes(i)) {
+          toolBody.cache_control = { type: 'ephemeral' }
+        }
+        return toolBody
+      })
     }
     if (stream) body.stream = true
     return body
+  }
+
+  /**
+   * Pull `providerOptions.anthropicSystemBlocks` out of the request
+   * and validate each block. Returns `undefined` when the key is
+   * absent so the splitter falls back to the string-join path.
+   */
+  private resolveSystemBlocks(
+    request: ChatRequest,
+  ): ReadonlyArray<AnthropicSystemBlock> | undefined {
+    const raw = request.providerOptions?.['anthropicSystemBlocks']
+    if (raw === undefined) return undefined
+    const parsed = z.array(AnthropicSystemBlockSchema).safeParse(raw)
+    if (!parsed.success) {
+      throw new ProviderError(
+        `Invalid anthropicSystemBlocks: ${parsed.error.issues
+          .map((i) => `${i.path.join('.')}: ${i.message}`)
+          .join('; ')}`,
+        { providerId: this.id, retryable: false },
+      )
+    }
+    return parsed.data as ReadonlyArray<AnthropicSystemBlock>
+  }
+
+  /**
+   * Pull `providerOptions.anthropicCacheTools` (a list of tool
+   * indices) out of the request. Indices that are out of range are
+   * silently dropped — the caller may not know the filtered list
+   * size, and we'd rather cache a strict subset than throw.
+   */
+  private resolveToolCacheControl(request: ChatRequest): ReadonlyArray<number> {
+    const raw = request.providerOptions?.['anthropicCacheTools']
+    if (raw === undefined || !Array.isArray(raw)) return []
+    return raw.filter((v): v is number => typeof v === 'number' && Number.isInteger(v))
   }
 
   private async performFetch(path: string, body: unknown, options?: StreamOptions): Promise<Response> {

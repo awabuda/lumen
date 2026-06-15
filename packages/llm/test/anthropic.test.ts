@@ -25,6 +25,7 @@
  *   - createAnthropicProvider factory
  */
 import { describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 import {
   AnthropicProvider,
   HttpStatusError,
@@ -679,5 +680,208 @@ describe('AnthropicProvider', () => {
     const provider = makeProvider(fetchImpl)
     const iter = provider.stream(basicRequest([{ role: 'user', content: 'hi' }]))
     await expect(iter.next()).rejects.toBeInstanceOf(ProviderError)
+  })
+})
+
+// -----------------------------------------------------------------------------
+// Prompt caching (P5.4)
+//
+// Anthropic's protocol supports `cache_control: { type: 'ephemeral' }`
+// markers on system blocks and tool definitions. The provider exposes
+// this through `request.providerOptions.anthropicSystemBlocks` and
+// `request.providerOptions.anthropicCacheTools`. These tests pin the
+// wire shape end-to-end through a fake fetch.
+// -----------------------------------------------------------------------------
+
+describe('AnthropicProvider prompt caching', () => {
+  it('sends the system field as a structured block array with cache_control when providerOptions.anthropicSystemBlocks is set', async () => {
+    const calls: Array<{ body: string }> = []
+    const fetchImpl: typeof fetch = (async (_url: unknown, init?: RequestInit) => {
+      calls.push({ body: String(init?.body) })
+      return makeFetch([
+        {
+          body: {
+            id: 'msg_x',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-test',
+            content: [{ type: 'text', text: 'ok' }],
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 5, output_tokens: 1 },
+          },
+        },
+      ])(_url, init)
+    }) as unknown as typeof fetch
+    const provider = makeProvider(fetchImpl)
+    const res = await provider.chat(
+      Object.assign(basicRequest([{ role: 'user', content: 'hi' }]), {
+        providerOptions: {
+          anthropicSystemBlocks: [
+            { type: 'text', text: 'You are a careful assistant.' },
+            { type: 'text', text: 'Long reference doc…', cache_control: { type: 'ephemeral' } },
+          ],
+        },
+      }),
+    )
+    expect(res.message.content).toBe('ok')
+    const body = JSON.parse(calls[0]?.body ?? '{}')
+    expect(Array.isArray(body.system)).toBe(true)
+    expect(body.system).toHaveLength(2)
+    expect(body.system[0]).toEqual({
+      type: 'text',
+      text: 'You are a careful assistant.',
+    })
+    expect(body.system[1]).toEqual({
+      type: 'text',
+      text: 'Long reference doc…',
+      cache_control: { type: 'ephemeral' },
+    })
+  })
+
+  it('omits the system field entirely when anthropicSystemBlocks is an empty array', async () => {
+    const calls: Array<{ body: string }> = []
+    const fetchImpl: typeof fetch = (async (_url: unknown, init?: RequestInit) => {
+      calls.push({ body: String(init?.body) })
+      return makeFetch([
+        {
+          body: {
+            id: 'msg_x',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-test',
+            content: [{ type: 'text', text: 'ok' }],
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 1, output_tokens: 1 },
+          },
+        },
+      ])(_url, init)
+    }) as unknown as typeof fetch
+    const provider = makeProvider(fetchImpl)
+    await provider.chat(
+      Object.assign(basicRequest([{ role: 'user', content: 'hi' }]), {
+        providerOptions: { anthropicSystemBlocks: [] },
+      }),
+    )
+    const body = JSON.parse(calls[0]?.body ?? '{}')
+    expect(body.system).toBeUndefined()
+  })
+
+  it('falls back to the string-join system path when no anthropicSystemBlocks is provided', async () => {
+    const calls: Array<{ body: string }> = []
+    const fetchImpl: typeof fetch = (async (_url: unknown, init?: RequestInit) => {
+      calls.push({ body: String(init?.body) })
+      return makeFetch([
+        {
+          body: {
+            id: 'msg_x',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-test',
+            content: [{ type: 'text', text: 'ok' }],
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 1, output_tokens: 1 },
+          },
+        },
+      ])(_url, init)
+    }) as unknown as typeof fetch
+    const provider = makeProvider(fetchImpl)
+    await provider.chat(
+      basicRequest([
+        { role: 'system', content: 'Be terse.' } as Message,
+        { role: 'user', content: 'hi' } as Message,
+      ]),
+    )
+    const body = JSON.parse(calls[0]?.body ?? '{}')
+    expect(typeof body.system).toBe('string')
+    expect(body.system).toBe('Be terse.')
+  })
+
+  it('attaches cache_control to the marked tool definitions in body.tools', async () => {
+    const calls: Array<{ body: string }> = []
+    const fetchImpl: typeof fetch = (async (_url: unknown, init?: RequestInit) => {
+      calls.push({ body: String(init?.body) })
+      return makeFetch([
+        {
+          body: {
+            id: 'msg_x',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-test',
+            content: [{ type: 'text', text: 'ok' }],
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 1, output_tokens: 1 },
+          },
+        },
+      ])(_url, init)
+    }) as unknown as typeof fetch
+    const provider = makeProvider(fetchImpl)
+    const tools: ChatRequest['tools'] = [
+      {
+        name: 'read_file',
+        description: 'read a file',
+        inputJsonSchema: { type: 'object' },
+        inputSchema: z.object({}).passthrough(),
+        risk: 'safe',
+        version: '1.0.0',
+      },
+      {
+        name: 'write_file',
+        description: 'write a file',
+        inputJsonSchema: { type: 'object' },
+        inputSchema: z.object({}).passthrough(),
+        risk: 'approval-required',
+        version: '1.0.0',
+      },
+      {
+        name: 'bash',
+        description: 'run a command',
+        inputJsonSchema: { type: 'object' },
+        inputSchema: z.object({}).passthrough(),
+        risk: 'dangerous',
+        version: '1.0.0',
+      },
+    ]
+    await provider.chat(
+      Object.assign(basicRequest([{ role: 'user', content: 'go' }]), {
+        tools,
+        providerOptions: { anthropicCacheTools: [1] },
+      }),
+    )
+    const body = JSON.parse(calls[0]?.body ?? '{}')
+    expect(body.tools).toHaveLength(3)
+    expect(body.tools[0].cache_control).toBeUndefined()
+    expect(body.tools[1].cache_control).toEqual({ type: 'ephemeral' })
+    expect(body.tools[2].cache_control).toBeUndefined()
+  })
+
+  it('throws a typed ProviderError when anthropicSystemBlocks has an invalid shape', async () => {
+    const fetchImpl = makeFetch([])
+    const provider = makeProvider(fetchImpl)
+    let captured: unknown
+    try {
+      await provider.chat(
+        Object.assign(basicRequest([{ role: 'user', content: 'hi' }]), {
+          providerOptions: {
+            anthropicSystemBlocks: [
+              // bad: missing `type`
+              { text: 'oops' } as unknown as Record<string, unknown>,
+            ],
+          },
+        }),
+      )
+    } catch (err) {
+      captured = err
+    }
+    expect(captured).toBeInstanceOf(ProviderError)
+    expect((captured as { message: string }).message).toMatch(/anthropicSystemBlocks/)
+  })
+
+  it('reports promptCaching: true in capabilities', () => {
+    const provider = makeProvider(makeFetch([]))
+    expect(provider.capabilities.promptCaching).toBe(true)
   })
 })

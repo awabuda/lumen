@@ -63,7 +63,11 @@ export {
   DEFAULT_ANTHROPIC_VERSION,
   DEFAULT_MAX_TOKENS,
 } from './anthropic.js'
-export type { AnthropicOptions } from './anthropic.js'
+export type {
+  AnthropicOptions,
+  AnthropicSystemBlock,
+  AnthropicCacheControl,
+} from './anthropic.js'
 export { OllamaProvider, createOllamaProvider, DEFAULT_OLLAMA_BASE_URL, parseNdjsonLines } from './ollama.js'
 export type { OllamaOptions } from './ollama.js'
 export { GeminiProvider, createGeminiProvider, DEFAULT_GEMINI_BASE_URL, GeminiOptionsSchema } from './gemini.js'
