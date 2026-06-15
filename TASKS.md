@@ -254,3 +254,28 @@ Subagent review notes for @lumen/llm:
 
 - [x] **P4.1** — Web search + fetch tools  *(done 2026-06-11, see packages/tools/src/web/)*
 - [x] **P4.2** — Google Gemini provider  *(done 2026-06-11, see packages/llm/src/gemini.ts)*
+- [x] **P4.3** — Mistral provider  *(done 2026-06-15, see packages/llm/src/mistral.ts, commit fd74df0; 12 tests)*
+
+## P5 — Capability expansion (2026-06-15, all done)
+
+- [x] **P5.1** — Embedding bridge in `@lumen/memory`  *(commit ec2118e, 12 tests)*
+  - `EmbeddingSource` interface (duck-typed, no `@lumen/llm` import — keeps the memory package provider-agnostic).
+  - `createProviderEmbedder(source, model?)` returning a `TextEmbedder`.
+  - `float32ToBytes` / `bytesToFloat32` helpers for `BaseVectorBackend` wire format.
+  - Production use: `lumen run` can now persist Mistral / OpenAI / Ollama / Gemini embeddings without a memory-package change.
+- [x] **P5.2** — `chunk_text` tool in `@lumen/tools`  *(commit 90ac781, 23 tests)*
+  - Pure `chunkText` helper, three strategies: `char` / `paragraph` / `sentence`.
+  - CJK punctuation aware (`。！？` are sentence terminators with or without trailing whitespace).
+  - Overlap windows taken at unit boundaries (no mid-unit cuts).
+  - `ChunkTextTool` wraps the helper with Zod I/O schemas.
+- [x] **P5.3** — Mistral streaming + tool_use E2E fixtures  *(commit 85058c5, 5 new tests)*
+  - Pin the inherited OpenAI-compatible streaming protocol under a `MistralProvider` identity: correct `baseUrl`, Authorization header, `stream: true` body field.
+  - Tool-call streaming: SSE deltas coalesce to `tool_call_complete`.
+  - 5xx and AbortSignal paths throw `ProviderError` (not synthetic error events).
+- [x] **P5.4** — Anthropic prompt caching protocol  *(commit b2957f7, 6 new tests)*
+  - `AnthropicSystemBlock` / `AnthropicCacheControl` interfaces exposed.
+  - `providerOptions.anthropicSystemBlocks` switches the system field from string to a structured block array; runtime schema validation fails fast on bad `cache_control.type`.
+  - `providerOptions.anthropicCacheTools` (tool indices) attaches `cache_control: {type: "ephemeral"}` to marked tool definitions.
+  - `capabilities.promptCaching: true` already declared; the wire shape now matches the capability.
+
+**P5 totals:** 4 commits, 11 new files / 2 modified, +1,489 lines, +46 tests (790 → 836). Full monorepo: 77 test files / 836 tests / 0 fail / typecheck clean.
