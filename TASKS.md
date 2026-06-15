@@ -279,3 +279,31 @@ Subagent review notes for @lumen/llm:
   - `capabilities.promptCaching: true` already declared; the wire shape now matches the capability.
 
 **P5 totals:** 4 commits, 11 new files / 2 modified, +1,489 lines, +46 tests (790 → 836). Full monorepo: 77 test files / 836 tests / 0 fail / typecheck clean.
+
+## P6 — Composable layers on top of the framework
+
+- [x] **P6.1** — RAG pipeline in `@lumen/memory`  *(commit 631fd99, +467 lines, +10 tests)*
+  - `BaseRagPipeline` (abstract contract) + `RagPipeline` (default impl).
+  - Composes caller-supplied `ChunkerFunction` (structural type, no `@lumen/tools` import) + `TextEmbedder` (P5.1) + `BaseVectorBackend` (float32 → bytes via `float32ToBytes`) + caller-supplied `BaseRetriever`.
+  - `ingest({ documentId, text, chunks?, metadata? })`: chunk → embed → store under namespace, **idempotent** (re-ingesting the same documentId replaces the prior chunks atomically).
+  - `retrieve({ query, topK?, minScore? })`: embed query → top-K → `Citation[]` with `chunkIndex`, `documentId`, `text`, `startOffset`/`endOffset`, `score`.
+  - Runtime chunker validation: rejects non-`TextChunk` shape, non-finite / negative `startOffset` / `endOffset` (no Zod dep in `@lumen/memory` — uses hand-rolled checks to match the package's existing style).
+  - 10 E2E tests: ingest dedup, retrieve ranking, override chunks, empty input, invalid-chunk rejection (both via `chunker` and caller-supplied).
+- [x] **P6.2** — Local-inference providers  *(commit 7966591, +371 lines, +6 +5 tests)*
+  - `LlamaCppProvider extends OpenAICompatibleProvider` — thin wrapper for llama.cpp's OpenAI-compatible HTTP server (`llama-server --port 8080`). Defaults `baseUrl` to `http://127.0.0.1:8080/v1`, no required `apiKey` (typical local use), and accepts `embedModel` override.
+  - `LlamaCppOptions` = OpenAI-compatible options minus `baseUrl` (overridable, not required).
+  - 6 unit tests: id, default + overridden baseUrl hit the right chat URL, Authorization: Bearer *** apiKey, header omitted without apiKey, factory shape.
+  - Ollama fixtures +5: multi-delta coalesce + `message_complete`, HTTP 5xx mid-stream throws, heartbeat lines (empty `message`) are skipped without poisoning deltas, multi-turn conversation round-trip, system message at position 0. Ollama test count 19 → 24.
+- [x] **P6.3** — ProviderPool in `@lumen/core`  *(commit 75b46bd, +869 lines, +18 tests)*
+  - `BaseProviderPool extends BaseProvider` (abstract contract) + `ProviderPool` (default impl).
+  - 4 routing strategies: `'round-robin'` (cycles through registered), `'name'` (pins to specific id, fails fast if missing), `'capability'` (picks head of providers that have `capabilities[key]=true`), `'weighted'` (weighted random, injectable PRNG).
+  - `runWithFailover` walks the strategy-ordered candidate list; collects `ProviderError` into a `PoolExhaustedError` carrying the full `attempts` array. **Non-`ProviderError` (programming bugs) bubble up immediately** — no failover for obvious bugs.
+  - Stream failover is best-effort: catch the first `iter.next()` throw, commit to the next provider. Once a non-error event is yielded we commit — a half-streamed response cannot be resumed on a different backend.
+  - Capabilities are OR-merged across all members; `maxContextTokens` takes the max.
+  - `register` rejects duplicate ids; `unregister` clamps the round-robin cursor.
+  - Zod schemas for `PooledProviderConfig` + `ProviderPoolOptions` per CLAUDE.md rule #4; JSDoc on every public symbol per rule #5; no `any` per rule #6; no swallowed try/catch per rule #7.
+  - 18 tests covering: construction/registration/capability-OR-merge/duplicate-id-rejection, all 4 strategies (including weighted distribution), failover paths (success / exhausted / non-ProviderError no-failover / embed-failover), stream (commit-on-first-event / fallback-on-error / empty-stream exhaustion), `PoolExhaustedError instanceof AgentError`.
+
+**P6 totals:** 3 commits, 3 new files / 1 modified, +1,707 lines, +39 tests (836 → 875). Full monorepo: 79 test files / 875 tests / 0 fail / typecheck clean.
+
+**Push status (2026-06-15):** Remote unreachable (`fatal: could not read Username for 'https://github.com': Device not configured`). Per standing convention, agent does not retry push — user must configure usable credentials. Local commits are safe and the tree is at HEAD of the main branch.
