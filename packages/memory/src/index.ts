@@ -71,3 +71,12 @@ export {
   type ProfileEntry,
   type UserProfile,
 } from './profile.js'
+
+export {
+  type EmbeddingSource,
+  type ProviderEmbedderOptions,
+  type TextEmbedder,
+  createProviderEmbedder,
+  float32ToBytes,
+  bytesToFloat32,
+} from './embedder.js'
