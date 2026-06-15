@@ -136,6 +136,19 @@ export {
   type SubAgentOptions,
 } from './agent/sub-agent.js'
 
+// Provider pool (multi-backend routing + failover)
+export {
+  BaseProviderPool,
+  ProviderPool,
+  PoolExhaustedError,
+  PooledProviderConfigSchema,
+  ProviderPoolOptionsSchema,
+  type RoutingStrategy,
+  type CapabilityKey,
+  type PooledProviderConfig,
+  type ProviderPoolOptions,
+} from './agent/pool.js'
+
 // Cron scheduler
 export {
   BaseCron,
