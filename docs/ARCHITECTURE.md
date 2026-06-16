@@ -39,6 +39,11 @@ Lumen is built on three first principles:
             ┌──────┐         ┌────────┐
             │  llm │         │ config │
             └──────┘         └────────┘
+
+**Adjacent bridges** (consume the framework; do not import each other):
+- `@lumen/server` — HTTP + WebSocket adapter (apps and remote clients).
+- `@lumen/desktop-bridge` — Tauri-based desktop client bridge.
+- `@lumen/editor-bridge` — Editor extension bridge (VSCode, JetBrains).
 ```
 
 **Rule:** arrows point from dependent to dependency. Lower packages never import
@@ -55,8 +60,11 @@ These are the seams. Every pluggable thing in Lumen conforms to one of them.
 | `BaseProvider` | `packages/llm/src/base.ts` | Chat + stream + embed |
 | `BaseTool` | `packages/tools/src/base.ts` | One callable capability |
 | `BaseMemoryStore` | `packages/memory/src/base.ts` | Persist + retrieve facts/sessions |
+| `BaseVectorMemoryStore` | `packages/core/src/memory/index.ts` | `BaseMemoryStore` + `vectorSearch(embedding, k?)`. Subclass when you need vector retrieval. |
 | `BaseSkill` | `packages/skills/src/base.ts` | A named, invokable capability |
 | `BaseTransport` | `packages/mcp/src/base.ts` | MCP wire transport (stdio/http) |
+| `BaseProviderPool` | `packages/core/src/agent/pool.ts` | Multi-backend provider with `round-robin` / `name` / `capability` / `weighted` strategies and automatic failover. Extends `BaseProvider` so pools drop into `Agent` like a single provider. |
+| `BaseMutex` | `packages/core/src/concurrency/mutex.ts` | FIFO async mutex (promise-chain). Public extension surface for code that needs to serialize critical sections across `await` points. |
 
 Each base contract has:
 - A **lifecycle**: `init()` → ready → `dispose()`.
@@ -118,6 +126,10 @@ Lumen is extensible in five ways, listed from cheapest to most powerful:
 - **No tool implementations in core.** Core defines the `BaseTool` contract;
   `tools` package ships defaults.
 - **No HTTP in core.** All network I/O is in `llm` (provider calls) and `mcp`.
+- **No global locks.** `BaseMutex` lives in `packages/core/src/concurrency/`
+  for code that needs to serialize state across `await` boundaries (e.g.
+  `ProviderPool` uses one to make the round-robin cursor read-modify-write
+  atomic). The mutex is opt-in, not a global re-entrant lock.
 
 ## Testing strategy
 

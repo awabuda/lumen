@@ -99,7 +99,7 @@ lumen/
 ```bash
 pnpm install
 pnpm -r typecheck    # 全量类型检查
-pnpm -r test         # 全量测试 (566 tests)
+pnpm -r test         # 全量测试 (887 tests, 81 test files, 11 packages)
 pnpm -r build        # 全量构建
 ```
 
