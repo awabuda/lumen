@@ -308,14 +308,15 @@ Subagent review notes for @lumen/llm:
 
 **Push status (2026-06-15):** Remote unreachable (`fatal: could not read Username for 'https://github.com': Device not configured`). Per standing convention, agent does not retry push — user must configure usable credentials. Local commits are safe and the tree is at HEAD of the main branch.
 
-## P7 — Framework internal cleanup (2026-06-16, all done; pending commit)
+## P7 — Framework internal cleanup (2026-06-16, all done; committed)
 
-- [x] **P7.1** — `BaseVectorMemoryStore` 抽象化 *(未提交，+1 abstract class, ~120 lines, 0 test delta)*
+- [x] **P7.1** — `BaseVectorMemoryStore` 抽象化 *(commit a53e80c, +1 abstract class, ~120 lines, 0 test delta)*
   - `packages/core/src/memory/index.ts`：新增 `abstract class BaseVectorMemoryStore extends BaseMemoryStore { abstract vectorSearch(embedding, k?) }`。vector 能力是 BaseMemoryStore 的可选子集；只读归档 / 测试 fixture 仍可只 extends BaseMemoryStore。
   - 修 `packages/memory/src/retriever.ts:105` 的 banned duck-typing pattern：删 `hasVector` 字段 + 构造期 `typeof (store as { vectorSearch?: ... }).vectorSearch === 'function'` 检查；`HybridRetriever` 构造参数类型从 `BaseMemoryStore` 缩窄为 `BaseVectorMemoryStore`，把"是否支持向量"从运行时检查提升为编译期约束。
   - `SqliteStore extends BaseVectorMemoryStore`；re-export 链路：`@lumen/memory` → `@lumen/core/dist/index.d.ts`（**先 `pnpm --filter @lumen/core build` 再下游 typecheck**——tsconfig.composite + declaration 让 symlink 指向 dist）。
   - 不需要向量的调用方改用 `TextOnlyRetriever`（已存在），未破坏。
-- [x] **P7.2** — `concurrency` 模块 + Mutex + ProviderPool cursor race 修复 *(未提交, 4 new files, +~700 lines, +11 tests)*
+  - **Biome note**: `query.embedding!` 触发 `lint/style/noNonNullAssertion`，改用显式 `if (query.embedding === undefined) return new Map<...>()` 守卫。
+- [x] **P7.2** — `concurrency` 模块 + Mutex + ProviderPool cursor race 修复 *(commit c8f11e0, 4 new files / 5 modified, +679/-51, +11 tests)*
   - `packages/core/src/concurrency/base.ts`：公开扩展面，re-export Mutex / BaseMutex / AcquireTimeoutError / MutexOptions。
   - `packages/core/src/concurrency/mutex.ts`（~250 lines）：`BaseMutex` 抽象类 + `Mutex` FIFO promise-chain 实现（不支持 callback 队列，因为 callback 队列在 async 上下文里很容易丢锁；promise chain 显式 await，每个 runExclusive snap 旧 chain 设置新 chain，串行 resolve）。
     - `waiters` 计数 = 队列总深度（含 holder），`pending` getter 在 `held=true` 时减 1 — 用户看到的是"等待者数"，不是"含自己的总深度"。这把第一次实现的双 decrement bug（成功路径减 1 + finally 重复减）一次根治。
@@ -324,6 +325,6 @@ Subagent review notes for @lumen/llm:
   - **2 个并发测试**（test/agent/pool.test.ts "concurrency" describe）：3 个并发 chat 验证 union 覆盖 3 个 provider；60 个并发 chat 验证 round-robin 严格递增（每个 provider 命中 20 次）。这两个 test 在无 Mutex 的旧实现下会 flaky fail，是 regression guard。
   - 9 个 Mutex 单元测试：serial / FIFO / 100 并发任务 / sync throw release / async rejection release / dispose 拒绝 / pending+locked 准确计数 / timeout + FIFO / 默认 name "mutex"。
 
-**P7 totals (working tree, pending commit):** 0 commits, 4 new files / 8 modified, ~+1,300 lines, +12 tests (875 → 887). Full monorepo: 81 test files / 887 tests / 0 fail / typecheck clean. Native binding rebuild 一步 (better-sqlite3)：root `pnpm rebuild` → `cd packages/memory && pnpm rebuild better-sqlite3`，等 `gyp info ok` 出现再跑 pnpm -r test。
+**P7 totals:** 2 commits (a53e80c, c8f11e0), 4 new files / 11 modified, +767 lines, +12 tests (875 → 887). Full monorepo: 81 test files / 887 tests / 0 fail / typecheck clean. Native binding rebuild 一步 (better-sqlite3)：root `pnpm rebuild` → `cd packages/memory && pnpm rebuild better-sqlite3`，等 `gyp info ok` 出现再跑 pnpm -r test。
 
-**Push status (2026-06-16):** Same — remote unreachable, no retry. Working tree clean except P7 uncommitted changes (`git status -s` shows the diff).
+**Push status (2026-06-16):** Same — remote unreachable, no retry. 73 commits ahead of origin/main, working tree clean.
