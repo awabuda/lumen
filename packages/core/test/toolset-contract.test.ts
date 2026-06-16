@@ -12,7 +12,11 @@ class EchoTool extends BaseTool {
   public readonly description = 'Echoes input'
   public readonly version = '1.0.0'
   public readonly risk = 'safe' as const
-  public readonly inputSchema = { type: 'object', properties: {}, additionalProperties: false } as const
+  public readonly inputSchema = {
+    type: 'object',
+    properties: {},
+    additionalProperties: false,
+  } as const
 
   public describe(): ToolDescriptor {
     return {

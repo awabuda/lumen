@@ -66,6 +66,7 @@ import {
   type ToolCall,
   type ToolDescriptor,
   type UserMessage,
+  ValidationError,
   withRetry,
 } from '@lumen/core'
 import { z } from 'zod'
@@ -484,7 +485,9 @@ export class OllamaProvider extends BaseProvider {
   constructor(options: OllamaOptions) {
     super()
     if (!options.defaultModel || options.defaultModel.length === 0) {
-      throw new Error('OllamaProvider: `defaultModel` is required')
+      throw new ValidationError('OllamaProvider: `defaultModel` is required', {
+        field: 'defaultModel',
+      })
     }
     this.id = options.id ?? 'ollama'
     this.baseUrl = normalizeBaseUrl(options.baseUrl ?? DEFAULT_OLLAMA_BASE_URL)
@@ -499,8 +502,9 @@ export class OllamaProvider extends BaseProvider {
       (typeof globalThis.fetch === 'function'
         ? (globalThis.fetch.bind(globalThis) as typeof fetch)
         : (() => {
-            throw new Error(
+            throw new ValidationError(
               'OllamaProvider: no fetch implementation available. Pass `fetchImpl` or run on Node 20+.',
+              { field: 'fetchImpl' },
             )
           })())
     this.capabilities = { ...defaultCapabilities(), ...(options.capabilities ?? {}) }

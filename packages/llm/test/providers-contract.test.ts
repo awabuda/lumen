@@ -18,33 +18,45 @@ import {
 } from '../src/index.js'
 import { runProviderContractTests } from './contract-suite.js'
 
-runProviderContractTests('OpenAICompatibleProvider', () =>
-  new OpenAICompatibleProvider({
-    id: 'openai',
-    apiKey: 'sk-test',
-    baseUrl: 'https://example.invalid/v1',
-    defaultModel: 'gpt-test',
-  }),
+runProviderContractTests(
+  'OpenAICompatibleProvider',
+  () =>
+    new OpenAICompatibleProvider({
+      id: 'openai',
+      apiKey: 'sk-test',
+      baseUrl: 'https://example.invalid/v1',
+      defaultModel: 'gpt-test',
+    }),
 )
 
-runProviderContractTests('AnthropicProvider', () =>
-  new AnthropicProvider({
-    apiKey: 'sk-ant-test',
-    baseUrl: 'https://example.invalid',
-    defaultModel: 'claude-test',
-  }),
+runProviderContractTests(
+  'AnthropicProvider',
+  () =>
+    new AnthropicProvider({
+      apiKey: 'sk-ant-test',
+      baseUrl: 'https://example.invalid',
+      defaultModel: 'claude-test',
+    }),
 )
 
-runProviderContractTests('OllamaProvider', () =>
-  new OllamaProvider({
-    defaultModel: 'llama-test',
-  }),
+runProviderContractTests(
+  'OllamaProvider',
+  () =>
+    new OllamaProvider({
+      defaultModel: 'llama-test',
+    }),
 )
 
 runProviderContractTests('createOpenAIProvider()', () =>
   createOpenAIProvider({ apiKey: 'sk-test', defaultModel: 'gpt-test' }),
 )
 runProviderContractTests('createAnthropicProvider()', () =>
-  createAnthropicProvider({ apiKey: 'sk-ant-test', baseUrl: 'https://example.invalid', defaultModel: 'claude-test' }),
+  createAnthropicProvider({
+    apiKey: 'sk-ant-test',
+    baseUrl: 'https://example.invalid',
+    defaultModel: 'claude-test',
+  }),
 )
-runProviderContractTests('createOllamaProvider()', () => createOllamaProvider({ defaultModel: 'llama-test' }))
+runProviderContractTests('createOllamaProvider()', () =>
+  createOllamaProvider({ defaultModel: 'llama-test' }),
+)

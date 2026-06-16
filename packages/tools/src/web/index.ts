@@ -15,7 +15,7 @@
  */
 
 import { z } from 'zod'
-import { BaseTool, type ToolContext, type ToolRisk } from '@lumen/core'
+import { BaseTool, type ToolContext, ToolError, type ToolRisk, ValidationError } from '@lumen/core'
 
 // ---------------------------------------------------------------------------
 // Backend abstraction
@@ -66,16 +66,12 @@ type FetchFn = (
 /** Options for {@link DuckDuckGoSearchProvider}. */
 export const DuckDuckGoSearchProviderOptionsSchema = z.object({
   /** The fetch implementation. Defaults to global fetch. */
-  fetch: z.custom<FetchFn>(
-    (v) => typeof v === 'function',
-  ),
+  fetch: z.custom<FetchFn>((v) => typeof v === 'function'),
   /** User-Agent header. */
   userAgent: z.string().default('lumen-web/0.1'),
 })
 
-export type DuckDuckGoSearchProviderOptions = z.input<
-  typeof DuckDuckGoSearchProviderOptionsSchema
->
+export type DuckDuckGoSearchProviderOptions = z.input<typeof DuckDuckGoSearchProviderOptionsSchema>
 
 /**
  * Free web search using DuckDuckGo's HTML endpoint.
@@ -94,14 +90,11 @@ export class DuckDuckGoSearchProvider extends BaseSearchProvider {
     this.userAgent = parsed.userAgent
   }
 
-  public async search(
-    query: string,
-    limit: number,
-  ): Promise<ReadonlyArray<SearchResult>> {
+  public async search(query: string, limit: number): Promise<ReadonlyArray<SearchResult>> {
     const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
     const res = await this.doFetch(url, { redirect: 'follow' })
     if (!res.ok) {
-      throw new Error(`DuckDuckGo returned ${res.status}`)
+      throw new ToolError(`DuckDuckGo returned ${res.status}`, { toolName: 'web_duckduckgo' })
     }
     const html = await res.text()
     return this.parse(html, limit)
@@ -110,7 +103,7 @@ export class DuckDuckGoSearchProvider extends BaseSearchProvider {
   public async fetch(targetUrl: string, _maxBytes: number): Promise<string> {
     const res = await this.doFetch(targetUrl, { redirect: 'follow' })
     if (!res.ok) {
-      throw new Error(`Fetch ${targetUrl} returned ${res.status}`)
+      throw new ToolError(`Fetch ${targetUrl} returned ${res.status}`, { toolName: 'web_fetch' })
     }
     const html = await res.text()
     return htmlToText(html)
@@ -121,7 +114,8 @@ export class DuckDuckGoSearchProvider extends BaseSearchProvider {
     const results: SearchResult[] = []
     // Each result is in <a class="result__a" href="...">title</a>
     // followed by <a class="result__snippet">snippet</a>.
-    const blockRe = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g
+    const blockRe =
+      /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g
     let m: RegExpExecArray | null
     while ((m = blockRe.exec(html)) !== null && results.length < limit) {
       const url = decodeHtml(m[1] ?? '')
@@ -188,10 +182,7 @@ export class InMemorySearchProvider extends BaseSearchProvider {
     this.fetchMap = options.fetchMap ?? {}
   }
 
-  public async search(
-    query: string,
-    limit: number,
-  ): Promise<ReadonlyArray<SearchResult>> {
+  public async search(query: string, limit: number): Promise<ReadonlyArray<SearchResult>> {
     const lower = query.toLowerCase()
     const scored = this.corpus.map((r) => {
       const inTitle = r.title.toLowerCase().includes(lower) ? 2 : 0
@@ -199,12 +190,15 @@ export class InMemorySearchProvider extends BaseSearchProvider {
       return { r, score: inTitle + inSnippet }
     })
     scored.sort((a, b) => b.score - a.score)
-    return scored.filter((s) => s.score > 0).slice(0, limit).map((s) => s.r)
+    return scored
+      .filter((s) => s.score > 0)
+      .slice(0, limit)
+      .map((s) => s.r)
   }
 
   public async fetch(url: string, _maxBytes: number): Promise<string> {
     if (!(url in this.fetchMap)) {
-      throw new Error(`Unknown URL: ${url}`)
+      throw new ValidationError(`Unknown URL: ${url}`, { field: 'url' })
     }
     return this.fetchMap[url] ?? ''
   }
@@ -243,10 +237,7 @@ export class WebSearchTool extends BaseTool {
     this.provider = provider
   }
 
-  protected override async execute(
-    input: unknown,
-    _ctx: ToolContext,
-  ): Promise<unknown> {
+  protected override async execute(input: unknown, _ctx: ToolContext): Promise<unknown> {
     const parsed = WebSearchInputSchema.parse(input)
     const results = await this.provider.search(parsed.query, parsed.limit)
     return WebSearchOutputSchema.parse({ results })
@@ -289,10 +280,7 @@ export class WebFetchTool extends BaseTool {
     this.provider = provider
   }
 
-  protected override async execute(
-    input: unknown,
-    _ctx: ToolContext,
-  ): Promise<unknown> {
+  protected override async execute(input: unknown, _ctx: ToolContext): Promise<unknown> {
     const parsed = WebFetchInputSchema.parse(input)
     const text = await this.provider.fetch(parsed.url, parsed.maxBytes)
     return WebFetchOutputSchema.parse({

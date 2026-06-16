@@ -23,9 +23,7 @@ const fakeFetch = (responses: Record<string, { ok: boolean; status: number; body
 describe('GeminiOptionsSchema', () => {
   it('requires apiKey and defaultModel', () => {
     expect(GeminiOptionsSchema.safeParse({}).success).toBe(false)
-    expect(
-      GeminiOptionsSchema.safeParse({ apiKey: 'k', defaultModel: 'm' }).success,
-    ).toBe(true)
+    expect(GeminiOptionsSchema.safeParse({ apiKey: 'k', defaultModel: 'm' }).success).toBe(true)
   })
 
   it('defaults id to "gemini"', () => {
@@ -84,19 +82,20 @@ describe('GeminiProvider', () => {
       apiKey: 'k',
       defaultModel: 'gemini-2.0-flash',
       fetchImpl: fakeFetch({
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=k': {
-          ok: true,
-          status: 200,
-          body: JSON.stringify({
-            candidates: [
-              {
-                content: { role: 'model', parts: [{ text: 'hello world' }] },
-                finishReason: 'STOP',
-              },
-            ],
-            usageMetadata: { totalTokenCount: 7 },
-          }),
-        },
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=k':
+          {
+            ok: true,
+            status: 200,
+            body: JSON.stringify({
+              candidates: [
+                {
+                  content: { role: 'model', parts: [{ text: 'hello world' }] },
+                  finishReason: 'STOP',
+                },
+              ],
+              usageMetadata: { totalTokenCount: 7 },
+            }),
+          },
       }),
     })
     const res = await provider.chat({
@@ -112,23 +111,22 @@ describe('GeminiProvider', () => {
       apiKey: 'k',
       defaultModel: 'gemini-2.0-flash',
       fetchImpl: fakeFetch({
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=k': {
-          ok: true,
-          status: 200,
-          body: JSON.stringify({
-            candidates: [
-              {
-                content: {
-                  role: 'model',
-                  parts: [
-                    { functionCall: { name: 'read_file', args: { path: '/x' } } },
-                  ],
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=k':
+          {
+            ok: true,
+            status: 200,
+            body: JSON.stringify({
+              candidates: [
+                {
+                  content: {
+                    role: 'model',
+                    parts: [{ functionCall: { name: 'read_file', args: { path: '/x' } } }],
+                  },
+                  finishReason: 'STOP',
                 },
-                finishReason: 'STOP',
-              },
-            ],
-          }),
-        },
+              ],
+            }),
+          },
       }),
     })
     const res = await provider.chat({
@@ -180,11 +178,12 @@ describe('GeminiProvider', () => {
       apiKey: 'k',
       defaultModel: 'gemini-2.0-flash',
       fetchImpl: fakeFetch({
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=k': {
-          ok: false,
-          status: 500,
-          body: 'oops',
-        },
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=k':
+          {
+            ok: false,
+            status: 500,
+            body: 'oops',
+          },
       }),
     })
     await expect(
@@ -201,11 +200,12 @@ describe('GeminiProvider', () => {
       defaultModel: 'gemini-2.0-flash',
       embedModel: 'text-embedding-004',
       fetchImpl: fakeFetch({
-        'https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=k': {
-          ok: true,
-          status: 200,
-          body: JSON.stringify({ embedding: { values: [0.1, 0.2, 0.3] } }),
-        },
+        'https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=k':
+          {
+            ok: true,
+            status: 200,
+            body: JSON.stringify({ embedding: { values: [0.1, 0.2, 0.3] } }),
+          },
       }),
     })
     const res = await provider.embed({

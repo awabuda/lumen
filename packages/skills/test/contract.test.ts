@@ -29,12 +29,14 @@ class StubSkill extends BaseSkill {
   public readonly triggers: ReadonlyArray<SkillTrigger>
   private readonly instructions: string[]
 
-  public constructor(opts: {
-    id?: string
-    name?: string
-    triggers?: SkillTrigger[]
-    instructions?: string[]
-  } = {}) {
+  public constructor(
+    opts: {
+      id?: string
+      name?: string
+      triggers?: SkillTrigger[]
+      instructions?: string[]
+    } = {},
+  ) {
     super()
     this.id = opts.id ?? 'stub'
     this.name = opts.name ?? 'Stub Skill'
@@ -64,7 +66,9 @@ describe('BaseSkill contract', () => {
   })
 
   it('shouldActivate returns active=false when no trigger matches', async () => {
-    const skill = new StubSkill({ triggers: [{ kind: 'keyword', value: 'kubernetes', weight: 0.8 }] })
+    const skill = new StubSkill({
+      triggers: [{ kind: 'keyword', value: 'kubernetes', weight: 0.8 }],
+    })
     const result = await skill.shouldActivate({ cwd: '/tmp', prompt: 'hello world' })
     expect(result.active).toBe(false)
   })

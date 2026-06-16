@@ -9,6 +9,7 @@ export {
   AcquireTimeoutError,
   BaseMutex,
   Mutex,
+  MutexDisposedError,
   MutexOptionsSchema,
   type AcquireResult,
   type MutexOptions,

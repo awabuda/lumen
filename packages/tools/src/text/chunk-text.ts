@@ -20,7 +20,12 @@
 
 import { z } from 'zod'
 import { BaseTool, type ToolContext, type ToolRisk } from '@lumen/core'
-import { chunkText, DEFAULT_CHUNK_MAX_SIZE, DEFAULT_CHUNK_OVERLAP, type TextChunk } from './chunker.js'
+import {
+  chunkText,
+  DEFAULT_CHUNK_MAX_SIZE,
+  DEFAULT_CHUNK_OVERLAP,
+  type TextChunk,
+} from './chunker.js'
 
 export const ChunkTextInputSchema = z.object({
   /** The text to split. */

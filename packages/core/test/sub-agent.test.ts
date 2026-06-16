@@ -1,20 +1,14 @@
 /** Tests for {@link SingleRunSubAgent}. */
 
 import { describe, expect, it } from 'vitest'
-import {
-  SingleRunSubAgent,
-  SubAgentOptionsSchema,
-  createSubAgent,
-} from '../src/agent/sub-agent.js'
+import { SingleRunSubAgent, SubAgentOptionsSchema, createSubAgent } from '../src/agent/sub-agent.js'
 import type { AgentConfig } from '../src/agent/index.js'
 import { ToolRegistry } from '../src/tools/index.js'
 import { FakeProvider } from './fake-provider.js'
 
 /** Build a minimal AgentConfig that returns `text` once. */
 const buildConfig = (text: string): AgentConfig => ({
-  provider: new FakeProvider([
-    { message: { role: 'assistant', content: text, toolCalls: [] } },
-  ]),
+  provider: new FakeProvider([{ message: { role: 'assistant', content: text, toolCalls: [] } }]),
   tools: new ToolRegistry(),
 })
 

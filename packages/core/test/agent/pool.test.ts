@@ -31,7 +31,9 @@ import {
 // Stubs
 // ---------------------------------------------------------------------------
 
-const defaultCapabilities = (overrides: Partial<ProviderCapabilities> = {}): ProviderCapabilities => ({
+const defaultCapabilities = (
+  overrides: Partial<ProviderCapabilities> = {},
+): ProviderCapabilities => ({
   streaming: false,
   embeddings: false,
   toolUse: false,
@@ -144,10 +146,22 @@ describe('ProviderPool', () => {
 
   describe("strategy: 'round-robin'", () => {
     it('cycles through providers in registration order', async () => {
-      const a = makeStub('a', { capabilities: defaultCapabilities(), chat: async () => chatResponse('a', 'A') })
-      const b = makeStub('b', { capabilities: defaultCapabilities(), chat: async () => chatResponse('b', 'B') })
-      const c = makeStub('c', { capabilities: defaultCapabilities(), chat: async () => chatResponse('c', 'C') })
-      const p = new ProviderPool({ strategy: 'round-robin', providers: [{ provider: a }, { provider: b }, { provider: c }] })
+      const a = makeStub('a', {
+        capabilities: defaultCapabilities(),
+        chat: async () => chatResponse('a', 'A'),
+      })
+      const b = makeStub('b', {
+        capabilities: defaultCapabilities(),
+        chat: async () => chatResponse('b', 'B'),
+      })
+      const c = makeStub('c', {
+        capabilities: defaultCapabilities(),
+        chat: async () => chatResponse('c', 'C'),
+      })
+      const p = new ProviderPool({
+        strategy: 'round-robin',
+        providers: [{ provider: a }, { provider: b }, { provider: c }],
+      })
 
       const responses = await Promise.all([
         p.chat(basicChat('1')),
@@ -165,7 +179,10 @@ describe('ProviderPool', () => {
   describe("strategy: 'name'", () => {
     it('routes to the provider with the matching id', async () => {
       const a = makeStub('a', { capabilities: defaultCapabilities() })
-      const b = makeStub('b', { capabilities: defaultCapabilities(), chat: async () => chatResponse('b', 'B') })
+      const b = makeStub('b', {
+        capabilities: defaultCapabilities(),
+        chat: async () => chatResponse('b', 'B'),
+      })
       const p = new ProviderPool({
         strategy: 'name',
         targetId: 'b',
@@ -177,8 +194,14 @@ describe('ProviderPool', () => {
 
     it('throws when targetId does not match any registered provider', async () => {
       const a = makeStub('a', { capabilities: defaultCapabilities() })
-      const p = new ProviderPool({ strategy: 'name', targetId: 'missing', providers: [{ provider: a }] })
-      await expect(p.chat(basicChat('x'))).rejects.toThrow(/No registered provider with id 'missing'/)
+      const p = new ProviderPool({
+        strategy: 'name',
+        targetId: 'missing',
+        providers: [{ provider: a }],
+      })
+      await expect(p.chat(basicChat('x'))).rejects.toThrow(
+        /No registered provider with id 'missing'/,
+      )
     })
   })
 
@@ -205,20 +228,31 @@ describe('ProviderPool', () => {
         capability: 'vision',
         providers: [{ provider: a }],
       })
-      await expect(p.chat(basicChat('x'))).rejects.toThrow(/No registered provider has capability 'vision'/)
+      await expect(p.chat(basicChat('x'))).rejects.toThrow(
+        /No registered provider has capability 'vision'/,
+      )
     })
   })
 
   describe("strategy: 'weighted'", () => {
     it('picks providers with probabilities matching weights', async () => {
-      const a = makeStub('a', { capabilities: defaultCapabilities(), chat: async () => chatResponse('a', 'A') })
-      const b = makeStub('b', { capabilities: defaultCapabilities(), chat: async () => chatResponse('b', 'B') })
+      const a = makeStub('a', {
+        capabilities: defaultCapabilities(),
+        chat: async () => chatResponse('a', 'A'),
+      })
+      const b = makeStub('b', {
+        capabilities: defaultCapabilities(),
+        chat: async () => chatResponse('b', 'B'),
+      })
       // Deterministic PRNG: every draw is 0.5 — with weights 1:9
       // (total 10), r*10 = 5, minus a's weight 1 = 4 > 0 → always b.
       const random = (): number => 0.5
       const p = new ProviderPool({
         strategy: 'weighted',
-        providers: [{ provider: a, weight: 1 }, { provider: b, weight: 9 }],
+        providers: [
+          { provider: a, weight: 1 },
+          { provider: b, weight: 9 },
+        ],
         random,
       })
       let aCount = 0
@@ -311,7 +345,10 @@ describe('ProviderPool', () => {
         capabilities: defaultCapabilities(),
         stream: (): AsyncGenerator<StreamEvent, void, void> =>
           (async function* (): AsyncGenerator<StreamEvent, void, void> {
-            yield { type: 'message_start', message: { role: 'assistant', content: '', toolCalls: [] } }
+            yield {
+              type: 'message_start',
+              message: { role: 'assistant', content: '', toolCalls: [] },
+            }
             yield { type: 'content_delta', delta: 'hello' }
             yield {
               type: 'message_complete',
@@ -338,7 +375,10 @@ describe('ProviderPool', () => {
         capabilities: defaultCapabilities(),
         stream: (): AsyncGenerator<StreamEvent, void, void> =>
           (async function* (): AsyncGenerator<StreamEvent, void, void> {
-            yield { type: 'message_start', message: { role: 'assistant', content: '', toolCalls: [] } }
+            yield {
+              type: 'message_start',
+              message: { role: 'assistant', content: '', toolCalls: [] },
+            }
             yield { type: 'content_delta', delta: 'b-fallback' }
             yield {
               type: 'message_complete',
@@ -349,7 +389,10 @@ describe('ProviderPool', () => {
       const p = new ProviderPool({ providers: [{ provider: a }, { provider: b }] })
       const events: StreamEvent[] = []
       for await (const ev of p.stream(basicChat('hi'))) events.push(ev)
-      const deltas = events.filter((e) => e.type === 'content_delta') as Array<{ type: 'content_delta'; delta: string }>
+      const deltas = events.filter((e) => e.type === 'content_delta') as Array<{
+        type: 'content_delta'
+        delta: string
+      }>
       expect(deltas.map((d) => d.delta).join('')).toBe('b-fallback')
     })
 
@@ -420,15 +463,14 @@ describe('ProviderPool', () => {
       // strictly increasing cursor and each provider is hit
       // exactly N/3 times.
       const counts: Record<string, number> = { a: 0, b: 0, c: 0 }
-      const stubs = ['a', 'b', 'c'].map(
-        (id) =>
-          makeStub(id, {
-            capabilities: defaultCapabilities(),
-            chat: async () => {
-              counts[id] = (counts[id] ?? 0) + 1
-              return chatResponse(id, id.toUpperCase())
-            },
-          }),
+      const stubs = ['a', 'b', 'c'].map((id) =>
+        makeStub(id, {
+          capabilities: defaultCapabilities(),
+          chat: async () => {
+            counts[id] = (counts[id] ?? 0) + 1
+            return chatResponse(id, id.toUpperCase())
+          },
+        }),
       )
       const p = new ProviderPool({
         strategy: 'round-robin',

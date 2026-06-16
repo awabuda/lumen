@@ -58,10 +58,7 @@ describe('RuleBasedReflector', () => {
 
   it('deduplicates by content hash', async () => {
     const reflector = new RuleBasedReflector()
-    await reflector.reflect(
-      [{ role: 'assistant', content: 'Remember: the sky is blue.' }],
-      store,
-    )
+    await reflector.reflect([{ role: 'assistant', content: 'Remember: the sky is blue.' }], store)
     const count2 = await reflector.reflect(
       [{ role: 'assistant', content: 'Remember: the sky is blue.' }],
       store,
@@ -71,10 +68,7 @@ describe('RuleBasedReflector', () => {
 
   it('skips facts shorter than 3 characters', async () => {
     const reflector = new RuleBasedReflector()
-    const count = await reflector.reflect(
-      [{ role: 'assistant', content: 'Remember: ab.' }],
-      store,
-    )
+    const count = await reflector.reflect([{ role: 'assistant', content: 'Remember: ab.' }], store)
     expect(count).toBe(0)
   })
 })

@@ -51,7 +51,10 @@ const makeFetch = (responses: FetchResponse[]): typeof fetch => {
   }) as unknown as typeof fetch
 }
 
-const makeProvider = (fetchImpl: typeof fetch, opts: Partial<ConstructorParameters<typeof OpenAICompatibleProvider>[0]> = {}): OpenAICompatibleProvider =>
+const makeProvider = (
+  fetchImpl: typeof fetch,
+  opts: Partial<ConstructorParameters<typeof OpenAICompatibleProvider>[0]> = {},
+): OpenAICompatibleProvider =>
   new OpenAICompatibleProvider({
     id: 'test',
     baseUrl: 'https://api.test.com/v1',
@@ -77,14 +80,19 @@ describe('OpenAICompatibleProvider', () => {
         body: {
           id: 'r1',
           model: 'test-model',
-          choices: [{ index: 0, message: { role: 'assistant', content: 'hi' }, finish_reason: 'stop' }],
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'hi' }, finish_reason: 'stop' },
+          ],
           usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
         },
       },
     ])
     const provider = makeProvider(fetchImpl)
     await provider.chat(basicRequest([{ role: 'user', content: 'hello' }]))
-    const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit]
+    const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      RequestInit,
+    ]
     expect(url).toBe('https://api.test.com/v1/chat/completions')
     const headers = init.headers as Record<string, string>
     expect(headers.authorization).toBe('Bearer test-key')
@@ -100,7 +108,9 @@ describe('OpenAICompatibleProvider', () => {
         body: {
           id: 'r1',
           model: 'test-model',
-          choices: [{ index: 0, message: { role: 'assistant', content: 'pong' }, finish_reason: 'stop' }],
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'pong' }, finish_reason: 'stop' },
+          ],
           usage: { prompt_tokens: 2, completion_tokens: 4, total_tokens: 6 },
         },
       },
@@ -157,7 +167,9 @@ describe('OpenAICompatibleProvider', () => {
       capturedBody = init?.body as string
       return new Response(
         JSON.stringify({
-          choices: [{ index: 0, message: { role: 'assistant', content: 'done' }, finish_reason: 'stop' }],
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'done' }, finish_reason: 'stop' },
+          ],
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       )
@@ -170,7 +182,11 @@ describe('OpenAICompatibleProvider', () => {
     await provider.chat(
       basicRequest([
         { role: 'user', content: 'weather?' } as UserMessage,
-        { role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'lookup', arguments: {} }] } as AssistantMessage,
+        {
+          role: 'assistant',
+          content: '',
+          toolCalls: [{ id: 'c1', name: 'lookup', arguments: {} }],
+        } as AssistantMessage,
         toolMsg,
       ]),
     )
@@ -213,9 +229,9 @@ describe('OpenAICompatibleProvider', () => {
   it('throws ResponseShapeError when the body does not match the schema', async () => {
     const fetchImpl = makeFetch([{ body: { totally: 'wrong' } }])
     const provider = makeProvider(fetchImpl)
-    await expect(provider.chat(basicRequest([{ role: 'user', content: 'x' }]))).rejects.toBeInstanceOf(
-      ResponseShapeError,
-    )
+    await expect(
+      provider.chat(basicRequest([{ role: 'user', content: 'x' }])),
+    ).rejects.toBeInstanceOf(ResponseShapeError)
   })
 
   it('streams chunks into StreamEvents', async () => {
@@ -237,7 +253,10 @@ describe('OpenAICompatibleProvider', () => {
     }
     // Expect: message_start, 2x content_delta ("Hel", "lo"), message_complete
     expect(events[0]?.type).toBe('message_start')
-    const deltas = events.filter((e) => e.type === 'content_delta') as Array<{ type: 'content_delta'; delta: string }>
+    const deltas = events.filter((e) => e.type === 'content_delta') as Array<{
+      type: 'content_delta'
+      delta: string
+    }>
     expect(deltas.map((d) => d.delta).join('')).toBe('Hello')
     expect(events.at(-1)?.type).toBe('message_complete')
   })
@@ -254,7 +273,9 @@ describe('OpenAICompatibleProvider', () => {
 
   it('embed() throws when capabilities.embeddings is false (default)', async () => {
     const provider = makeProvider(makeFetch([]))
-    await expect(provider.embed({ input: ['x'], model: 'test-model' })).rejects.toThrow(/embeddings/)
+    await expect(provider.embed({ input: ['x'], model: 'test-model' })).rejects.toThrow(
+      /embeddings/,
+    )
   })
 
   it('throws if baseUrl is missing', () => {

@@ -10,7 +10,7 @@
 import * as fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
-import { BaseTool, type ToolContext, type ToolDescriptor } from '@lumen/core'
+import { AbortError, BaseTool, type ToolContext, type ToolDescriptor } from '@lumen/core'
 import { PathKindError } from '../errors.js'
 
 /** Zod schema for the tool's input. */
@@ -88,14 +88,14 @@ async function walk(
   out: ListDirEntry[],
   signal: AbortSignal,
 ): Promise<void> {
-  if (signal.aborted) throw new Error('aborted')
+  if (signal.aborted) throw new AbortError()
   const stat = await fs.lstat(current)
   if (!stat.isDirectory()) {
     throw new PathKindError(current, 'dir')
   }
   const dirents = await fs.readdir(current, { withFileTypes: true })
   for (const d of dirents) {
-    if (signal.aborted) throw new Error('aborted')
+    if (signal.aborted) throw new AbortError()
     const child = path.join(current, d.name)
     const rel = path.relative(root, child)
     // Only list entries at depth <= depthLimit. The root is depth 0; an
@@ -105,12 +105,11 @@ async function walk(
     if (entryDepth > depthLimit) {
       continue
     }
-    const entry: ListDirEntry =
-      d.isFile()
-        ? { name: rel, type: 'file' }
-        : d.isDirectory()
-          ? { name: rel, type: 'dir' }
-          : { name: rel, type: 'other' }
+    const entry: ListDirEntry = d.isFile()
+      ? { name: rel, type: 'file' }
+      : d.isDirectory()
+        ? { name: rel, type: 'dir' }
+        : { name: rel, type: 'other' }
     if (d.isFile()) {
       // Fill in size for files. Use lstat to match the readdir kind.
       const s = await fs.lstat(child)

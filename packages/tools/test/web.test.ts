@@ -10,8 +10,7 @@ import {
 } from '../src/web/index.js'
 
 const mockFetch =
-  (responses: Record<string, { ok: boolean; status: number; body: string }>) =>
-  (url: string) => {
+  (responses: Record<string, { ok: boolean; status: number; body: string }>) => (url: string) => {
     const entry = responses[url]
     if (!entry) {
       return Promise.resolve({
@@ -49,7 +48,7 @@ describe('InMemorySearchProvider', () => {
         { title: 'C', url: 'https://c', snippet: 'common' },
       ],
     })
-    expect((await provider.search('common', 2))).toHaveLength(2)
+    expect(await provider.search('common', 2)).toHaveLength(2)
   })
 
   it('returns empty array when nothing matches', async () => {
@@ -116,7 +115,7 @@ describe('DuckDuckGoSearchProvider', () => {
         'https://html.duckduckgo.com/html/?q=x': { ok: true, status: 200, body: html },
       }),
     })
-    expect((await provider.search('x', 2))).toHaveLength(2)
+    expect(await provider.search('x', 2)).toHaveLength(2)
   })
 
   it('throws on transport error (Rule 7)', async () => {
@@ -161,17 +160,16 @@ describe('DuckDuckGoSearchProvider', () => {
 describe('WebSearchTool', () => {
   it('returns search results', async () => {
     const provider = new InMemorySearchProvider({
-      corpus: [
-        { title: 'Foo', url: 'https://foo.com', snippet: 'foo snippet' },
-      ],
+      corpus: [{ title: 'Foo', url: 'https://foo.com', snippet: 'foo snippet' }],
     })
     const tool = new WebSearchTool(provider)
     expect(tool.name).toBe('web_search')
     expect(tool.risk).toBe('safe')
-    const out = (await tool.execute(
-      { query: 'foo' },
-      { signal: new AbortController().signal, cwd: '/tmp', log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} } } as never,
-    )) as { results: Array<{ title: string }> }
+    const out = (await tool.execute({ query: 'foo' }, {
+      signal: new AbortController().signal,
+      cwd: '/tmp',
+      log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+    } as never)) as { results: Array<{ title: string }> }
     expect(out.results).toHaveLength(1)
     expect(out.results[0]?.title).toBe('Foo')
   })
@@ -179,7 +177,11 @@ describe('WebSearchTool', () => {
   it('rejects empty query', async () => {
     const tool = new WebSearchTool(new InMemorySearchProvider({ corpus: [] }))
     await expect(
-      tool.execute({ query: '' }, { signal: new AbortController().signal, cwd: '/tmp', log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} } } as never),
+      tool.execute({ query: '' }, {
+        signal: new AbortController().signal,
+        cwd: '/tmp',
+        log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+      } as never),
     ).rejects.toThrow()
   })
 
@@ -195,10 +197,11 @@ describe('WebSearchTool', () => {
       ],
     })
     const tool = new WebSearchTool(provider)
-    const out = (await tool.execute(
-      { query: 'common' },
-      { signal: new AbortController().signal, cwd: '/tmp', log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} } } as never,
-    )) as { results: unknown[] }
+    const out = (await tool.execute({ query: 'common' }, {
+      signal: new AbortController().signal,
+      cwd: '/tmp',
+      log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+    } as never)) as { results: unknown[] }
     expect(out.results).toHaveLength(5)
   })
 })
@@ -210,10 +213,11 @@ describe('WebFetchTool', () => {
       fetchMap: { 'https://a': 'hello world' },
     })
     const tool = new WebFetchTool(provider)
-    const out = (await tool.execute(
-      { url: 'https://a' },
-      { signal: new AbortController().signal, cwd: '/tmp', log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} } } as never,
-    )) as { text: string; truncated: boolean }
+    const out = (await tool.execute({ url: 'https://a' }, {
+      signal: new AbortController().signal,
+      cwd: '/tmp',
+      log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+    } as never)) as { text: string; truncated: boolean }
     expect(out.text).toBe('hello world')
     expect(out.truncated).toBe(false)
   })
@@ -224,10 +228,11 @@ describe('WebFetchTool', () => {
       fetchMap: { 'https://a': 'x'.repeat(200) },
     })
     const tool = new WebFetchTool(provider)
-    const out = (await tool.execute(
-      { url: 'https://a', maxBytes: 50 },
-      { signal: new AbortController().signal, cwd: '/tmp', log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} } } as never,
-    )) as { text: string; truncated: boolean }
+    const out = (await tool.execute({ url: 'https://a', maxBytes: 50 }, {
+      signal: new AbortController().signal,
+      cwd: '/tmp',
+      log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+    } as never)) as { text: string; truncated: boolean }
     expect(out.text).toHaveLength(50)
     expect(out.truncated).toBe(true)
   })
@@ -235,10 +240,11 @@ describe('WebFetchTool', () => {
   it('rejects invalid URL', async () => {
     const tool = new WebFetchTool(new InMemorySearchProvider({ corpus: [] }))
     await expect(
-      tool.execute(
-        { url: 'not-a-url' },
-        { signal: new AbortController().signal, cwd: '/tmp', log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} } } as never,
-      ),
+      tool.execute({ url: 'not-a-url' }, {
+        signal: new AbortController().signal,
+        cwd: '/tmp',
+        log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+      } as never),
     ).rejects.toThrow()
   })
 })

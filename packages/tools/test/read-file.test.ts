@@ -86,6 +86,8 @@ describe('ReadFileTool', () => {
     const file = path.join(tmpDir, 'a.txt')
     await fs.writeFile(file, 'x', 'utf8')
     const tool = new ReadFileTool()
-    await expect(tool.call({ path: 'a.txt', offset: 0 }, ctx)).rejects.toBeInstanceOf(ToolValidationError)
+    await expect(tool.call({ path: 'a.txt', offset: 0 }, ctx)).rejects.toBeInstanceOf(
+      ToolValidationError,
+    )
   })
 })

@@ -17,7 +17,7 @@
  */
 
 import { z, type ZodIssue } from 'zod'
-import { ToolError, ToolValidationError } from '../errors/index.js'
+import { ConfigError, ToolError, ToolValidationError } from '../errors/index.js'
 
 /**
  * Risk classification — controls whether the user is asked for approval
@@ -182,7 +182,8 @@ const convert = (s: ZodTypeAny): Record<string, unknown> => {
     return { type: typeof v, enum: [v] }
   }
   if (s._def?.typeName === ZodFirstPartyTypeKind.ZodUnion) {
-    const options = ((s as unknown as { _def: { options: ReadonlyArray<ZodTypeAny> } })._def.options) as ReadonlyArray<ZodTypeAny>
+    const options = (s as unknown as { _def: { options: ReadonlyArray<ZodTypeAny> } })._def
+      .options as ReadonlyArray<ZodTypeAny>
     return { anyOf: options.map((o: ZodTypeAny) => convert(o)) }
   }
   // Fallback: opaque
@@ -216,7 +217,7 @@ export class ToolRegistry {
   /** Register a tool. Throws if a tool with the same name is already registered. */
   public register(tool: BaseTool): this {
     if (this.tools.has(tool.name)) {
-      throw new Error(`Tool "${tool.name}" is already registered`)
+      throw new ConfigError(`Tool "${tool.name}" is already registered`, { field: 'name' })
     }
     this.tools.set(tool.name, tool)
     return this
@@ -240,7 +241,7 @@ export class ToolRegistry {
     options: { eager?: boolean; namespace?: boolean } = {},
   ): this {
     if (this.toolsets.has(toolset.id)) {
-      throw new Error(`Toolset "${toolset.id}" is already registered`)
+      throw new ConfigError(`Toolset "${toolset.id}" is already registered`, { field: 'id' })
     }
     this.toolsets.set(toolset.id, toolset)
     if (options.eager === true) this.materializeToolset(toolset, options.namespace !== false)
@@ -266,7 +267,10 @@ export class ToolRegistry {
    * Materialize one toolset under the `name:tool` namespace.
    * Called by both the eager path and {@link materializeToolsets}.
    */
-  private materializeToolset(toolset: import('./toolset.js').BaseToolset, namespace: boolean): void {
+  private materializeToolset(
+    toolset: import('./toolset.js').BaseToolset,
+    namespace: boolean,
+  ): void {
     for (const tool of toolset.materialize()) {
       const name = namespace ? `${toolset.id}:${tool.name}` : tool.name
       // Use a private write so we do not throw on a
@@ -293,7 +297,7 @@ export class ToolRegistry {
   /** Require a tool by name. Throws if not found. */
   public require(name: string): BaseTool {
     const t = this.tools.get(name)
-    if (!t) throw new Error(`Tool "${name}" is not registered`)
+    if (!t) throw new ConfigError(`Tool "${name}" is not registered`, { field: 'name' })
     return t
   }
 

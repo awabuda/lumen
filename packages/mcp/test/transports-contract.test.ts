@@ -22,14 +22,18 @@ import { StdioMcpTransport } from '../src/stdio-transport.js'
 import { HttpMcpTransport } from '../src/http-transport.js'
 import { runMcpTransportContractTests } from './contract-suite.js'
 
-runMcpTransportContractTests('StdioMcpTransport', () =>
-  // We never call open() in the contract — passing a
-  // non-existent command is fine because open() is exercised
-  // in stdio-transport.test.ts, not here.
-  new StdioMcpTransport({ command: '/nonexistent/contract-probe' }),
+runMcpTransportContractTests(
+  'StdioMcpTransport',
+  () =>
+    // We never call open() in the contract — passing a
+    // non-existent command is fine because open() is exercised
+    // in stdio-transport.test.ts, not here.
+    new StdioMcpTransport({ command: '/nonexistent/contract-probe' }),
 )
 
-runMcpTransportContractTests('HttpMcpTransport', () =>
-  // Same reasoning: we do not open the URL in the contract.
-  new HttpMcpTransport({ url: 'http://127.0.0.1:1/contract-probe' }),
+runMcpTransportContractTests(
+  'HttpMcpTransport',
+  () =>
+    // Same reasoning: we do not open the URL in the contract.
+    new HttpMcpTransport({ url: 'http://127.0.0.1:1/contract-probe' }),
 )

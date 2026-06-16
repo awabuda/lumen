@@ -53,48 +53,52 @@ describe('GhTool', () => {
   it('pr_list spawns gh with --json and parses the output', async () => {
     currentChild = fakeChild(JSON.stringify([{ number: 1, title: 'fix', state: 'open' }]))
     const tool = new GhTool()
-    const output = await tool.call({ op: 'pr_list', limit: 5 }, ctx) as { data: { result: unknown[] } }
+    const output = (await tool.call({ op: 'pr_list', limit: 5 }, ctx)) as {
+      data: { result: unknown[] }
+    }
     expect(output.data.result).toEqual([{ number: 1, title: 'fix', state: 'open' }])
   })
 
   it('pr_create extracts the URL from stdout', async () => {
     currentChild = fakeChild('https://github.com/org/repo/pull/42\n')
     const tool = new GhTool()
-    const output = await tool.call(
-      { op: 'pr_create', title: 'feat', body: 'desc' },
-      ctx,
-    ) as { data: { url: string } }
+    const output = (await tool.call({ op: 'pr_create', title: 'feat', body: 'desc' }, ctx)) as {
+      data: { url: string }
+    }
     expect(output.data.url).toBe('https://github.com/org/repo/pull/42')
   })
 
   it('pr_view spawns gh with --json', async () => {
     currentChild = fakeChild(JSON.stringify({ number: 3, title: 'view me' }))
     const tool = new GhTool()
-    const output = await tool.call({ op: 'pr_view', number: 3 }, ctx) as { data: { result: { title: string } } }
+    const output = (await tool.call({ op: 'pr_view', number: 3 }, ctx)) as {
+      data: { result: { title: string } }
+    }
     expect(output.data.result.title).toBe('view me')
   })
 
   it('issue_create extracts the URL from stdout', async () => {
     currentChild = fakeChild('https://github.com/org/repo/issues/7\n')
     const tool = new GhTool()
-    const output = await tool.call(
-      { op: 'issue_create', title: 'bug' },
-      ctx,
-    ) as { data: { url: string } }
+    const output = (await tool.call({ op: 'issue_create', title: 'bug' }, ctx)) as {
+      data: { url: string }
+    }
     expect(output.data.url).toBe('https://github.com/org/repo/issues/7')
   })
 
   it('issue_list spawns gh with --json', async () => {
     currentChild = fakeChild(JSON.stringify([{ number: 5, title: 'bug', state: 'open' }]))
     const tool = new GhTool()
-    const output = await tool.call({ op: 'issue_list' }, ctx) as { data: { result: unknown[] } }
+    const output = (await tool.call({ op: 'issue_list' }, ctx)) as { data: { result: unknown[] } }
     expect(output.data.result).toEqual([{ number: 5, title: 'bug', state: 'open' }])
   })
 
   it('pr_status spawns gh with --json', async () => {
     currentChild = fakeChild(JSON.stringify({ currentBranch: 'main' }))
     const tool = new GhTool()
-    const output = await tool.call({ op: 'pr_status' }, ctx) as { data: { result: { currentBranch: string } } }
+    const output = (await tool.call({ op: 'pr_status' }, ctx)) as {
+      data: { result: { currentBranch: string } }
+    }
     expect(output.data.result.currentBranch).toBe('main')
   })
 
@@ -108,7 +112,7 @@ describe('GhTool', () => {
     setTimeout(() => child.emit('error', new Error('ENOENT')), 1)
     currentChild = Object.assign(child, { stdout: stdoutEE, stderr: stderrEE, stdin, kill })
     const tool = new GhTool()
-    const output = await tool.call({ op: 'pr_list' }, ctx) as { exitCode: number }
+    const output = (await tool.call({ op: 'pr_list' }, ctx)) as { exitCode: number }
     expect(output.exitCode).toBe(127)
   })
 })

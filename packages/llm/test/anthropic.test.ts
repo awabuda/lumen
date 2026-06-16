@@ -117,7 +117,10 @@ describe('AnthropicProvider', () => {
     ])
     const provider = makeProvider(fetchImpl)
     await provider.chat(basicRequest([{ role: 'user', content: 'hello' }]))
-    const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit]
+    const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      RequestInit,
+    ]
     expect(url).toBe('https://api.test.com/v1/messages')
     const headers = init.headers as Record<string, string>
     expect(headers['x-api-key']).toBe('test-key')
@@ -136,8 +139,8 @@ describe('AnthropicProvider', () => {
     const fetchImpl = makeFetch([{ body: { content: [], stop_reason: 'end_turn' } }])
     const provider = makeProvider(fetchImpl, { anthropicVersion: '2024-01-01' })
     await provider.chat(basicRequest([{ role: 'user', content: 'hi' }]))
-    const headers = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock
-      .calls[0][1].headers as Record<string, string>
+    const headers = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]
+      .headers as Record<string, string>
     expect(headers['anthropic-version']).toBe('2024-01-01')
   })
 
@@ -582,9 +585,10 @@ describe('AnthropicProvider', () => {
       events.push(ev)
     }
     expect(events[0]?.type).toBe('message_start')
-    const deltas = events.filter(
-      (e) => e.type === 'content_delta',
-    ) as Array<{ type: 'content_delta'; delta: string }>
+    const deltas = events.filter((e) => e.type === 'content_delta') as Array<{
+      type: 'content_delta'
+      delta: string
+    }>
     expect(deltas.map((d) => d.delta).join('')).toBe('Hello')
     const last = events.at(-1)
     expect(last?.type).toBe('message_complete')
@@ -639,9 +643,10 @@ describe('AnthropicProvider', () => {
       expect(toolComplete.toolCall.arguments).toEqual({ q: 'sf' })
     }
 
-    const deltas = events.filter(
-      (e) => e.type === 'tool_call_delta',
-    ) as Array<{ type: 'tool_call_delta'; argumentsDelta?: string }>
+    const deltas = events.filter((e) => e.type === 'tool_call_delta') as Array<{
+      type: 'tool_call_delta'
+      argumentsDelta?: string
+    }>
     expect(deltas.length).toBe(2)
     expect(deltas[0]?.argumentsDelta).toBe('{"q":')
     expect(deltas[1]?.argumentsDelta).toBe('"sf"}')

@@ -49,7 +49,7 @@ import {
   type StreamEvent,
   type StreamOptions,
 } from '../index.js'
-import { AgentError } from '../errors/index.js'
+import { AgentError, ConfigError } from '../errors/index.js'
 import { Mutex } from '../concurrency/index.js'
 
 /** Routing strategy for the pool. */
@@ -146,7 +146,9 @@ export const ProviderPoolOptionsSchema = z.object({
  */
 export class PoolExhaustedError extends AgentError {
   public readonly attempts: ReadonlyArray<{ readonly providerId: string; readonly error: unknown }>
-  public constructor(attempts: ReadonlyArray<{ readonly providerId: string; readonly error: unknown }>) {
+  public constructor(
+    attempts: ReadonlyArray<{ readonly providerId: string; readonly error: unknown }>,
+  ) {
     super(
       `Provider pool exhausted after ${attempts.length} attempt(s): ` +
         attempts.map((a) => a.providerId).join(', '),
@@ -232,7 +234,9 @@ export class ProviderPool extends BaseProviderPool {
     // mutation that follows cannot interleave with another caller's code.
     // The cursor-mutation race is contained inside `candidatesFor`.)
     if (this.registered.some((p) => p.provider.id === config.provider.id)) {
-      throw new Error(`Provider id already registered: ${config.provider.id}`)
+      throw new ConfigError(`Provider id already registered: ${config.provider.id}`, {
+        field: 'provider.id',
+      })
     }
     this.registered = [...this.registered, config]
     this.invalidate()
@@ -251,16 +255,20 @@ export class ProviderPool extends BaseProviderPool {
 
   protected pickProvider(_request?: ChatRequest | EmbedRequest): BaseProvider {
     if (this.registered.length === 0) {
-      throw new Error('ProviderPool has no registered providers')
+      throw new ConfigError('ProviderPool has no registered providers')
     }
     switch (this.strategy) {
       case 'name': {
         if (!this.targetId) {
-          throw new Error("ProviderPool strategy 'name' requires options.targetId")
+          throw new ConfigError("ProviderPool strategy 'name' requires options.targetId", {
+            field: 'targetId',
+          })
         }
         const match = this.registered.find((p) => p.provider.id === this.targetId)
         if (!match) {
-          throw new Error(`No registered provider with id '${this.targetId}'`)
+          throw new ConfigError(`No registered provider with id '${this.targetId}'`, {
+            field: 'targetId',
+          })
         }
         return match.provider
       }
@@ -270,9 +278,10 @@ export class ProviderPool extends BaseProviderPool {
           return typeof cap === 'boolean' ? cap : false
         })
         if (capable.length === 0) {
-          throw new Error(
+          throw new ConfigError(
             `No registered provider has capability '${String(this.capability)}': true. ` +
               `Registered: ${this.registered.map((p) => p.provider.id).join(', ')}`,
+            { field: 'capability' },
           )
         }
         return capable[this.roundRobinIndex % capable.length]!.provider
@@ -289,7 +298,7 @@ export class ProviderPool extends BaseProviderPool {
         // Exhaustiveness check — TypeScript will flag a new strategy
         // added to the union that we forgot to handle.
         const _exhaustive: never = this.strategy
-        throw new Error(`Unhandled strategy: ${String(_exhaustive)}`)
+        throw new AgentError(`Unhandled strategy: ${String(_exhaustive)}`)
       }
     }
   }
@@ -374,7 +383,7 @@ export class ProviderPool extends BaseProviderPool {
     // be resumed on a different backend.
     const candidates = await this.candidatesFor(request)
     if (candidates.length === 0) {
-      throw new Error('ProviderPool has no registered providers')
+      throw new ConfigError('ProviderPool has no registered providers')
     }
     let lastError: unknown
     for (const provider of candidates) {
@@ -384,7 +393,10 @@ export class ProviderPool extends BaseProviderPool {
         const head = await iter.next()
         if (head.done === true) {
           // Stream ended without producing any events; try the next.
-          lastError = new Error(`Provider '${provider.id}' produced an empty stream`)
+          lastError = new ProviderError(`Provider '${provider.id}' produced an empty stream`, {
+            providerId: provider.id,
+            retryable: true,
+          })
           continue
         }
         firstEvent = head.value
@@ -402,7 +414,10 @@ export class ProviderPool extends BaseProviderPool {
     )
   }
 
-  public override async embed(request: EmbedRequest, options?: StreamOptions): Promise<EmbedResponse> {
+  public override async embed(
+    request: EmbedRequest,
+    options?: StreamOptions,
+  ): Promise<EmbedResponse> {
     return this.runWithFailover((p) => p.embed(request, options), request)
   }
 
@@ -428,11 +443,15 @@ export class ProviderPool extends BaseProviderPool {
       switch (this.strategy) {
         case 'name': {
           if (!this.targetId) {
-            throw new Error(`ProviderPool strategy 'name' requires options.targetId`)
+            throw new ConfigError("ProviderPool strategy 'name' requires options.targetId", {
+              field: 'targetId',
+            })
           }
           const match = this.registered.find((p) => p.provider.id === this.targetId)
           if (!match) {
-            throw new Error(`No registered provider with id '${this.targetId}'`)
+            throw new ConfigError(`No registered provider with id '${this.targetId}'`, {
+              field: 'targetId',
+            })
           }
           return [match.provider]
         }
@@ -442,9 +461,10 @@ export class ProviderPool extends BaseProviderPool {
             return typeof cap === 'boolean' ? cap : false
           })
           if (capable.length === 0) {
-            throw new Error(
+            throw new ConfigError(
               `No registered provider has capability '${String(this.capability)}': true. ` +
                 `Registered: ${this.registered.map((p) => p.provider.id).join(', ')}`,
+              { field: 'capability' },
             )
           }
           // Pick the head of the capable list (round-robin) but include
@@ -490,7 +510,7 @@ export class ProviderPool extends BaseProviderPool {
   ): Promise<T> {
     const candidates = await this.candidatesFor(request)
     if (candidates.length === 0) {
-      throw new Error('ProviderPool has no registered providers')
+      throw new ConfigError('ProviderPool has no registered providers')
     }
     const attempts: Array<{ providerId: string; error: unknown }> = []
     for (const provider of candidates) {

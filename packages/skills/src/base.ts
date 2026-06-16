@@ -125,14 +125,16 @@ export abstract class BaseSkill {
         const needle = trigger.value.toLowerCase()
         if (prompt.includes(needle)) {
           const score = trigger.weight ?? 0.7
-          if (score > best.score) best = { active: true, score, reason: `keyword matched: ${trigger.value}` }
+          if (score > best.score)
+            best = { active: true, score, reason: `keyword matched: ${trigger.value}` }
         }
       }
       if (trigger.kind === 'glob') {
         const matched = pathHints.some((hint) => globLikeMatch(trigger.value, hint))
         if (matched) {
           const score = trigger.weight ?? 0.6
-          if (score > best.score) best = { active: true, score, reason: `path matched: ${trigger.value}` }
+          if (score > best.score)
+            best = { active: true, score, reason: `path matched: ${trigger.value}` }
         }
       }
     }

@@ -5,7 +5,14 @@
  * detection, and activation sorting. It does not know where skills came from.
  */
 
-import type { BaseSkill, SkillActivation, SkillApplication, SkillContext, SkillDescriptor } from './base.js'
+import type {
+  BaseSkill,
+  SkillActivation,
+  SkillApplication,
+  SkillContext,
+  SkillDescriptor,
+} from './base.js'
+import { SkillConfigError } from './errors.js'
 
 /** Activated skill paired with its score. */
 export interface ActivatedSkill {
@@ -22,7 +29,9 @@ export class SkillRegistry {
   /** Register one skill. Throws on duplicate id. */
   public register(skill: BaseSkill): this {
     if (this.skills.has(skill.id)) {
-      throw new Error(`Skill "${skill.id}" is already registered`)
+      throw new SkillConfigError(`Skill "${skill.id}" is already registered`, {
+        skillId: skill.id,
+      })
     }
     this.skills.set(skill.id, skill)
     return this
@@ -42,7 +51,7 @@ export class SkillRegistry {
   /** Require a skill by id. */
   public require(id: string): BaseSkill {
     const skill = this.skills.get(id)
-    if (!skill) throw new Error(`Skill "${id}" is not registered`)
+    if (!skill) throw new SkillConfigError(`Skill "${id}" is not registered`, { skillId: id })
     return skill
   }
 
@@ -58,7 +67,9 @@ export class SkillRegistry {
       const activation = await skill.shouldActivate(ctx)
       if (activation.active) out.push({ skill, activation })
     }
-    return out.sort((a, b) => b.activation.score - a.activation.score || a.skill.id.localeCompare(b.skill.id))
+    return out.sort(
+      (a, b) => b.activation.score - a.activation.score || a.skill.id.localeCompare(b.skill.id),
+    )
   }
 
   /** Apply all active skills and return their instruction payloads. */

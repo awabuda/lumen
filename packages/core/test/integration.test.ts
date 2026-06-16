@@ -135,13 +135,7 @@ describe('Agent integration', () => {
     expect(persisted[2]?.role).toBe('assistant')
     // Hooks fired in the expected order: run:start, step:start, message:append, step:end, run:end.
     const kinds = events.map((e) => e.kind)
-    expect(kinds).toEqual([
-      'run:start',
-      'step:start',
-      'message:append',
-      'step:end',
-      'run:end',
-    ])
+    expect(kinds).toEqual(['run:start', 'step:start', 'message:append', 'step:end', 'run:end'])
   })
 
   it('dispatches a tool call, feeds the result back, and terminates when the model says done', async () => {
@@ -261,7 +255,13 @@ describe('Agent integration', () => {
     await memory.init()
     const tools = new ToolRegistry()
     tools.register(new FailingTool())
-    const agent = new Agent({ provider, tools, memory, hooks: new HookRegistry(), model: 'fake-model' })
+    const agent = new Agent({
+      provider,
+      tools,
+      memory,
+      hooks: new HookRegistry(),
+      model: 'fake-model',
+    })
     const result = await agent.run({ userMessage: 'go' })
 
     // Two iterations: the tool error didn't crash the loop; the model
@@ -290,10 +290,16 @@ describe('Agent integration', () => {
     await memory.init()
     const tools = new ToolRegistry()
     tools.register(new AddTool())
-    const agent = new Agent({ provider, tools, memory, hooks: new HookRegistry(), model: 'fake-model' })
-    await expect(
-      agent.run({ userMessage: 'go', maxIterations: 3 }),
-    ).rejects.toThrow(/maximum iterations/)
+    const agent = new Agent({
+      provider,
+      tools,
+      memory,
+      hooks: new HookRegistry(),
+      model: 'fake-model',
+    })
+    await expect(agent.run({ userMessage: 'go', maxIterations: 3 })).rejects.toThrow(
+      /maximum iterations/,
+    )
   })
 
   it('streamRun() yields run:end with the final message on the last event', async () => {
@@ -308,7 +314,13 @@ describe('Agent integration', () => {
     await memory.init()
     const tools = new ToolRegistry()
     tools.register(new AddTool())
-    const agent = new Agent({ provider, tools, memory, hooks: new HookRegistry(), model: 'fake-model' })
+    const agent = new Agent({
+      provider,
+      tools,
+      memory,
+      hooks: new HookRegistry(),
+      model: 'fake-model',
+    })
     const events: RunEvent[] = []
     let lastRunEnd: RunEvent | undefined
     for await (const ev of agent.streamRun({ userMessage: 'hi' })) {

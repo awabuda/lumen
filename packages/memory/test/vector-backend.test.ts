@@ -1,11 +1,7 @@
 /** Tests for the vector backend abstraction and SqliteStore integration. */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import {
-  BruteForceVectorBackend,
-  SqliteStore,
-  type VectorPoint,
-} from '../src/index.js'
+import { BruteForceVectorBackend, SqliteStore, type VectorPoint } from '../src/index.js'
 import { floatsToBytes } from './helpers.js'
 
 let store: SqliteStore
@@ -59,9 +55,9 @@ describe('BruteForceVectorBackend', () => {
   it('rejects a dimension mismatch on upsert', async () => {
     const v = new BruteForceVectorBackend(4)
     // 3-dim embedding into a 4-dim backend
-    await expect(
-      v.upsert({ id: 'm', embedding: floatsToBytes([1, 0, 0]) }),
-    ).rejects.toThrow(/dimension mismatch/i)
+    await expect(v.upsert({ id: 'm', embedding: floatsToBytes([1, 0, 0]) })).rejects.toThrow(
+      /dimension mismatch/i,
+    )
   })
 })
 

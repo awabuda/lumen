@@ -23,6 +23,7 @@
  */
 
 import { z } from 'zod'
+import { ConfigError } from '../errors/index.js'
 
 // ---------------------------------------------------------------------------
 // Domain types
@@ -99,9 +100,7 @@ const DEFAULT_ROLE_PERMISSIONS: Readonly<Record<UserRole, ReadonlySet<string>>> 
 /** Zod schema for {@link RoleBasedPolicyOptions}. */
 export const RoleBasedPolicyOptionsSchema = z.object({
   /** Override the default role permission map. */
-  overrides: z
-    .record(z.array(z.string()))
-    .optional(),
+  overrides: z.record(z.array(z.string())).optional(),
 })
 
 /** Options for {@link RoleBasedPolicy}. */
@@ -234,7 +233,7 @@ export class InMemoryUserStore extends BaseUserStore {
   public async create(input: Omit<User, 'createdAt'>): Promise<User> {
     const parsed = CreateUserInputSchema.parse({ ...input, role: input.role ?? this.defaultRole })
     if (this.users.has(parsed.id)) {
-      throw new Error(`User "${parsed.id}" already exists`)
+      throw new ConfigError(`User "${parsed.id}" already exists`, { field: 'id' })
     }
     const user: User = {
       id: parsed.id,
@@ -251,12 +250,9 @@ export class InMemoryUserStore extends BaseUserStore {
     return this.users.get(id)
   }
 
-  public async update(
-    id: string,
-    patch: Partial<Omit<User, 'id' | 'createdAt'>>,
-  ): Promise<User> {
+  public async update(id: string, patch: Partial<Omit<User, 'id' | 'createdAt'>>): Promise<User> {
     const existing = this.users.get(id)
-    if (!existing) throw new Error(`User "${id}" not found`)
+    if (!existing) throw new ConfigError(`User "${id}" not found`, { field: 'id' })
     UpdateUserInputSchema.parse(patch)
     const updated: User = { ...existing, ...patch }
     this.users.set(id, updated)
@@ -401,9 +397,13 @@ export class MultiUserRuntime {
    * Check whether `userId` is allowed to invoke `tool`.
    * Throws if the user does not exist (Rule 7).
    */
-  public async authorize(userId: string, tool: string, input?: unknown): Promise<PermissionDecision> {
+  public async authorize(
+    userId: string,
+    tool: string,
+    input?: unknown,
+  ): Promise<PermissionDecision> {
     const user = await this.users.get(userId)
-    if (!user) throw new Error(`User "${userId}" not found`)
+    if (!user) throw new ConfigError(`User "${userId}" not found`, { field: 'userId' })
     return this.policy.check({ user, tool, ...(input !== undefined ? { input } : {}) })
   }
 }

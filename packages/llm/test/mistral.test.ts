@@ -105,9 +105,7 @@ describe('createMistralProvider', () => {
     })
     expect(provider.id).toBe('mistral')
     // Drive a request purely to confirm routing; we don't care about parsing.
-    await provider
-      .chat(basicRequest([{ role: 'user', content: 'ping' }]))
-      .catch(() => undefined)
+    await provider.chat(basicRequest([{ role: 'user', content: 'ping' }])).catch(() => undefined)
     expect(calls[0]).toBe('https://api.mistral.ai/v1/chat/completions')
   })
 
@@ -181,9 +179,7 @@ describe('MistralProvider HTTP behavior', () => {
     }) as unknown as typeof fetch
 
     const provider = createMistralProvider({ apiKey: 'test-key', fetchImpl })
-    const res = await provider.chat(
-      basicRequest([{ role: 'user', content: 'hi' }]),
-    )
+    const res = await provider.chat(basicRequest([{ role: 'user', content: 'hi' }]))
     expect(res.message.content).toBe('hi')
 
     expect(calls).toHaveLength(1)
@@ -194,10 +190,7 @@ describe('MistralProvider HTTP behavior', () => {
     // The provider passes a Record<string,string> for headers; the fetch
     // implementation may keep it as a plain object or upgrade to a Headers
     // instance. Handle both shapes.
-    const rawHeaders = call?.init?.headers as
-      | Record<string, string>
-      | Headers
-      | undefined
+    const rawHeaders = call?.init?.headers as Record<string, string> | Headers | undefined
     const getHeader = (name: string): string | null => {
       if (!rawHeaders) return null
       if (typeof (rawHeaders as Headers).get === 'function') {
@@ -240,9 +233,7 @@ describe('MistralProvider HTTP behavior', () => {
       },
     ])
     const provider = createMistralProvider({ apiKey: 'k', fetchImpl })
-    const res = await provider.chat(
-      basicRequest([{ role: 'user', content: 'read /x' }]),
-    )
+    const res = await provider.chat(basicRequest([{ role: 'user', content: 'read /x' }]))
     expect(res.message.toolCalls).toHaveLength(1)
     expect(res.message.toolCalls[0]?.name).toBe('read_file')
     expect(res.message.toolCalls[0]?.arguments).toEqual({ path: '/x' })
@@ -324,9 +315,7 @@ describe('MistralProvider streaming', () => {
     }) as unknown as typeof fetch
     const provider = createMistralProvider({ apiKey: 'test-key', fetchImpl })
     const events: StreamEvent[] = []
-    for await (const ev of provider.stream(
-      basicRequest([{ role: 'user', content: 'hi' }]),
-    )) {
+    for await (const ev of provider.stream(basicRequest([{ role: 'user', content: 'hi' }]))) {
       events.push(ev)
     }
     expect(calls).toHaveLength(1)
@@ -368,9 +357,7 @@ describe('MistralProvider streaming', () => {
     }) as unknown as typeof fetch
     const provider = createMistralProvider({ apiKey: 'k', fetchImpl })
     const events: StreamEvent[] = []
-    for await (const ev of provider.stream(
-      basicRequest([{ role: 'user', content: 'read /x' }]),
-    )) {
+    for await (const ev of provider.stream(basicRequest([{ role: 'user', content: 'read /x' }]))) {
       events.push(ev)
     }
     const toolCompletes = events.filter((e) => e.type === 'tool_call_complete') as Array<{
@@ -394,9 +381,7 @@ describe('MistralProvider streaming', () => {
     const provider = createMistralProvider({ apiKey: 'k', fetchImpl })
     let captured: unknown
     try {
-      for await (const _ev of provider.stream(
-        basicRequest([{ role: 'user', content: 'hi' }]),
-      )) {
+      for await (const _ev of provider.stream(basicRequest([{ role: 'user', content: 'hi' }]))) {
         void _ev
       }
     } catch (err) {
@@ -435,9 +420,7 @@ describe('MistralProvider streaming', () => {
       })
     }) as unknown as typeof fetch
     const provider = createMistralProvider({ apiKey: 'mistral-key', fetchImpl })
-    for await (const _ev of provider.stream(
-      basicRequest([{ role: 'user', content: 'ping' }]),
-    )) {
+    for await (const _ev of provider.stream(basicRequest([{ role: 'user', content: 'ping' }]))) {
       // drain
       void _ev
     }
@@ -445,21 +428,21 @@ describe('MistralProvider streaming', () => {
   })
 
   it('throws ProviderError when the AbortSignal is already aborted', async () => {
-    const fetchImpl = vi.fn(async () =>
-      new Response('data: [DONE]\n\n', {
-        status: 200,
-        headers: { 'content-type': 'text/event-stream' },
-      }),
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response('data: [DONE]\n\n', {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+        }),
     ) as unknown as typeof fetch
     const provider = createMistralProvider({ apiKey: 'k', fetchImpl })
     const controller = new AbortController()
     controller.abort()
     let captured: unknown
     try {
-      for await (const _ev of provider.stream(
-        basicRequest([{ role: 'user', content: 'x' }]),
-        { signal: controller.signal },
-      )) {
+      for await (const _ev of provider.stream(basicRequest([{ role: 'user', content: 'x' }]), {
+        signal: controller.signal,
+      })) {
         void _ev
       }
     } catch (err) {

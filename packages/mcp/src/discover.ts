@@ -77,12 +77,13 @@ export const connectMcpServer = async (
   await client.initialize()
   const mcpTools = await client.listTools()
   const tools = mcpTools.map(
-    (t) => new McpToolProxy(
-      `mcp_${name}_${t.name}`.replace(/[-.]/g, '_'),
-      t.description ?? t.name,
-      t.inputSchema,
-      client,
-    ),
+    (t) =>
+      new McpToolProxy(
+        `mcp_${name}_${t.name}`.replace(/[-.]/g, '_'),
+        t.description ?? t.name,
+        t.inputSchema,
+        client,
+      ),
   )
   return { name, client, tools }
 }

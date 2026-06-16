@@ -102,7 +102,11 @@ describe('HttpMcpTransport — JSON response mode', () => {
 
   it('attaches Authorization: Bearer from apiKey', async () => {
     server = await startFakeMcpHttp({ mode: 'json' })
-    const transport = new HttpMcpTransport({ url: server.url, apiKey: 'secret-123', timeoutMs: 5_000 })
+    const transport = new HttpMcpTransport({
+      url: server.url,
+      apiKey: 'secret-123',
+      timeoutMs: 5_000,
+    })
     const client = new McpClient(transport)
     await client.initialize()
 
@@ -116,7 +120,7 @@ describe('HttpMcpTransport — JSON response mode', () => {
     const transport = new HttpMcpTransport({
       url: server.url,
       apiKey: 'unused',
-      headers: { 'X-Tenant-Id': 'acme', 'Authorization': 'Custom scheme-xyz' },
+      headers: { 'X-Tenant-Id': 'acme', Authorization: 'Custom scheme-xyz' },
       timeoutMs: 5_000,
     })
     const client = new McpClient(transport)

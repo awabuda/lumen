@@ -30,7 +30,9 @@ interface ChatMessage {
 
 /** Minimal provider type — mirrors @lumen/core's BaseProvider. */
 interface MinimalProvider {
-  chat(opts: { model: string; messages: ChatMessage[]; temperature?: number }): Promise<{ content: string }>
+  chat(opts: { model: string; messages: ChatMessage[]; temperature?: number }): Promise<{
+    content: string
+  }>
 }
 
 /** A single extracted fact. */
@@ -198,8 +200,7 @@ export class LLMReflector extends BaseReflector {
       if (!Array.isArray(parsed)) return []
       return parsed
         .filter(
-          (item): item is Record<string, unknown> =>
-            typeof item === 'object' && item !== null,
+          (item): item is Record<string, unknown> => typeof item === 'object' && item !== null,
         )
         .map((item) => ({
           id: hashId(String(item['content'] ?? '')),

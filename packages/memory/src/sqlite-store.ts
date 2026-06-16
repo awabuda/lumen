@@ -42,13 +42,17 @@
  */
 import {
   BaseVectorMemoryStore,
+  ConfigError,
   type MemoryQuery,
   type MemoryRecord,
   type MemorySearchResult,
   type SessionMessage,
   type SessionRecord,
 } from '@lumen/core'
-import BetterSqlite3, { type Database as BetterSqlite3Database, type Statement } from 'better-sqlite3'
+import BetterSqlite3, {
+  type Database as BetterSqlite3Database,
+  type Statement,
+} from 'better-sqlite3'
 import {
   BaseVectorBackend,
   BruteForceVectorBackend,
@@ -195,7 +199,7 @@ export class SqliteStore extends BaseVectorMemoryStore {
     k = 10,
   ): Promise<ReadonlyArray<MemorySearchResult>> {
     if (!this.vector) {
-      throw new Error('SqliteStore used before init() completed. Call init() first.')
+      throw new ConfigError('SqliteStore used before init() completed. Call init() first.')
     }
     if (embedding.byteLength === 0) return []
     const hits = await this.vector.topK(embedding, k)
@@ -245,7 +249,9 @@ export class SqliteStore extends BaseVectorMemoryStore {
    */
   private get s(): PreparedStatements {
     if (!this.stmts) {
-      throw new Error('SqliteStore used before init() completed. Call init() in your composition root.')
+      throw new ConfigError(
+        'SqliteStore used before init() completed. Call init() in your composition root.',
+      )
     }
     return this.stmts
   }
@@ -300,7 +306,16 @@ export class SqliteStore extends BaseVectorMemoryStore {
   private putSync(record: Omit<MemoryRecord, 'createdAt' | 'updatedAt'>): MemoryRecord {
     const now = Date.now()
     const existing = this.s.getRecord.get(record.id) as
-      | { id: string; kind: string; content: string; trust: number; created_at: number; updated_at: number; tags: string; metadata: string }
+      | {
+          id: string
+          kind: string
+          content: string
+          trust: number
+          created_at: number
+          updated_at: number
+          tags: string
+          metadata: string
+        }
       | undefined
     const stored: MemoryRecord = {
       ...record,
@@ -507,7 +522,13 @@ export class SqliteStore extends BaseVectorMemoryStore {
 
   public getSession(id: string): Promise<SessionRecord | undefined> {
     const row = this.s.getSession.get(id) as
-      | { id: string; title: string | null; created_at: number; updated_at: number; metadata: string }
+      | {
+          id: string
+          title: string | null
+          created_at: number
+          updated_at: number
+          metadata: string
+        }
       | undefined
     if (!row) return Promise.resolve(undefined)
     return Promise.resolve(rowToSession(row))
@@ -515,9 +536,7 @@ export class SqliteStore extends BaseVectorMemoryStore {
 
   public listSessions(limit?: number): Promise<ReadonlyArray<SessionRecord>> {
     const rows = (
-      limit === undefined
-        ? this.s.listAllSessions.all()
-        : this.s.listRecentSessions.all(limit)
+      limit === undefined ? this.s.listAllSessions.all() : this.s.listRecentSessions.all(limit)
     ) as Array<{
       id: string
       title: string | null
@@ -528,9 +547,7 @@ export class SqliteStore extends BaseVectorMemoryStore {
     return Promise.resolve(rows.map(rowToSession))
   }
 
-  public appendMessage(
-    message: Omit<SessionMessage, 'id' | 'createdAt'>,
-  ): Promise<SessionMessage> {
+  public appendMessage(message: Omit<SessionMessage, 'id' | 'createdAt'>): Promise<SessionMessage> {
     return new Promise<SessionMessage>((resolve, reject) => {
       try {
         resolve(this.appendMessageSync(message))

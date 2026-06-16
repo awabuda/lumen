@@ -1,7 +1,11 @@
 /** Tests for the telemetry collector. */
 
 import { describe, expect, it, vi } from 'vitest'
-import { ConsoleTelemetryBackend, NoopTelemetryBackend, TelemetryCollector } from '../src/telemetry/index.js'
+import {
+  ConsoleTelemetryBackend,
+  NoopTelemetryBackend,
+  TelemetryCollector,
+} from '../src/telemetry/index.js'
 
 describe('NoopTelemetryBackend', () => {
   it('does nothing on emit', () => {
@@ -23,10 +27,12 @@ describe('ConsoleTelemetryBackend', () => {
   it('writes JSON to stderr', () => {
     const backend = new ConsoleTelemetryBackend()
     let output = ''
-    const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
-      output += String(chunk)
-      return true
-    })
+    const spy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation((chunk: string | Uint8Array) => {
+        output += String(chunk)
+        return true
+      })
     backend.emit({
       runCount: 1,
       toolCalls: 3,
@@ -46,9 +52,21 @@ describe('TelemetryCollector', () => {
   it('increments run count on each record', () => {
     const collector = new TelemetryCollector()
     expect(collector.runs).toBe(0)
-    collector.record({ toolCalls: 1, iterations: 1, durationMs: 50, providerId: 'test', model: 'test' })
+    collector.record({
+      toolCalls: 1,
+      iterations: 1,
+      durationMs: 50,
+      providerId: 'test',
+      model: 'test',
+    })
     expect(collector.runs).toBe(1)
-    collector.record({ toolCalls: 2, iterations: 2, durationMs: 100, providerId: 'test', model: 'test' })
+    collector.record({
+      toolCalls: 2,
+      iterations: 2,
+      durationMs: 100,
+      providerId: 'test',
+      model: 'test',
+    })
     expect(collector.runs).toBe(2)
   })
 })

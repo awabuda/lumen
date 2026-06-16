@@ -71,9 +71,9 @@ describe('Agent.run', () => {
       })),
     )
     const agent = new Agent({ provider, tools: new ToolRegistry(), model: 'fake-model' })
-    await expect(
-      agent.run({ userMessage: 'loop', maxIterations: 5 }),
-    ).rejects.toBeInstanceOf(MaxIterationsExceededError)
+    await expect(agent.run({ userMessage: 'loop', maxIterations: 5 })).rejects.toBeInstanceOf(
+      MaxIterationsExceededError,
+    )
   })
 
   it('throws AbortError when the signal is pre-aborted', async () => {
@@ -81,7 +81,9 @@ describe('Agent.run', () => {
     const agent = new Agent({ provider, tools: new ToolRegistry() })
     const ctrl = new AbortController()
     ctrl.abort()
-    await expect(agent.run({ userMessage: 'hi', signal: ctrl.signal })).rejects.toBeInstanceOf(AbortError)
+    await expect(agent.run({ userMessage: 'hi', signal: ctrl.signal })).rejects.toBeInstanceOf(
+      AbortError,
+    )
   })
 
   it('persists messages to the memory store when one is provided', async () => {

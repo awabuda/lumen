@@ -44,6 +44,7 @@ import {
   type ToolDescriptor,
   type ToolResult,
   type UserMessage,
+  ValidationError,
   withRetry,
 } from '@lumen/core'
 import { z } from 'zod'
@@ -410,10 +411,14 @@ export class OpenAICompatibleProvider extends BaseProvider {
   constructor(options: OpenAICompatibleOptions) {
     super()
     if (!options.baseUrl || options.baseUrl.length === 0) {
-      throw new Error('OpenAICompatibleProvider: `baseUrl` is required')
+      throw new ValidationError('OpenAICompatibleProvider: `baseUrl` is required', {
+        field: 'baseUrl',
+      })
     }
     if (!options.defaultModel || options.defaultModel.length === 0) {
-      throw new Error('OpenAICompatibleProvider: `defaultModel` is required')
+      throw new ValidationError('OpenAICompatibleProvider: `defaultModel` is required', {
+        field: 'defaultModel',
+      })
     }
     this.id = options.id ?? 'openai-compatible'
     this.baseUrl = normalizeBaseUrl(options.baseUrl)
@@ -429,8 +434,9 @@ export class OpenAICompatibleProvider extends BaseProvider {
       (typeof globalThis.fetch === 'function'
         ? (globalThis.fetch.bind(globalThis) as typeof fetch)
         : (() => {
-            throw new Error(
+            throw new ValidationError(
               'OpenAICompatibleProvider: no fetch implementation available. Pass `fetchImpl` or run on Node 20+.',
+              { field: 'fetchImpl' },
             )
           })())
     this.capabilities = { ...defaultCapabilities(), ...(options.capabilities ?? {}) }

@@ -38,11 +38,10 @@
 
 import { type TextEmbedder, float32ToBytes } from './embedder.js'
 import { BaseVectorBackend, type VectorHit } from './vector-backend.js'
+import { ConfigError, ToolError } from '@lumen/core'
 
 /** Structural chunker type — accepts `chunkText` from @lumen/tools. */
-export type ChunkerFunction = (
-  text: string,
-) => ReadonlyArray<{
+export type ChunkerFunction = (text: string) => ReadonlyArray<{
   readonly text: string
   readonly startOffset: number
   readonly endOffset: number
@@ -117,21 +116,32 @@ const deriveChunkId = (documentId: string, chunkIndex: number): string =>
 
 /** Narrow a structural chunker output to a validated {@link RagChunk}[]. */
 const validateChunks = (
-  raw: ReadonlyArray<{ readonly text: string; readonly startOffset: number; readonly endOffset: number; readonly index: number }>,
+  raw: ReadonlyArray<{
+    readonly text: string
+    readonly startOffset: number
+    readonly endOffset: number
+    readonly index: number
+  }>,
 ): ReadonlyArray<RagChunk> => {
   const out: RagChunk[] = []
   for (const c of raw) {
     if (typeof c.text !== 'string' || c.text.length === 0) {
-      throw new Error('chunker produced a chunk with empty text')
+      throw new ToolError('chunker produced a chunk with empty text', { toolName: 'chunker' })
     }
     if (!Number.isInteger(c.startOffset) || c.startOffset < 0) {
-      throw new Error(`chunker produced a chunk with invalid startOffset: ${c.startOffset}`)
+      throw new ToolError(`chunker produced a chunk with invalid startOffset: ${c.startOffset}`, {
+        toolName: 'chunker',
+      })
     }
     if (!Number.isInteger(c.endOffset) || c.endOffset < c.startOffset) {
-      throw new Error(`chunker produced a chunk with invalid endOffset: ${c.endOffset}`)
+      throw new ToolError(`chunker produced a chunk with invalid endOffset: ${c.endOffset}`, {
+        toolName: 'chunker',
+      })
     }
     if (!Number.isInteger(c.index) || c.index < 0) {
-      throw new Error(`chunker produced a chunk with invalid index: ${c.index}`)
+      throw new ToolError(`chunker produced a chunk with invalid index: ${c.index}`, {
+        toolName: 'chunker',
+      })
     }
     out.push({ text: c.text, startOffset: c.startOffset, endOffset: c.endOffset, index: c.index })
   }
@@ -189,16 +199,16 @@ export class RagPipeline extends BaseRagPipeline {
     // document id. Re-ingestion is supposed to be idempotent.
     await this.forget(input.documentId)
 
-    const chunks: ReadonlyArray<RagChunk> = validateChunks(
-      input.chunks ?? this.chunker(input.text),
-    )
+    const chunks: ReadonlyArray<RagChunk> = validateChunks(input.chunks ?? this.chunker(input.text))
     if (chunks.length === 0) {
       return { documentId: input.documentId, chunkCount: 0, ids: [] }
     }
 
     const vectors = await this.embedder(chunks.map((c) => c.text))
     if (vectors.length !== chunks.length) {
-      throw new Error(`embedder returned ${vectors.length} vectors for ${chunks.length} chunks`)
+      throw new ConfigError(
+        `embedder returned ${vectors.length} vectors for ${chunks.length} chunks`,
+      )
     }
     const ids: string[] = []
     for (let i = 0; i < chunks.length; i += 1) {

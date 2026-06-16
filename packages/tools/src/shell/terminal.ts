@@ -67,7 +67,12 @@ export const TerminalInputSchema = z.object({
    * upper bound so a typo (`timeoutMs: 99999999`) doesn't hang
    * the agent for a day.
    */
-  timeoutMs: z.number().int().min(1).max(10 * 60 * 1000).optional(),
+  timeoutMs: z
+    .number()
+    .int()
+    .min(1)
+    .max(10 * 60 * 1000)
+    .optional(),
 })
 
 export type TerminalInput = z.infer<typeof TerminalInputSchema>
@@ -141,15 +146,14 @@ export class TerminalTool extends BaseTool {
         truncated: false,
         refusal: {
           reason: 'policy-violation',
-          message: `Refused: argv[0] "${parsed.command[0]}" contains a shell metacharacter. ` +
+          message:
+            `Refused: argv[0] "${parsed.command[0]}" contains a shell metacharacter. ` +
             'Pass commands as a flat array of arguments; do not use the terminal tool to invoke a shell.',
         },
       }
     }
 
-    const cwd = parsed.cwd
-      ? require('node:path').resolve(ctx.cwd, parsed.cwd)
-      : ctx.cwd
+    const cwd = parsed.cwd ? require('node:path').resolve(ctx.cwd, parsed.cwd) : ctx.cwd
 
     const outcome = await this.sandbox.run({
       command: parsed.command,

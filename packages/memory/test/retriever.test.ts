@@ -28,8 +28,20 @@ describe('TextOnlyRetriever', () => {
   })
 
   it('finds records by keyword match', async () => {
-    await store.put({ id: 'a', kind: 'fact', content: 'Paris is the capital of France', trust: 0.5, tags: [] })
-    await store.put({ id: 'b', kind: 'fact', content: 'Berlin is the capital of Germany', trust: 0.5, tags: [] })
+    await store.put({
+      id: 'a',
+      kind: 'fact',
+      content: 'Paris is the capital of France',
+      trust: 0.5,
+      tags: [],
+    })
+    await store.put({
+      id: 'b',
+      kind: 'fact',
+      content: 'Berlin is the capital of Germany',
+      trust: 0.5,
+      tags: [],
+    })
     const r = new TextOnlyRetriever(store)
     const out = await r.retrieve({ text: 'paris', limit: 5 })
     const ids = out.map((h: RetrievalResult) => h.record.id)

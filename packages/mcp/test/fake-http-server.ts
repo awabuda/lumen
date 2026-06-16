@@ -59,14 +59,23 @@ export interface FakeMcpHttp {
 
 export type ResponseBuilder = (req: CapturedRequest) => unknown
 
-const sendJson = (res: ServerResponse, body: unknown, status = 200, extraHeaders: Record<string, string> = {}) => {
+const sendJson = (
+  res: ServerResponse,
+  body: unknown,
+  status = 200,
+  extraHeaders: Record<string, string> = {},
+) => {
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
   for (const [k, v] of Object.entries(extraHeaders)) res.setHeader(k, v)
   res.end(JSON.stringify(body))
 }
 
-const sendSse = async (res: ServerResponse, events: Array<{ event?: string; data: string }>, extraHeaders: Record<string, string> = {}) => {
+const sendSse = async (
+  res: ServerResponse,
+  events: Array<{ event?: string; data: string }>,
+  extraHeaders: Record<string, string> = {},
+) => {
   res.statusCode = 200
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -140,7 +149,12 @@ export const startFakeMcpHttp = async (options: FakeMcpHttpOptions = {}): Promis
     // assert against the captured `body` and the response is
     // well-formed for `client.send(...)` to dispatch.
     if (!rpc || typeof rpc.method !== 'string') {
-      sendJson(res, { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'no method' } }, 200, extraHeaders)
+      sendJson(
+        res,
+        { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'no method' } },
+        200,
+        extraHeaders,
+      )
       return
     }
     const id = (rpc as { id?: unknown }).id
@@ -154,7 +168,11 @@ export const startFakeMcpHttp = async (options: FakeMcpHttpOptions = {}): Promis
         {
           name: 'echo',
           description: 'Echo input',
-          inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+          inputSchema: {
+            type: 'object',
+            properties: { text: { type: 'string' } },
+            required: ['text'],
+          },
         },
       ]
     } else if (rpc.method === 'tools/call') {

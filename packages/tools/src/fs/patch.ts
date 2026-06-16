@@ -15,7 +15,13 @@
 import * as fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
-import { BaseTool, type ToolContext, type ToolDescriptor } from '@lumen/core'
+import {
+  BaseTool,
+  type ToolContext,
+  type ToolDescriptor,
+  ToolError,
+  ValidationError,
+} from '@lumen/core'
 import { atomicWriteFile } from './write-file.js'
 
 /** Zod schema for the tool's input. */
@@ -103,7 +109,9 @@ function replaceOneNormalized(
       nIdx++
     }
   }
-  if (origStart < 0) throw new Error('normalized index out of range')
+  if (origStart < 0) {
+    throw new ToolError('patch: normalized index out of range', { toolName: 'patch' })
+  }
 
   // The end of the match in the original is the point where the
   // normalized cursor has advanced by `needle.length` characters.
@@ -145,9 +153,10 @@ export class PatchTool extends BaseTool {
     const exactCount = countOccurrences(original, oldString)
     if (exactCount > 0) {
       if (exactCount > 1 && !replaceAll) {
-        throw new Error(
+        throw new ValidationError(
           `patch: oldString matched ${exactCount} times in ${absPath} but replaceAll=false. ` +
             'Refine oldString with more surrounding context, or pass replaceAll=true.',
+          { field: 'oldString' },
         )
       }
       const next = replaceAll
@@ -162,12 +171,13 @@ export class PatchTool extends BaseTool {
     const normNeedle = normalizeWhitespace(oldString)
     const normCount = countOccurrences(normOriginal, normNeedle)
     if (normCount === 0) {
-      throw new Error(`patch: oldString not found in ${absPath}`)
+      throw new ValidationError(`patch: oldString not found in ${absPath}`, { field: 'oldString' })
     }
     if (normCount > 1 && !replaceAll) {
-      throw new Error(
+      throw new ValidationError(
         `patch: oldString matched ${normCount} times under fuzzy whitespace normalization in ${absPath} ` +
           'but replaceAll=false. Refine oldString or pass replaceAll=true.',
+        { field: 'oldString' },
       )
     }
     const normIdx = normOriginal.indexOf(normNeedle)

@@ -21,6 +21,7 @@
  */
 
 import { z } from 'zod'
+import { ProviderError } from '../errors/index.js'
 
 /** A single step in a plan. */
 export interface PlanStep {
@@ -240,7 +241,10 @@ export class LLMPlanner extends BasePlanner {
     const start = text.indexOf('{')
     const end = text.lastIndexOf('}')
     if (start === -1 || end === -1) {
-      throw new Error('No JSON object found in LLM response')
+      throw new ProviderError('No JSON object found in LLM response', {
+        providerId: 'plan',
+        retryable: false,
+      })
     }
     return text.slice(start, end + 1)
   }

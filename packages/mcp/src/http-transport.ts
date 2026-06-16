@@ -75,7 +75,9 @@ export interface HttpMcpTransportOptions extends McpTransportOptions {
  * `data` and `event` for MCP — `id` is for resumability which we
  * do not implement in this transport.
  */
-export const parseSseEvent = (chunk: string): { event: string | null; data: string; consumed: number } | null => {
+export const parseSseEvent = (
+  chunk: string,
+): { event: string | null; data: string; consumed: number } | null => {
   // Find the first blank line — everything up to (but not including)
   // it is one event.
   const boundary = chunk.indexOf('\n\n')
@@ -298,7 +300,10 @@ export class HttpMcpTransport extends McpTransport {
    * request/response calls) or after we see a notification (no
    * id to match). Other events are ignored.
    */
-  private async consumeSseUntilResponse(response: Response, requestId: string | number | undefined): Promise<void> {
+  private async consumeSseUntilResponse(
+    response: Response,
+    requestId: string | number | undefined,
+  ): Promise<void> {
     if (!response.body) {
       throw new McpTransportError('MCP http SSE response had no body')
     }

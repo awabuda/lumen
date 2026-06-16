@@ -17,7 +17,12 @@ const ctx: ToolContext = {
 describe('DateTool', () => {
   it('returns an ISO timestamp and epoch', async () => {
     const tool = new DateTool()
-    const output = await tool.call({}, ctx) as { iso: string; epochMs: number; utc: string; timezone: string }
+    const output = (await tool.call({}, ctx)) as {
+      iso: string
+      epochMs: number
+      utc: string
+      timezone: string
+    }
     expect(output.iso).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
     expect(output.epochMs).toBeGreaterThan(1_700_000_000_000)
     expect(output.utc).toMatch(/GMT$/)
@@ -35,7 +40,11 @@ describe('DateTool', () => {
 describe('EnvTool', () => {
   it('returns null for an unset variable', async () => {
     const tool = new EnvTool()
-    const output = await tool.call({ name: 'LUMEN_DOES_NOT_EXIST_42' }, ctx) as { name: string; value: string | null; redacted: boolean }
+    const output = (await tool.call({ name: 'LUMEN_DOES_NOT_EXIST_42' }, ctx)) as {
+      name: string
+      value: string | null
+      redacted: boolean
+    }
     expect(output.value).toBeNull()
     expect(output.redacted).toBe(false)
   })
@@ -44,7 +53,11 @@ describe('EnvTool', () => {
     process.env.LUMEN_TEST_VAR = 'hello'
     try {
       const tool = new EnvTool()
-      const output = await tool.call({ name: 'LUMEN_TEST_VAR' }, ctx) as { name: string; value: string | null; redacted: boolean }
+      const output = (await tool.call({ name: 'LUMEN_TEST_VAR' }, ctx)) as {
+        name: string
+        value: string | null
+        redacted: boolean
+      }
       expect(output.value).toBe('hello')
       expect(output.redacted).toBe(false)
     } finally {
@@ -56,7 +69,11 @@ describe('EnvTool', () => {
     process.env.LUMEN_API_KEY = 'sk-secret-123'
     try {
       const tool = new EnvTool()
-      const output = await tool.call({ name: 'LUMEN_API_KEY' }, ctx) as { name: string; value: string | null; redacted: boolean }
+      const output = (await tool.call({ name: 'LUMEN_API_KEY' }, ctx)) as {
+        name: string
+        value: string | null
+        redacted: boolean
+      }
       expect(output.value).toBe('[REDACTED]')
       expect(output.redacted).toBe(true)
     } finally {
@@ -74,7 +91,15 @@ describe('EnvTool', () => {
 describe('WhoamiTool', () => {
   it('returns the current user and host info', async () => {
     const tool = new WhoamiTool()
-    const output = await tool.call({}, ctx) as { username: string; hostname: string; platform: string; arch: string; nodeVersion: string; cwd: string; home: string }
+    const output = (await tool.call({}, ctx)) as {
+      username: string
+      hostname: string
+      platform: string
+      arch: string
+      nodeVersion: string
+      cwd: string
+      home: string
+    }
     expect(output.username.length).toBeGreaterThan(0)
     expect(output.hostname.length).toBeGreaterThan(0)
     expect(output.platform).toBe('darwin')

@@ -31,9 +31,7 @@ describe('CreateUserInputSchema', () => {
   it('requires id and name', () => {
     expect(CreateUserInputSchema.safeParse({}).success).toBe(false)
     expect(CreateUserInputSchema.safeParse({ id: 'a' }).success).toBe(false)
-    expect(
-      CreateUserInputSchema.safeParse({ id: 'a', name: 'Alice' }).success,
-    ).toBe(true)
+    expect(CreateUserInputSchema.safeParse({ id: 'a', name: 'Alice' }).success).toBe(true)
   })
 
   it('defaults role to member', () => {
@@ -54,9 +52,9 @@ describe('UpdateUserInputSchema', () => {
   })
 
   it('accepts partial updates', () => {
-    expect(
-      UpdateUserInputSchema.safeParse({ name: 'Bob', lastSeenAt: Date.now() }).success,
-    ).toBe(true)
+    expect(UpdateUserInputSchema.safeParse({ name: 'Bob', lastSeenAt: Date.now() }).success).toBe(
+      true,
+    )
   })
 })
 
@@ -143,16 +141,14 @@ describe('ApprovalRequiredPolicy', () => {
   })
 
   it('exposes id "approval-required"', () => {
-    expect(new ApprovalRequiredPolicy(new RoleBasedPolicy(), []).id).toBe(
-      'approval-required',
-    )
+    expect(new ApprovalRequiredPolicy(new RoleBasedPolicy(), []).id).toBe('approval-required')
   })
 })
 
 describe('BasePermissionPolicy is abstract', () => {
   it('cannot be instantiated directly', () => {
     // @ts-expect-error — abstract class
-    new (BasePermissionPolicy as any)()
+    ;new (BasePermissionPolicy as any)()
   })
 })
 
@@ -178,9 +174,9 @@ describe('InMemoryUserStore', () => {
 
   it('rejects duplicate ids (Rule 7)', async () => {
     await store.create({ id: 'a', name: 'Alice', role: 'admin' })
-    await expect(
-      store.create({ id: 'a', name: 'Bob', role: 'member' }),
-    ).rejects.toThrow(/already exists/)
+    await expect(store.create({ id: 'a', name: 'Bob', role: 'member' })).rejects.toThrow(
+      /already exists/,
+    )
   })
 
   it('updates fields', async () => {
@@ -213,14 +209,14 @@ describe('InMemoryUserStore', () => {
     for (let i = 0; i < 5; i++) {
       await store.create({ id: `u${i}`, name: `U${i}`, role: 'member' })
     }
-    expect((await store.list(2))).toHaveLength(2)
+    expect(await store.list(2)).toHaveLength(2)
   })
 })
 
 describe('BaseUserStore is abstract', () => {
   it('cannot be instantiated directly', () => {
     // @ts-expect-error — abstract class
-    new (BaseUserStore as any)()
+    ;new (BaseUserStore as any)()
   })
 })
 
@@ -290,9 +286,7 @@ describe('MultiUserRuntime', () => {
   })
 
   it('throws on unknown user (Rule 7)', async () => {
-    await expect(runtime.authorize('nobody', 'read_file')).rejects.toThrow(
-      /not found/,
-    )
+    await expect(runtime.authorize('nobody', 'read_file')).rejects.toThrow(/not found/)
   })
 
   it('exposes store, policy, sessionGate', () => {

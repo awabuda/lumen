@@ -41,7 +41,9 @@ class ScriptedStreamProvider extends BaseProvider {
     this.eventsByCall = eventsByCall
   }
 
-  public override async chat(_request: ChatRequest): Promise<{ message: AssistantMessage; latencyMs: number }> {
+  public override async chat(
+    _request: ChatRequest,
+  ): Promise<{ message: AssistantMessage; latencyMs: number }> {
     throw new Error('ScriptedStreamProvider does not implement chat() — only stream()')
   }
 
@@ -50,7 +52,8 @@ class ScriptedStreamProvider extends BaseProvider {
     _options?: StreamOptions,
   ): AsyncGenerator<StreamEvent, void, void> {
     this.calls.push(request)
-    const events = this.eventsByCall[this.callIndex] ?? this.eventsByCall[this.eventsByCall.length - 1] ?? []
+    const events =
+      this.eventsByCall[this.callIndex] ?? this.eventsByCall[this.eventsByCall.length - 1] ?? []
     this.callIndex += 1
     for (const ev of events) {
       yield ev
@@ -77,7 +80,10 @@ const textChunked = (chunks: string[]): StreamEvent[] => {
   return events
 }
 
-const textThenTool = (text: string, toolCall: { id: string; name: string; arguments: Record<string, unknown> }): StreamEvent[] => {
+const textThenTool = (
+  text: string,
+  toolCall: { id: string; name: string; arguments: Record<string, unknown> },
+): StreamEvent[] => {
   const tc: AssistantMessage['toolCalls'][number] = {
     id: toolCall.id,
     name: toolCall.name,
@@ -104,7 +110,14 @@ describe('Agent.streamRun', () => {
       events.push(ev.type)
       if (ev.type === 'run:end') result = ev
     }
-    expect(events).toEqual(['run:start', 'text:start', 'text:delta', 'text:end', 'step:end', 'run:end'])
+    expect(events).toEqual([
+      'run:start',
+      'text:start',
+      'text:delta',
+      'text:end',
+      'step:end',
+      'run:end',
+    ])
     expect(result).toBeDefined()
   })
 
@@ -201,7 +214,15 @@ describe('Agent.streamRun', () => {
       createSession: vi.fn().mockResolvedValue({ id: 's', createdAt: 0, updatedAt: 0 }),
       getSession: vi.fn(),
       listSessions: vi.fn(),
-      appendMessage: vi.fn().mockResolvedValue({ id: 1, sessionId: 's', role: 'assistant', content: 'saved', createdAt: 0 }),
+      appendMessage: vi
+        .fn()
+        .mockResolvedValue({
+          id: 1,
+          sessionId: 's',
+          role: 'assistant',
+          content: 'saved',
+          createdAt: 0,
+        }),
       getSessionMessages: vi.fn(),
       prune: vi.fn(),
     }

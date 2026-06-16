@@ -73,9 +73,7 @@ export class DockerSandbox implements ShellSandbox {
   public run(request: ShellSandboxRequest): Promise<ShellSandboxOutcome> {
     // Refuse empty commands.
     if (request.command.length === 0) {
-      return Promise.resolve(
-        this.refuse('policy-violation', 'Refusing to run an empty command'),
-      )
+      return Promise.resolve(this.refuse('policy-violation', 'Refusing to run an empty command'))
     }
 
     // Join argv into a single shell command string for `sh -c`.
@@ -118,15 +116,11 @@ export class DockerSandbox implements ShellSandbox {
         child.stderr?.removeListener('data', onStderr)
 
         const truncated =
-          stdout.length >= this.config.maxOutputBytes ||
-          stderr.length >= this.config.maxOutputBytes
+          stdout.length >= this.config.maxOutputBytes || stderr.length >= this.config.maxOutputBytes
 
         if (killed || signal === 'SIGKILL') {
           resolve(
-            this.refuse(
-              'budget-exhausted',
-              `Command timed out after ${this.config.timeoutMs}ms`,
-            ),
+            this.refuse('budget-exhausted', `Command timed out after ${this.config.timeoutMs}ms`),
           )
           return
         }
@@ -145,12 +139,7 @@ export class DockerSandbox implements ShellSandbox {
 
       child.on('error', (err) => {
         clearTimeout(timer)
-        resolve(
-          this.refuse(
-            'policy-disabled',
-            `Docker is not available: ${err.message}`,
-          ),
-        )
+        resolve(this.refuse('policy-disabled', `Docker is not available: ${err.message}`))
       })
     })
   }
@@ -189,10 +178,7 @@ export class DockerSandbox implements ShellSandbox {
     return args
   }
 
-  private refuse(
-    reason: ShellSandboxRefusalReason,
-    message: string,
-  ): ShellSandboxOutcome {
+  private refuse(reason: ShellSandboxRefusalReason, message: string): ShellSandboxOutcome {
     return { kind: 'refused', reason, message }
   }
 }
@@ -202,6 +188,5 @@ export class DockerSandbox implements ShellSandbox {
  * Pass this to {@link withSandboxFactory} to register the
  * Docker strategy in the sandbox registry.
  */
-export const dockerSandboxFactory = (
-  config?: DockerSandboxConfig,
-): ShellSandbox => new DockerSandbox(config)
+export const dockerSandboxFactory = (config?: DockerSandboxConfig): ShellSandbox =>
+  new DockerSandbox(config)

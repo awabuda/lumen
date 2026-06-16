@@ -29,6 +29,17 @@
 import { z } from 'zod'
 import { AgentError } from '../errors/index.js'
 
+/** Thrown when an operation is attempted on a disposed mutex. */
+export class MutexDisposedError extends AgentError {
+  public readonly mutexId: string
+
+  constructor(mutexId: string) {
+    super(`Mutex '${mutexId}' is disposed`)
+    this.name = 'MutexDisposedError'
+    this.mutexId = mutexId
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
@@ -180,7 +191,7 @@ export class Mutex extends BaseMutex {
 
   public async runExclusive<T>(fn: () => Promise<T> | T): Promise<T> {
     if (this.disposed) {
-      throw new Error(`Mutex '${this.id}' is disposed`)
+      throw new MutexDisposedError(this.id)
     }
     // Snapshot the prior chain BEFORE incrementing waiters. The new
     // chain is THIS caller's release deferred.

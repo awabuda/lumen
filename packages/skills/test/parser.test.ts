@@ -1,7 +1,13 @@
 /** Tests for the SKILL.md parser and MarkdownSkill adapter. */
 
 import { describe, expect, it } from 'vitest'
-import { buildTriggers, MarkdownSkill, parseFrontmatter, parseSkillMarkdown, slugify } from '../src/index.js'
+import {
+  buildTriggers,
+  MarkdownSkill,
+  parseFrontmatter,
+  parseSkillMarkdown,
+  slugify,
+} from '../src/index.js'
 
 const doc = `---
 name: TypeScript Expert
@@ -64,7 +70,9 @@ describe('parseSkillMarkdown', () => {
   })
 
   it('validates required name', () => {
-    expect(() => parseSkillMarkdown('---\ndescription: no name\n---\nbody')).toThrow(/Invalid SKILL.md/)
+    expect(() => parseSkillMarkdown('---\ndescription: no name\n---\nbody')).toThrow(
+      /Invalid SKILL.md/,
+    )
   })
 })
 
@@ -83,7 +91,10 @@ describe('MarkdownSkill', () => {
   it('activates by keyword', async () => {
     const parsed = parseSkillMarkdown(doc)
     const skill = new MarkdownSkill(parsed)
-    const activation = await skill.shouldActivate({ cwd: '/tmp', prompt: 'help with TypeScript types' })
+    const activation = await skill.shouldActivate({
+      cwd: '/tmp',
+      prompt: 'help with TypeScript types',
+    })
     expect(activation.active).toBe(true)
     expect(activation.reason).toContain('keyword')
   })

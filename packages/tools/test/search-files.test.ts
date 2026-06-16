@@ -55,10 +55,9 @@ describe('SearchFilesTool', () => {
     await fs.writeFile(path.join(tmpDir, 'a.txt'), 'TARGET\n', 'utf8')
     await fs.writeFile(path.join(tmpDir, 'b.md'), 'TARGET\n', 'utf8')
     const tool = new SearchFilesTool()
-    const result = (await tool.call(
-      { pattern: 'TARGET', path: '.', glob: '*.txt' },
-      ctx,
-    )) as { matches: Array<{ file: string }> }
+    const result = (await tool.call({ pattern: 'TARGET', path: '.', glob: '*.txt' }, ctx)) as {
+      matches: Array<{ file: string }>
+    }
     expect(result.matches).toHaveLength(1)
     expect(result.matches[0]?.file).toBe(path.join(tmpDir, 'a.txt'))
   })
@@ -67,10 +66,9 @@ describe('SearchFilesTool', () => {
     const body = Array.from({ length: 20 }, () => 'match').join('\n') + '\n'
     await fs.writeFile(path.join(tmpDir, 'a.txt'), body, 'utf8')
     const tool = new SearchFilesTool()
-    const result = (await tool.call(
-      { pattern: 'match', path: '.', maxResults: 5 },
-      ctx,
-    )) as { matches: unknown[] }
+    const result = (await tool.call({ pattern: 'match', path: '.', maxResults: 5 }, ctx)) as {
+      matches: unknown[]
+    }
     expect(result.matches).toHaveLength(5)
   })
 
@@ -87,6 +85,8 @@ describe('SearchFilesTool', () => {
 
   it('rejects an invalid regex with a clear error', async () => {
     const tool = new SearchFilesTool()
-    await expect(tool.call({ pattern: '[unclosed', path: '.' }, ctx)).rejects.toThrow(/invalid regex/i)
+    await expect(tool.call({ pattern: '[unclosed', path: '.' }, ctx)).rejects.toThrow(
+      /invalid regex/i,
+    )
   })
 })

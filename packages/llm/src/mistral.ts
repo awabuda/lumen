@@ -31,16 +31,14 @@
  */
 
 import { z } from 'zod'
-import {
-  OpenAICompatibleProvider,
-  type OpenAICompatibleOptions,
-} from './openai-compatible.js'
+import { OpenAICompatibleProvider, type OpenAICompatibleOptions } from './openai-compatible.js'
 import { parseResponseJson } from './errors.js'
 import {
   ProviderError,
   type EmbedRequest,
   type EmbedResponse,
   type StreamOptions,
+  ValidationError,
 } from '@lumen/core'
 
 // ---------------------------------------------------------------------------
@@ -133,8 +131,9 @@ export class MistralProvider extends OpenAICompatibleProvider {
       (typeof globalThis.fetch === 'function'
         ? (globalThis.fetch.bind(globalThis) as typeof fetch)
         : (() => {
-            throw new Error(
+            throw new ValidationError(
               'MistralProvider: no fetch implementation available. Pass `fetchImpl` or run on Node 20+.',
+              { field: 'fetchImpl' },
             )
           })())
     // Mirror the base class's URL normalization (strip trailing slashes).
@@ -172,14 +171,11 @@ export class MistralProvider extends OpenAICompatibleProvider {
       })
       const text = await response.text()
       if (!response.ok) {
-        throw new ProviderError(
-          `Mistral embeddings returned HTTP ${response.status}`,
-          {
-            providerId: this.id,
-            statusCode: response.status,
-            retryable: response.status >= 500 || response.status === 429,
-          },
-        )
+        throw new ProviderError(`Mistral embeddings returned HTTP ${response.status}`, {
+          providerId: this.id,
+          statusCode: response.status,
+          retryable: response.status >= 500 || response.status === 429,
+        })
       }
       const parsed = parseResponseJson(text, MistralEmbedResponseSchema)
       // Preserve order; Mistral returns `data: [{ index, embedding }, ...]`
@@ -282,9 +278,7 @@ export interface MistralProviderOptions {
  * })
  * ```
  */
-export function createMistralProvider(
-  opts: MistralProviderOptions,
-): MistralProvider {
+export function createMistralProvider(opts: MistralProviderOptions): MistralProvider {
   return new MistralProvider({
     id: opts.id ?? MISTRAL_PROVIDER_ID,
     baseUrl: opts.baseUrl ?? DEFAULT_MISTRAL_BASE_URL,

@@ -38,7 +38,12 @@ import { BaseMemoryStore } from '../memory/index.js'
 import { BaseLogger, ConsoleLogger } from '../logging/index.js'
 import { HookRegistry } from '../hooks/index.js'
 import { Budget } from '../budget/index.js'
-import { AbortError, MaxIterationsExceededError, ProviderError, ToolError } from '../errors/index.js'
+import {
+  AbortError,
+  MaxIterationsExceededError,
+  ProviderError,
+  ToolError,
+} from '../errors/index.js'
 
 export interface AgentConfig {
   /** The LLM provider to call. Required. */
@@ -116,7 +121,13 @@ export type RunEvent =
   | { type: 'text:delta'; delta: string }
   | { type: 'text:end'; content: string; iteration: number }
   | { type: 'tool:start'; toolCall: ToolCall; iteration: number }
-  | { type: 'tool:end'; toolCall: ToolCall; result: ToolResult; durationMs: number; iteration: number }
+  | {
+      type: 'tool:end'
+      toolCall: ToolCall
+      result: ToolResult
+      durationMs: number
+      iteration: number
+    }
   | { type: 'step:end'; iteration: number; message: AssistantMessage }
   | { type: 'run:end'; finalMessage: AssistantMessage; iterations: number }
   | { type: 'error'; error: Error }
@@ -333,7 +344,9 @@ export class Agent {
    * `toResult()` if they used the helper, or catch the throw if they
    * consumed events directly.
    */
-  public async *streamRun(options: AgentRunOptions): AsyncGenerator<RunEvent, AgentRunResult, void> {
+  public async *streamRun(
+    options: AgentRunOptions,
+  ): AsyncGenerator<RunEvent, AgentRunResult, void> {
     const sessionId = options.sessionId ?? newSessionId()
     const signal = options.signal
     const maxIterations = options.maxIterations ?? 50
@@ -403,7 +416,11 @@ export class Agent {
                 // Some providers send deltas. We accumulate by id (or
                 // by index 0 if no id).
                 const key = ev.id ?? '__default__'
-                const existing = toolAcc.get(0) ?? { id: '', name: '', arguments: {} as Record<string, unknown> }
+                const existing = toolAcc.get(0) ?? {
+                  id: '',
+                  name: '',
+                  arguments: {} as Record<string, unknown>,
+                }
                 const merged: ToolCall = {
                   id: ev.id ?? existing.id,
                   name: ev.name ?? existing.name,
@@ -419,7 +436,8 @@ export class Agent {
               case 'message_complete':
                 if (ev.message.content !== undefined) lastContentAccumulated = ev.message.content
                 if (ev.message.model !== undefined) modelFromStream = ev.message.model
-                if (ev.message.finishReason !== undefined) finishFromStream = ev.message.finishReason
+                if (ev.message.finishReason !== undefined)
+                  finishFromStream = ev.message.finishReason
                 if (ev.message.usage !== undefined) usageFromStream = ev.message.usage
                 // Some providers (and our scripted tests) only reveal
                 // tool calls in the final `message_complete` event.
@@ -447,8 +465,7 @@ export class Agent {
         }
 
         // Build the final assistant message for this step.
-        const toolCalls: ToolCall[] =
-          toolAcc.size > 0 ? [...toolAcc.values()] : partial.toolCalls
+        const toolCalls: ToolCall[] = toolAcc.size > 0 ? [...toolAcc.values()] : partial.toolCalls
         const assembled: AssistantMessage = {
           role: 'assistant',
           content: lastContentAccumulated.length > 0 ? lastContentAccumulated : partial.content,
@@ -504,7 +521,12 @@ export class Agent {
         yield { type: 'step:end', iteration: iterations, message: assembled }
       }
 
-      const finalResult: AgentRunResult = { sessionId, finalMessage: lastMessage, iterations, messages }
+      const finalResult: AgentRunResult = {
+        sessionId,
+        finalMessage: lastMessage,
+        iterations,
+        messages,
+      }
       yield { type: 'run:end', finalMessage: lastMessage, iterations }
       return finalResult
     } catch (err) {
@@ -522,7 +544,11 @@ export class Agent {
    */
   public async *stream(
     options: AgentRunOptions,
-  ): AsyncGenerator<StreamEvent | { type: 'tool_complete'; toolCall: ToolCall; result: ToolResult }, void, void> {
+  ): AsyncGenerator<
+    StreamEvent | { type: 'tool_complete'; toolCall: ToolCall; result: ToolResult },
+    void,
+    void
+  > {
     // Kept for backward compatibility; the TUI now uses streamRun().
     for await (const ev of this.streamRun(options)) {
       if (ev.type === 'text:delta') {
@@ -570,7 +596,10 @@ export class Agent {
     }
   }
 
-  private async dispatchToolCall(call: ToolCall, signal: AbortSignal | undefined): Promise<ToolResult> {
+  private async dispatchToolCall(
+    call: ToolCall,
+    signal: AbortSignal | undefined,
+  ): Promise<ToolResult> {
     const tool = this.tools.get(call.name)
     if (!tool) {
       return {
@@ -595,7 +624,10 @@ export class Agent {
         toolCallId: call.id,
         isError: false,
         content: typeof output === 'string' ? output : JSON.stringify(output),
-        data: typeof output === 'object' && output !== null ? (output as Record<string, unknown>) : undefined,
+        data:
+          typeof output === 'object' && output !== null
+            ? (output as Record<string, unknown>)
+            : undefined,
       }
     } catch (err) {
       if (err instanceof ToolError) {
@@ -619,10 +651,14 @@ export class Agent {
     let content = ''
     let toolName: string | undefined
     if (role === 'user' || role === 'system') {
-      content = typeof message.content === 'string' ? message.content : JSON.stringify(message.content)
+      content =
+        typeof message.content === 'string' ? message.content : JSON.stringify(message.content)
     } else if (role === 'assistant') {
       content = message.content ?? ''
-      toolName = message.toolCalls.length > 0 ? message.toolCalls.map((t: ToolCall) => t.name).join(',') : undefined
+      toolName =
+        message.toolCalls.length > 0
+          ? message.toolCalls.map((t: ToolCall) => t.name).join(',')
+          : undefined
     } else if (role === 'tool') {
       content = message.results.map((r: ToolResult) => r.content ?? '').join('\n')
       toolName = message.results[0]?.toolCallId

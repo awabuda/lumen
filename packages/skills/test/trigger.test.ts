@@ -54,14 +54,20 @@ describe('KeywordTrigger', () => {
 
   it('skips skills with no keyword triggers', async () => {
     const trigger = new KeywordTrigger()
-    const skills: BaseSkill[] = [{
-      id: 'empty', name: 'empty', description: 'No triggers',
-      version: '1.0.0',
-      triggers: [],
-      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-      outputSchema: { type: 'object', properties: {}, additionalProperties: false },
-      async execute(): Promise<unknown> { return { ok: true } },
-    }]
+    const skills: BaseSkill[] = [
+      {
+        id: 'empty',
+        name: 'empty',
+        description: 'No triggers',
+        version: '1.0.0',
+        triggers: [],
+        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        outputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        async execute(): Promise<unknown> {
+          return { ok: true }
+        },
+      },
+    ]
     const results = await trigger.trigger('anything', skills)
     expect(results).toEqual([])
   })

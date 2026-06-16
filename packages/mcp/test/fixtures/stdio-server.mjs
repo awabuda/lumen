@@ -35,7 +35,11 @@ rl.on('line', (line) => {
           {
             name: 'echo',
             description: 'Echo text',
-            inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+            inputSchema: {
+              type: 'object',
+              properties: { text: { type: 'string' } },
+              required: ['text'],
+            },
           },
         ],
       },

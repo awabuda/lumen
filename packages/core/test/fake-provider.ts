@@ -2,11 +2,7 @@
  * A fake provider for testing the agent loop. Records calls and returns
  * pre-canned responses. Lives in test/ so it doesn't ship.
  */
-import type {
-  ChatRequest,
-  ChatResponse,
-  ProviderCapabilities,
-} from '../src/message/provider.js'
+import type { ChatRequest, ChatResponse, ProviderCapabilities } from '../src/message/provider.js'
 import { BaseProvider } from '../src/message/provider.js'
 import type { AssistantMessage, StreamEvent, StreamOptions } from '../src/message/index.js'
 
@@ -40,7 +36,10 @@ export class FakeProvider extends BaseProvider {
     this.script = script
   }
 
-  public override async chat(_request: ChatRequest, _options?: StreamOptions): Promise<ChatResponse> {
+  public override async chat(
+    _request: ChatRequest,
+    _options?: StreamOptions,
+  ): Promise<ChatResponse> {
     // Clone the request so the stored copy doesn't mutate when the
     // agent loop appends more messages after this call returns.
     this.calls.push({

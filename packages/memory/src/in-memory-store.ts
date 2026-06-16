@@ -26,7 +26,14 @@
  * store", not "I am a production cache". Production deployments
  * use {@link SqliteStore}.
  */
-import { BaseMemoryStore, type MemoryQuery, type MemoryRecord, type MemorySearchResult, type SessionMessage, type SessionRecord } from '@lumen/core'
+import {
+  BaseMemoryStore,
+  type MemoryQuery,
+  type MemoryRecord,
+  type MemorySearchResult,
+  type SessionMessage,
+  type SessionRecord,
+} from '@lumen/core'
 
 /** Comparator for `getSessionMessages`: oldest first. */
 function byIdAsc(a: SessionMessage, b: SessionMessage): number {
@@ -169,9 +176,7 @@ export class InMemoryStore extends BaseMemoryStore {
     return Promise.resolve(limit === undefined ? all : all.slice(0, limit))
   }
 
-  public appendMessage(
-    message: Omit<SessionMessage, 'id' | 'createdAt'>,
-  ): Promise<SessionMessage> {
+  public appendMessage(message: Omit<SessionMessage, 'id' | 'createdAt'>): Promise<SessionMessage> {
     return this.mutate(async () => {
       const id = this.nextMessageId++
       const stored: SessionMessage = {
@@ -201,10 +206,7 @@ export class InMemoryStore extends BaseMemoryStore {
       filtered.push(m)
     }
     filtered.sort(byIdAsc)
-    const out =
-      options?.limit === undefined
-        ? filtered
-        : filtered.slice(-options.limit) // last N in chronological order
+    const out = options?.limit === undefined ? filtered : filtered.slice(-options.limit) // last N in chronological order
     return Promise.resolve(out)
   }
 

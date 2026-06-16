@@ -68,11 +68,21 @@ export type {
   AnthropicSystemBlock,
   AnthropicCacheControl,
 } from './anthropic.js'
-export { OllamaProvider, createOllamaProvider, DEFAULT_OLLAMA_BASE_URL, parseNdjsonLines } from './ollama.js'
+export {
+  OllamaProvider,
+  createOllamaProvider,
+  DEFAULT_OLLAMA_BASE_URL,
+  parseNdjsonLines,
+} from './ollama.js'
 export type { OllamaOptions } from './ollama.js'
 export { LlamaCppProvider, createLlamaCppProvider } from './llama-cpp.js'
 export type { LlamaCppOptions } from './llama-cpp.js'
-export { GeminiProvider, createGeminiProvider, DEFAULT_GEMINI_BASE_URL, GeminiOptionsSchema } from './gemini.js'
+export {
+  GeminiProvider,
+  createGeminiProvider,
+  DEFAULT_GEMINI_BASE_URL,
+  GeminiOptionsSchema,
+} from './gemini.js'
 export type { GeminiOptions } from './gemini.js'
 export {
   MistralProvider,
@@ -83,4 +93,9 @@ export {
   MISTRAL_PROVIDER_ID,
 } from './mistral.js'
 export type { MistralProviderOptions } from './mistral.js'
-export { HttpStatusError, ResponseShapeError, StreamParseError, isRetryableStatus } from './errors.js'
+export {
+  HttpStatusError,
+  ResponseShapeError,
+  StreamParseError,
+  isRetryableStatus,
+} from './errors.js'

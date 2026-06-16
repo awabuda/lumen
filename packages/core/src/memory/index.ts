@@ -105,13 +105,17 @@ export abstract class BaseMemoryStore {
 
   // ---- Sessions -----------------------------------------------------------
 
-  public abstract createSession(record: Omit<SessionRecord, 'createdAt' | 'updatedAt'>): Promise<SessionRecord>
+  public abstract createSession(
+    record: Omit<SessionRecord, 'createdAt' | 'updatedAt'>,
+  ): Promise<SessionRecord>
 
   public abstract getSession(id: string): Promise<SessionRecord | undefined>
 
   public abstract listSessions(limit?: number): Promise<ReadonlyArray<SessionRecord>>
 
-  public abstract appendMessage(message: Omit<SessionMessage, 'id' | 'createdAt'>): Promise<SessionMessage>
+  public abstract appendMessage(
+    message: Omit<SessionMessage, 'id' | 'createdAt'>,
+  ): Promise<SessionMessage>
 
   public abstract getSessionMessages(
     sessionId: string,

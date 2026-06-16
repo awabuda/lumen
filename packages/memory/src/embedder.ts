@@ -29,6 +29,7 @@
  */
 
 import type { EmbedRequest, EmbedResponse } from '@lumen/core'
+import { ConfigError, ProviderError, ValidationError } from '@lumen/core'
 
 // ---------------------------------------------------------------------------
 // Structural type for an embedding source
@@ -98,7 +99,9 @@ export function createProviderEmbedder(
   options: ProviderEmbedderOptions,
 ): TextEmbedder {
   if (!options.model) {
-    throw new Error('createProviderEmbedder: options.model is required')
+    throw new ValidationError('createProviderEmbedder: options.model is required', {
+      field: 'model',
+    })
   }
   return async (texts: ReadonlyArray<string>): Promise<ReadonlyArray<Float32Array>> => {
     if (texts.length === 0) return []
@@ -107,7 +110,13 @@ export function createProviderEmbedder(
       model: options.model,
     })
     if (response.vectors.length === 0) {
-      throw new Error('createProviderEmbedder: provider returned empty embedding response')
+      throw new ProviderError(
+        'createProviderEmbedder: provider returned empty embedding response',
+        {
+          providerId: 'embedder',
+          retryable: true,
+        },
+      )
     }
     const expectedDimensions = options.dimensions ?? response.vectors[0]!.length
     return response.vectors.map((vec, i) => toFloat32(vec, expectedDimensions, i, texts.length))
@@ -135,12 +144,13 @@ export function float32ToBytes(embedding: Float32Array): Uint8Array {
 
 /** Inverse of {@link float32ToBytes}. */
 export function bytesToFloat32(bytes: Uint8Array, expectedLength: number): Float32Array {
-  const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+  const ab = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer
   const f = new Float32Array(ab)
   if (f.length !== expectedLength) {
-    throw new Error(
-      `bytesToFloat32: expected length ${expectedLength}, got ${f.length}`,
-    )
+    throw new ConfigError(`bytesToFloat32: expected length ${expectedLength}, got ${f.length}`)
   }
   return f
 }
@@ -156,7 +166,7 @@ const toFloat32 = (
   total: number,
 ): Float32Array => {
   if (vec.length !== expected) {
-    throw new Error(
+    throw new ConfigError(
       `createProviderEmbedder: embedding dimension mismatch at index ${index}/${total}: ` +
         `expected ${expected}, got ${vec.length}`,
     )

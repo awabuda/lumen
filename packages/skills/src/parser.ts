@@ -7,6 +7,7 @@
  */
 
 import { z } from 'zod'
+import { SkillParseError } from './errors.js'
 
 /** Zod schema for supported SKILL.md frontmatter. */
 export const SkillFrontmatterSchema = z.object({
@@ -30,12 +31,12 @@ export type ParsedSkillMarkdown = z.infer<typeof ParsedSkillMarkdownSchema>
 export const parseSkillMarkdown = (input: string): ParsedSkillMarkdown => {
   const normalized = input.replace(/\r\n/g, '\n')
   if (!normalized.startsWith('---\n')) {
-    throw new Error('SKILL.md must start with YAML frontmatter delimiter "---"')
+    throw new SkillParseError('SKILL.md must start with YAML frontmatter delimiter "---"')
   }
 
   const end = normalized.indexOf('\n---\n', 4)
   if (end === -1) {
-    throw new Error('SKILL.md frontmatter must end with delimiter "---"')
+    throw new SkillParseError('SKILL.md frontmatter must end with delimiter "---"')
   }
 
   const frontmatterText = normalized.slice(4, end)
@@ -44,7 +45,7 @@ export const parseSkillMarkdown = (input: string): ParsedSkillMarkdown => {
   const parsed = SkillFrontmatterSchema.safeParse(raw)
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')
-    throw new Error(`Invalid SKILL.md frontmatter: ${issues}`)
+    throw new SkillParseError(`Invalid SKILL.md frontmatter: ${issues}`)
   }
   return { frontmatter: parsed.data, body }
 }
@@ -70,7 +71,7 @@ export const parseFrontmatter = (text: string): Record<string, unknown> => {
 
     currentArrayKey = undefined
     const match = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line)
-    if (!match) throw new Error(`Unsupported frontmatter line: ${line}`)
+    if (!match) throw new SkillParseError(`Unsupported frontmatter line: ${line}`)
 
     const key = match[1]
     const value = match[2]
@@ -90,13 +91,19 @@ const parseScalarOrInlineArray = (value: string): string | string[] => {
   if (value.startsWith('[') && value.endsWith(']')) {
     const inner = value.slice(1, -1).trim()
     if (!inner) return []
-    return inner.split(',').map((part) => unquote(part.trim())).filter((part) => part.length > 0)
+    return inner
+      .split(',')
+      .map((part) => unquote(part.trim()))
+      .filter((part) => part.length > 0)
   }
   return unquote(value)
 }
 
 const unquote = (value: string): string => {
-  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
     return value.slice(1, -1)
   }
   return value

@@ -1,11 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { McpClient, McpToolProxy, McpTransport, type JsonRpcNotification, type JsonRpcRequest } from '../src/index.js'
+import {
+  McpClient,
+  McpToolProxy,
+  McpTransport,
+  type JsonRpcNotification,
+  type JsonRpcRequest,
+} from '../src/index.js'
 
 class FakeTransport extends McpTransport {
   public readonly sent: Array<JsonRpcRequest | JsonRpcNotification> = []
-  public get name(): string { return 'fake' }
-  public async open(): Promise<void> { this._connected = true }
-  public async close(): Promise<void> { this._connected = false }
+  public get name(): string {
+    return 'fake'
+  }
+  public async open(): Promise<void> {
+    this._connected = true
+  }
+  public async close(): Promise<void> {
+    this._connected = false
+  }
   protected async sendRaw(request: JsonRpcRequest | JsonRpcNotification): Promise<void> {
     this.sent.push(request)
     if ('id' in request && request.method === 'initialize') {
@@ -31,7 +43,11 @@ class FakeTransport extends McpTransport {
             {
               name: 'echo',
               description: 'Echo input',
-              inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+              inputSchema: {
+                type: 'object',
+                properties: { text: { type: 'string' } },
+                required: ['text'],
+              },
             },
           ],
         },

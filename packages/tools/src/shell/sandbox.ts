@@ -32,6 +32,7 @@
  * construction; calling `run()` is safe from multiple concurrent tools.
  */
 import type { ChildProcess } from 'node:child_process'
+import { ConfigError } from '@lumen/core'
 
 /**
  * Per-invocation sandbox input.
@@ -96,7 +97,11 @@ export type ShellSandboxRefusalReason =
 /** Outcome of a `run` call. Either a result or a typed refusal. */
 export type ShellSandboxOutcome =
   | { readonly kind: 'ok'; readonly result: ShellSandboxResult }
-  | { readonly kind: 'refused'; readonly reason: ShellSandboxRefusalReason; readonly message: string }
+  | {
+      readonly kind: 'refused'
+      readonly reason: ShellSandboxRefusalReason
+      readonly message: string
+    }
 
 /**
  * Static factory for {@link ShellSandbox} instances.
@@ -179,9 +184,10 @@ export interface ShellSandboxConfig {
 export function resolveSandbox(config: ShellSandboxConfig): ShellSandbox {
   const factory = config.factories[config.strategy]
   if (!factory) {
-    throw new Error(
+    throw new ConfigError(
       `Unknown shell sandbox strategy: "${config.strategy}". ` +
         `Registered: [${Object.keys(config.factories).join(', ')}]`,
+      { field: 'strategy' },
     )
   }
   return factory(config)

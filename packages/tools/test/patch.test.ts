@@ -78,7 +78,11 @@ describe('PatchTool', () => {
     await fs.writeFile(file, 'if (x) {\n  doSomething(x)\n}\n', 'utf8')
     const tool = new PatchTool()
     const result = (await tool.call(
-      { path: 'e.txt', oldString: 'if (x) {\n\tdoSomething(x)\n}', newString: 'if (x) {\n  doSomething(x!)\n}' },
+      {
+        path: 'e.txt',
+        oldString: 'if (x) {\n\tdoSomething(x)\n}',
+        newString: 'if (x) {\n  doSomething(x!)\n}',
+      },
       ctx,
     )) as { replacements: number }
     expect(result.replacements).toBe(1)

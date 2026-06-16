@@ -25,7 +25,10 @@ let port = 0
 
 const waitForReady = (stream: NodeJS.ReadableStream, timeoutMs = 5_000): Promise<number> =>
   new Promise<number>((resolveReady, reject) => {
-    const timer = setTimeout(() => reject(new Error('fixture did not become ready in time')), timeoutMs)
+    const timer = setTimeout(
+      () => reject(new Error('fixture did not become ready in time')),
+      timeoutMs,
+    )
     const onData = (chunk: Buffer | string) => {
       const text = chunk.toString()
       const match = text.match(/^READY (\d+)/m)

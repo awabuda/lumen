@@ -29,10 +29,10 @@ afterEach(async () => {
 describe('WriteFileTool', () => {
   it('writes a new file and reports the byte count', async () => {
     const tool = new WriteFileTool()
-    const result = (await tool.call(
-      { path: 'a.txt', content: 'hello' },
-      ctx,
-    )) as { bytesWritten: number; path: string }
+    const result = (await tool.call({ path: 'a.txt', content: 'hello' }, ctx)) as {
+      bytesWritten: number
+      path: string
+    }
     expect(result.bytesWritten).toBe(5)
     expect(result.path).toBe(path.join(tmpDir, 'a.txt'))
     const onDisk = await fs.readFile(path.join(tmpDir, 'a.txt'), 'utf8')

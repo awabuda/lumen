@@ -52,7 +52,12 @@ export const GhInputSchema = z.object({
   /** State filter for list ops (open, closed, merged, all). */
   state: z.enum(['open', 'closed', 'merged', 'all']).optional(),
   /** Max output bytes. Defaults to 256 KiB. */
-  maxBytes: z.number().int().min(1024).max(5 * 1024 * 1024).optional(),
+  maxBytes: z
+    .number()
+    .int()
+    .min(1024)
+    .max(5 * 1024 * 1024)
+    .optional(),
 })
 
 export type GhInput = z.infer<typeof GhInputSchema>
@@ -175,7 +180,10 @@ export class GhTool extends BaseTool {
       case 'pr_view': {
         const args = ['pr', 'view']
         if (input.number) args.push(String(input.number))
-        args.push('--json', 'number,title,state,body,author,headRefName,baseRefName,url,createdAt,mergedAt,additions,deletions,reviews,statusCheckRollup')
+        args.push(
+          '--json',
+          'number,title,state,body,author,headRefName,baseRefName,url,createdAt,mergedAt,additions,deletions,reviews,statusCheckRollup',
+        )
         return args
       }
       case 'pr_status': {

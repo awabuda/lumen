@@ -34,7 +34,8 @@ const sendSse = (res, body, headers = {}) => {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     ...headers,
-  })) res.setHeader(k, v)
+  }))
+    res.setHeader(k, v)
   res.write(`event: message\ndata: ${JSON.stringify(body)}\n\n`)
   res.end()
 }
@@ -63,15 +64,19 @@ const server = createServer((req, res) => {
     const id = req2.id
     const extraHeaders = { 'Mcp-Session-Id': 'fixture-http-session' }
     if (req2.method === 'initialize') {
-      sendJson(res, {
-        jsonrpc: '2.0',
-        id,
-        result: {
-          protocolVersion: '2025-03-26',
-          capabilities: { tools: {} },
-          serverInfo: { name: 'fixture-http-mcp', version: '1.0.0' },
+      sendJson(
+        res,
+        {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            protocolVersion: '2025-03-26',
+            capabilities: { tools: {} },
+            serverInfo: { name: 'fixture-http-mcp', version: '1.0.0' },
+          },
         },
-      }, extraHeaders)
+        extraHeaders,
+      )
       return
     }
     if (req2.method === 'notifications/initialized') {
@@ -79,30 +84,46 @@ const server = createServer((req, res) => {
       return
     }
     if (req2.method === 'tools/list') {
-      sendJson(res, {
-        jsonrpc: '2.0',
-        id,
-        result: {
-          tools: [
-            {
-              name: 'echo',
-              description: 'Echo text',
-              inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
-            },
-          ],
+      sendJson(
+        res,
+        {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            tools: [
+              {
+                name: 'echo',
+                description: 'Echo text',
+                inputSchema: {
+                  type: 'object',
+                  properties: { text: { type: 'string' } },
+                  required: ['text'],
+                },
+              },
+            ],
+          },
         },
-      }, extraHeaders)
+        extraHeaders,
+      )
       return
     }
     if (req2.method === 'tools/call') {
-      sendJson(res, {
-        jsonrpc: '2.0',
-        id,
-        result: { content: [{ type: 'text', text: req2.params?.arguments?.text ?? '' }] },
-      }, extraHeaders)
+      sendJson(
+        res,
+        {
+          jsonrpc: '2.0',
+          id,
+          result: { content: [{ type: 'text', text: req2.params?.arguments?.text ?? '' }] },
+        },
+        extraHeaders,
+      )
       return
     }
-    sendJson(res, { jsonrpc: '2.0', id, error: { code: -32601, message: 'method not found' } }, extraHeaders)
+    sendJson(
+      res,
+      { jsonrpc: '2.0', id, error: { code: -32601, message: 'method not found' } },
+      extraHeaders,
+    )
   })
 })
 

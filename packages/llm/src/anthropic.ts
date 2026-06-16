@@ -48,6 +48,7 @@ import {
   type ToolCall,
   type ToolResult,
   type UserMessage,
+  ValidationError,
   withRetry,
 } from '@lumen/core'
 import { z } from 'zod'
@@ -489,13 +490,15 @@ export class AnthropicProvider extends BaseProvider {
   constructor(options: AnthropicOptions) {
     super()
     if (!options.baseUrl || options.baseUrl.length === 0) {
-      throw new Error('AnthropicProvider: `baseUrl` is required')
+      throw new ValidationError('AnthropicProvider: `baseUrl` is required', { field: 'baseUrl' })
     }
     if (!options.apiKey || options.apiKey.length === 0) {
-      throw new Error('AnthropicProvider: `apiKey` is required')
+      throw new ValidationError('AnthropicProvider: `apiKey` is required', { field: 'apiKey' })
     }
     if (!options.defaultModel || options.defaultModel.length === 0) {
-      throw new Error('AnthropicProvider: `defaultModel` is required')
+      throw new ValidationError('AnthropicProvider: `defaultModel` is required', {
+        field: 'defaultModel',
+      })
     }
     this.id = options.id ?? 'anthropic'
     this.baseUrl = normalizeBaseUrl(options.baseUrl)
@@ -511,8 +514,9 @@ export class AnthropicProvider extends BaseProvider {
       (typeof globalThis.fetch === 'function'
         ? (globalThis.fetch.bind(globalThis) as typeof fetch)
         : (() => {
-            throw new Error(
+            throw new ValidationError(
               'AnthropicProvider: no fetch implementation available. Pass `fetchImpl` or run on Node 20+.',
+              { field: 'fetchImpl' },
             )
           })())
     this.capabilities = { ...defaultCapabilities(), ...(options.capabilities ?? {}) }

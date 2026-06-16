@@ -71,10 +71,7 @@ export class ConsoleLogger extends BaseLogger {
     error: 40,
   }
 
-  public constructor(
-    bindings: Record<string, unknown> = {},
-    minLevel: LogLevel = 'info',
-  ) {
+  public constructor(bindings: Record<string, unknown> = {}, minLevel: LogLevel = 'info') {
     super()
     this.bindings = { ...bindings }
     this.minLevel = ConsoleLogger.LEVEL_ORDER[minLevel]
@@ -103,12 +100,13 @@ export class ConsoleLogger extends BaseLogger {
   private log(level: LogLevel, msg: string, context?: Record<string, unknown>): void {
     if (ConsoleLogger.LEVEL_ORDER[level] < this.minLevel) return
     const prefix = `[${level.toUpperCase()}]`
-    const bindingStr = Object.keys(this.bindings).length > 0
-      ? ` [${Object.entries(this.bindings).map(([k, v]) => `${k}=${String(v)}`).join(' ')}]`
-      : ''
-    const ctxStr = context && Object.keys(context).length > 0
-      ? ` ${JSON.stringify(context)}`
-      : ''
+    const bindingStr =
+      Object.keys(this.bindings).length > 0
+        ? ` [${Object.entries(this.bindings)
+            .map(([k, v]) => `${k}=${String(v)}`)
+            .join(' ')}]`
+        : ''
+    const ctxStr = context && Object.keys(context).length > 0 ? ` ${JSON.stringify(context)}` : ''
     process.stderr.write(`${prefix}${bindingStr} ${msg}${ctxStr}\n`)
   }
 
@@ -187,7 +185,9 @@ export class PinoLogger extends BaseLogger {
     // re-import. The child's bindings are passed to
     // pino.child() when the parent is ready.
     if (this.pinoInstance) {
-      const childFn = this.pinoInstance['child'] as ((b: Record<string, unknown>) => Record<string, unknown>) | undefined
+      const childFn = this.pinoInstance['child'] as
+        | ((b: Record<string, unknown>) => Record<string, unknown>)
+        | undefined
       child.pinoInstance = childFn ? childFn(bindings) : this.pinoInstance
       child.initialized = true
     }
@@ -196,7 +196,9 @@ export class PinoLogger extends BaseLogger {
 
   private log(level: LogLevel, msg: string, context?: Record<string, unknown>): void {
     if (!this.pinoInstance) return
-    const fn = this.pinoInstance[level] as ((obj: Record<string, unknown>, msg: string) => void) | undefined
+    const fn = this.pinoInstance[level] as
+      | ((obj: Record<string, unknown>, msg: string) => void)
+      | undefined
     if (fn) {
       fn({ ...context }, msg)
     }

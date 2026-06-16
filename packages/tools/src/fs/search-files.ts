@@ -17,7 +17,13 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import * as fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
-import { BaseTool, type ToolContext, type ToolDescriptor } from '@lumen/core'
+import {
+  AbortError,
+  BaseTool,
+  type ToolContext,
+  type ToolDescriptor,
+  ValidationError,
+} from '@lumen/core'
 
 /** Zod schema for the tool's input. */
 export const SearchFilesInputSchema = z.object({
@@ -79,7 +85,9 @@ export class SearchFilesTool extends BaseTool {
     try {
       new RegExp(pattern, 'g')
     } catch (err) {
-      throw new Error(`search_files: invalid regex pattern: ${(err as Error).message}`)
+      throw new ValidationError(`search_files: invalid regex pattern: ${(err as Error).message}`, {
+        field: 'pattern',
+      })
     }
 
     const rgMatches = await tryRipgrep(absPath, fileGlob, pattern, cap, ctx.signal)
@@ -234,7 +242,7 @@ async function walkDir(
   out: SearchMatch[],
   signal: AbortSignal,
 ): Promise<void> {
-  if (signal.aborted) throw new Error('aborted')
+  if (signal.aborted) throw new AbortError()
   if (out.length >= cap) return
   const stat = await fs.lstat(current)
   if (stat.isFile()) {
@@ -247,7 +255,7 @@ async function walkDir(
   const dirents = await fs.readdir(current, { withFileTypes: true })
   for (const d of dirents) {
     if (out.length >= cap) return
-    if (signal.aborted) throw new Error('aborted')
+    if (signal.aborted) throw new AbortError()
     const child = path.join(current, d.name)
     if (d.isDirectory()) {
       await walkDir(root, child, matcher, pattern, cap, out, signal)
@@ -271,7 +279,7 @@ async function scanFile(
   } catch {
     return // skip unreadable files
   }
-  if (signal.aborted) throw new Error('aborted')
+  if (signal.aborted) throw new AbortError()
   // Use a fresh, non-global RegExp per line so we don't carry state
   // across splits; .test() on a non-global regex is allocation-free.
   const r = new RegExp(pattern)

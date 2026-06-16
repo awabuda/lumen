@@ -95,3 +95,41 @@ export class AbortError extends AgentError {
     this.name = 'AbortError'
   }
 }
+
+/**
+ * Configuration is invalid, missing, or inconsistent.
+ *
+ * Use for setup-time failures that the caller can fix by changing how
+ * they wired the framework: duplicate registrations, missing required
+ * options, references to unknown ids, misconfigured routing strategies.
+ * NOT for runtime failures (network, FS, LLM, etc).
+ */
+export class ConfigError extends AgentError {
+  public readonly field?: string
+
+  constructor(message: string, init: { field?: string; cause?: unknown } = {}) {
+    super(message, { cause: init.cause })
+    this.name = 'ConfigError'
+    this.field = init.field
+  }
+}
+
+/**
+ * Input did not pass a structural or value-range validation.
+ *
+ * Use for argument validation that the caller can satisfy by providing
+ * the right shape: empty arrays, out-of-range numbers, malformed
+ * strings, missing required fields. Distinct from {@link ConfigError},
+ * which is about *wiring* the framework, not about a single call.
+ */
+export class ValidationError extends AgentError {
+  public readonly field?: string
+  public readonly value?: unknown
+
+  constructor(message: string, init: { field?: string; value?: unknown; cause?: unknown } = {}) {
+    super(message, { cause: init.cause })
+    this.name = 'ValidationError'
+    this.field = init.field
+    this.value = init.value
+  }
+}

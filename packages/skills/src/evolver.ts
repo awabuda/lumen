@@ -33,7 +33,9 @@ interface ChatMessage {
 
 /** Minimal provider type — mirrors @lumen/core's BaseProvider. */
 interface MinimalProvider {
-  chat(opts: { model: string; messages: ChatMessage[]; temperature?: number }): Promise<{ content: string }>
+  chat(opts: { model: string; messages: ChatMessage[]; temperature?: number }): Promise<{
+    content: string
+  }>
 }
 
 /** Result of an evolution attempt. */
@@ -99,9 +101,10 @@ export class HeuristicEvolver extends BaseEvolver {
 
     // Get the final assistant response.
     const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
-    const summary = typeof lastAssistant?.content === 'string'
-      ? lastAssistant.content.slice(0, 200)
-      : 'Task completed successfully.'
+    const summary =
+      typeof lastAssistant?.content === 'string'
+        ? lastAssistant.content.slice(0, 200)
+        : 'Task completed successfully.'
 
     // Generate a slug from the task.
     const slug = task
@@ -136,9 +139,7 @@ export class HeuristicEvolver extends BaseEvolver {
       '',
       '## Tools used',
       '',
-      ...messages
-        .filter((m) => m.role === 'tool')
-        .map((m) => `- \`${m.toolName ?? 'unknown'}\``),
+      ...messages.filter((m) => m.role === 'tool').map((m) => `- \`${m.toolName ?? 'unknown'}\``),
     ].join('\n')
 
     // Write the SKILL.md file.
@@ -155,7 +156,11 @@ export class HeuristicEvolver extends BaseEvolver {
     })
     registry.register(skill)
 
-    return { created: true, skill, reason: `Created skill "${skillId}" from ${toolCalls} tool calls` }
+    return {
+      created: true,
+      skill,
+      reason: `Created skill "${skillId}" from ${toolCalls} tool calls`,
+    }
   }
 }
 
@@ -251,7 +256,10 @@ export class LLMEvolver extends BaseEvolver {
 
       return { created: true, skill, reason: `LLM-generated skill "${skillId}"` }
     } catch (err) {
-      return { created: false, reason: `LLM call failed: ${err instanceof Error ? err.message : String(err)}` }
+      return {
+        created: false,
+        reason: `LLM call failed: ${err instanceof Error ? err.message : String(err)}`,
+      }
     }
   }
 }

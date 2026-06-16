@@ -25,10 +25,20 @@ export {
 } from './base.js'
 
 export { SkillRegistry, type ActivatedSkill } from './registry.js'
-export { parseFrontmatter, parseSkillMarkdown, SkillFrontmatterSchema, ParsedSkillMarkdownSchema }
-  from './parser.js'
+export {
+  parseFrontmatter,
+  parseSkillMarkdown,
+  SkillFrontmatterSchema,
+  ParsedSkillMarkdownSchema,
+} from './parser.js'
 export type { ParsedSkillMarkdown, SkillFrontmatter } from './parser.js'
-export { MarkdownSkill, buildTriggers, slugify, type MarkdownSkillOptions } from './markdown-skill.js'
+export { SkillConfigError, SkillError, SkillParseError } from './errors.js'
+export {
+  MarkdownSkill,
+  buildTriggers,
+  slugify,
+  type MarkdownSkillOptions,
+} from './markdown-skill.js'
 export {
   FilesystemSkillSource,
   defaultSkillsPath,

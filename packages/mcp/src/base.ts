@@ -10,7 +10,7 @@
  * factory registry for late-bound strategy selection.
  */
 
-import { type ToolDescriptor } from '@lumen/core'
+import { type ToolDescriptor, ToolError } from '@lumen/core'
 
 // ---------------------------------------------------------------------------
 // JSON-RPC 2.0 message types
@@ -102,11 +102,14 @@ export interface McpTransportOptions {
  */
 export abstract class McpTransport {
   protected requestId = 0
-  protected pending = new Map<string | number, {
-    resolve: (res: unknown) => void
-    reject: (err: Error) => void
-    timer: ReturnType<typeof setTimeout>
-  }>()
+  protected pending = new Map<
+    string | number,
+    {
+      resolve: (res: unknown) => void
+      reject: (err: Error) => void
+      timer: ReturnType<typeof setTimeout>
+    }
+  >()
   protected _connected = false
 
   public abstract get name(): string
@@ -159,9 +162,9 @@ export abstract class McpTransport {
     clearTimeout(pending.timer)
     this.pending.delete(id)
     if (response.error) {
-      pending.reject(new McpTransportError(
-        `MCP error ${response.error.code}: ${response.error.message}`,
-      ))
+      pending.reject(
+        new McpTransportError(`MCP error ${response.error.code}: ${response.error.message}`),
+      )
     } else {
       pending.resolve(response.result)
     }
@@ -232,11 +235,11 @@ export class McpClient {
   public async initialize(): Promise<void> {
     if (this.initialized) return
     await this.transport.open()
-    const result = await this.transport.send('initialize', {
+    const result = (await this.transport.send('initialize', {
       protocolVersion: '2025-03-26',
       capabilities: {},
       clientInfo: this.clientInfo,
-    } satisfies McpInitializeRequest) as McpInitializeResult | undefined
+    } satisfies McpInitializeRequest)) as McpInitializeResult | undefined
     if (!result) {
       throw new McpTransportError('Initialize returned no result')
     }
@@ -253,7 +256,7 @@ export class McpClient {
     if (!this.connected) {
       throw new McpTransportError('Client not initialized — call initialize() first')
     }
-    const result = await this.transport.send('tools/list') as McpListToolsResult | undefined
+    const result = (await this.transport.send('tools/list')) as McpListToolsResult | undefined
     return result?.tools ?? []
   }
 
@@ -264,10 +267,10 @@ export class McpClient {
     if (!this.connected) {
       throw new McpTransportError('Client not initialized — call initialize() first')
     }
-    const result = await this.transport.send('tools/call', {
+    const result = (await this.transport.send('tools/call', {
       name,
       arguments: args,
-    } satisfies McpCallToolParams) as McpCallToolResult | undefined
+    } satisfies McpCallToolParams)) as McpCallToolResult | undefined
     if (!result) {
       throw new McpTransportError(`Tool "${name}" returned no result`)
     }
@@ -303,7 +306,12 @@ export class McpToolProxy extends BaseTool {
   public readonly risk: ToolRisk = 'safe'
   private readonly client: McpClient
 
-  constructor(name: string, description: string, inputSchema: Record<string, unknown>, client: McpClient) {
+  constructor(
+    name: string,
+    description: string,
+    inputSchema: Record<string, unknown>,
+    client: McpClient,
+  ) {
     super()
     this.name = name
     this.description = description
@@ -312,10 +320,15 @@ export class McpToolProxy extends BaseTool {
   }
 
   protected async execute(input: unknown, _ctx: ToolContext): Promise<unknown> {
-    const result = await this.client.callTool(this.name, input as Record<string, unknown> | undefined)
+    const result = await this.client.callTool(
+      this.name,
+      input as Record<string, unknown> | undefined,
+    )
     if (result.isError) {
       const text = result.content.map((c) => c.text ?? '').join('\n')
-      throw new Error(`MCP tool "${this.name}" returned error: ${text}`)
+      throw new ToolError(`MCP tool "${this.name}" returned error: ${text}`, {
+        toolName: this.name,
+      })
     }
     return result.content.map((c) => c.text ?? c.data ?? '').join('\n')
   }
@@ -327,7 +340,12 @@ export class McpToolProxy extends BaseTool {
  */
 const mcpSchemaToZod = (schema: Record<string, unknown>): z.ZodType<unknown> => {
   if (!schema || typeof schema !== 'object') return z.any()
-  const s = schema as { type?: string; properties?: Record<string, unknown>; items?: Record<string, unknown>; required?: string[] }
+  const s = schema as {
+    type?: string
+    properties?: Record<string, unknown>
+    items?: Record<string, unknown>
+    required?: string[]
+  }
   if (s.type === 'object' && s.properties) {
     const shape: Record<string, z.ZodType<unknown>> = {}
     const requiredSet = new Set<string>(s.required ?? [])

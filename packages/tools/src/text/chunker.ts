@@ -62,6 +62,8 @@ export const DEFAULT_CHUNK_MAX_SIZE = 1000
 export const DEFAULT_CHUNK_OVERLAP = 200
 export const MIN_CHUNK_MAX_SIZE = 1
 
+import { ValidationError } from '@lumen/core'
+
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
@@ -80,14 +82,21 @@ export function chunkText(text: string, options: ChunkOptions = {}): TextChunk[]
   const maxChunkSize = options.maxChunkSize ?? DEFAULT_CHUNK_MAX_SIZE
   const overlap = options.overlap ?? DEFAULT_CHUNK_OVERLAP
   if (maxChunkSize < MIN_CHUNK_MAX_SIZE) {
-    throw new Error(`chunkText: maxChunkSize must be >= ${MIN_CHUNK_MAX_SIZE}, got ${maxChunkSize}`)
+    throw new ValidationError(
+      `chunkText: maxChunkSize must be >= ${MIN_CHUNK_MAX_SIZE}, got ${maxChunkSize}`,
+      { field: 'maxChunkSize', value: maxChunkSize },
+    )
   }
   if (overlap < 0) {
-    throw new Error(`chunkText: overlap must be >= 0, got ${overlap}`)
+    throw new ValidationError(`chunkText: overlap must be >= 0, got ${overlap}`, {
+      field: 'overlap',
+      value: overlap,
+    })
   }
   if (overlap >= maxChunkSize) {
-    throw new Error(
+    throw new ValidationError(
       `chunkText: overlap (${overlap}) must be < maxChunkSize (${maxChunkSize})`,
+      { field: 'overlap', value: overlap },
     )
   }
   switch (strategy) {

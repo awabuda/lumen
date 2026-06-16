@@ -8,7 +8,13 @@
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { createInterface, type Interface } from 'node:readline'
-import { McpTransport, McpTransportError, type JsonRpcNotification, type JsonRpcRequest, type McpTransportOptions } from './base.js'
+import {
+  McpTransport,
+  McpTransportError,
+  type JsonRpcNotification,
+  type JsonRpcRequest,
+  type McpTransportOptions,
+} from './base.js'
 
 export interface StdioMcpTransportOptions extends McpTransportOptions {
   command: string
@@ -83,11 +89,17 @@ export class StdioMcpTransport extends McpTransport {
 
     this.child.once('error', (err) => {
       this._connected = false
-      this.rejectAllPending(new McpTransportError(`MCP stdio process error: ${err.message}`, { cause: err }))
+      this.rejectAllPending(
+        new McpTransportError(`MCP stdio process error: ${err.message}`, { cause: err }),
+      )
     })
     this.child.once('exit', (code, signal) => {
       this._connected = false
-      this.rejectAllPending(new McpTransportError(`MCP stdio process exited: code=${code ?? 'n/a'} signal=${signal ?? 'n/a'}`))
+      this.rejectAllPending(
+        new McpTransportError(
+          `MCP stdio process exited: code=${code ?? 'n/a'} signal=${signal ?? 'n/a'}`,
+        ),
+      )
     })
 
     this._connected = true

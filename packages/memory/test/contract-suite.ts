@@ -93,8 +93,20 @@ export function runStoreContractTests(
     })
 
     it('search by text finds substring matches', async () => {
-      await store.put({ id: 'a', kind: 'fact', content: 'Paris is in France', trust: 0.5, tags: [] })
-      await store.put({ id: 'b', kind: 'fact', content: 'Berlin is in Germany', trust: 0.5, tags: [] })
+      await store.put({
+        id: 'a',
+        kind: 'fact',
+        content: 'Paris is in France',
+        trust: 0.5,
+        tags: [],
+      })
+      await store.put({
+        id: 'b',
+        kind: 'fact',
+        content: 'Berlin is in Germany',
+        trust: 0.5,
+        tags: [],
+      })
       const results = await store.search({ text: 'france' })
       const ids = results.map((r) => r.record.id)
       expect(ids).toContain('a')

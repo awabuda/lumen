@@ -111,10 +111,9 @@ describe('TerminalTool', () => {
       maxOutputBytes: 1024,
       factories: { custom: () => sandbox },
     })
-    const out = (await tool.call(
-      { command: ['echo`whoami`', 'hi'] },
-      ctx,
-    )) as { refusal: { reason: string; message: string } | null }
+    const out = (await tool.call({ command: ['echo`whoami`', 'hi'] }, ctx)) as {
+      refusal: { reason: string; message: string } | null
+    }
     expect(out.refusal).not.toBeNull()
     expect(out.refusal?.reason).toBe('policy-violation')
     expect(out.refusal?.message).toMatch(/metacharacter/i)

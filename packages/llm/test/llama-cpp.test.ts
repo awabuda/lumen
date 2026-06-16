@@ -61,7 +61,9 @@ describe('LlamaCppProvider', () => {
           id: 'cmpl-1',
           object: 'chat.completion',
           model: 'm',
-          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+          ],
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       )
@@ -89,7 +91,9 @@ describe('LlamaCppProvider', () => {
           id: 'cmpl-1',
           object: 'chat.completion',
           model: 'm',
-          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+          ],
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       )
@@ -113,7 +117,9 @@ describe('LlamaCppProvider', () => {
           id: 'cmpl-1',
           object: 'chat.completion',
           model: 'm',
-          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+          ],
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       )

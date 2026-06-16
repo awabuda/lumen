@@ -20,6 +20,7 @@
  */
 
 import type Database from 'better-sqlite3'
+import { ConfigError } from '@lumen/core'
 
 /** The better-sqlite3 `Database` type, re-aliased for readability. */
 export type SqliteDatabase = Database.Database
@@ -195,7 +196,10 @@ export class SqliteVecBackend extends BaseVectorBackend {
     // better-sqlite3's typed statement infers the bind
     // parameter count from the SQL. We pass a fresh array
     // literal so the variadic signature is happy.
-    const rows = this.topKStmt!.all([query, k]) as Array<{ rowid: number | bigint; distance: number }>
+    const rows = this.topKStmt!.all([query, k]) as Array<{
+      rowid: number | bigint
+      distance: number
+    }>
     return rows.map((r) => ({
       id: r.rowid.toString(),
       score: 1 / (1 + Math.max(0, r.distance)),
@@ -214,7 +218,9 @@ export class SqliteVecBackend extends BaseVectorBackend {
 
   private assertReady(): void {
     if (!this.upsertStmt) {
-      throw new Error('SqliteVecBackend used before init() — call init() after loading the extension')
+      throw new ConfigError(
+        'SqliteVecBackend used before init() — call init() after loading the extension',
+      )
     }
   }
 
@@ -258,10 +264,13 @@ const bytesToFloats = (bytes: Uint8Array, expectedLength: number): Float32Array 
   // Copy into a fresh ArrayBuffer so we are not aliased to
   // the caller's buffer (a Float32Array view shares the
   // underlying memory; reassigning later would corrupt us).
-  const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+  const ab = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer
   const f = new Float32Array(ab)
   if (f.length !== expectedLength) {
-    throw new Error(
+    throw new ConfigError(
       `Vector dimension mismatch: backend expects ${expectedLength}, got ${f.length}`,
     )
   }

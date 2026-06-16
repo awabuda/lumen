@@ -98,7 +98,10 @@ describe('RagPipeline', () => {
     await pipe.ingest({ documentId: 'doc-3', text: 'first version of the document text' })
     // Re-ingest with completely new content. The first ingest's
     // chunks should be forgotten before the new ones are stored.
-    await pipe.ingest({ documentId: 'doc-3', text: 'completely different content for second version' })
+    await pipe.ingest({
+      documentId: 'doc-3',
+      text: 'completely different content for second version',
+    })
 
     // Total stored chunks should equal the second ingest's count,
     // not double.

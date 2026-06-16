@@ -30,9 +30,9 @@ describe('PlanStepSchema', () => {
 
 describe('PlanSchema', () => {
   it('requires at least one step', () => {
-    expect(
-      PlanSchema.safeParse({ id: 'p', goal: 'g', steps: [], createdAt: 0 }).success,
-    ).toBe(false)
+    expect(PlanSchema.safeParse({ id: 'p', goal: 'g', steps: [], createdAt: 0 }).success).toBe(
+      false,
+    )
   })
 
   it('accepts a valid plan', () => {
@@ -202,6 +202,6 @@ describe('BasePlanner is abstract', () => {
   it('cannot be instantiated directly', () => {
     // @ts-expect-error — abstract class cannot be instantiated
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-    new (BasePlanner as any)()
+    ;new (BasePlanner as any)()
   })
 })

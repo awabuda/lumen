@@ -43,7 +43,11 @@ export type { PatchInput, PatchOutput } from './fs/patch.js'
 export { ListDirTool, ListDirInputSchema, ListDirOutputSchema } from './fs/list-dir.js'
 export type { ListDirInput, ListDirOutput, ListDirEntry } from './fs/list-dir.js'
 
-export { SearchFilesTool, SearchFilesInputSchema, SearchFilesOutputSchema } from './fs/search-files.js'
+export {
+  SearchFilesTool,
+  SearchFilesInputSchema,
+  SearchFilesOutputSchema,
+} from './fs/search-files.js'
 export type { SearchFilesInput, SearchFilesOutput, SearchMatch } from './fs/search-files.js'
 
 // Shell sandbox abstractions
@@ -157,7 +161,13 @@ export function createGitTools(): BaseTool[] {
  * whole tool palette ready for {@link ToolRegistry.registerAll}.
  */
 export function createDefaultTools(): BaseTool[] {
-  return [...createFilesystemTools(), ...createShellTools(), ...createGitTools(), ...createMetaTools(), ...createGithubTools()]
+  return [
+    ...createFilesystemTools(),
+    ...createShellTools(),
+    ...createGitTools(),
+    ...createMetaTools(),
+    ...createGithubTools(),
+  ]
 }
 
 /**

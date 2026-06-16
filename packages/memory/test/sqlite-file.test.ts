@@ -74,8 +74,20 @@ describe('SqliteStore (file)', () => {
     const s = new SqliteStore({ path: dbPath })
     await s.init()
     try {
-      await s.put({ id: 'a', kind: 'fact', content: 'The developer runs the build', trust: 0.5, tags: [] })
-      await s.put({ id: 'b', kind: 'fact', content: 'A cat sleeps on the mat', trust: 0.5, tags: [] })
+      await s.put({
+        id: 'a',
+        kind: 'fact',
+        content: 'The developer runs the build',
+        trust: 0.5,
+        tags: [],
+      })
+      await s.put({
+        id: 'b',
+        kind: 'fact',
+        content: 'A cat sleeps on the mat',
+        trust: 0.5,
+        tags: [],
+      })
       // Porter stemmer turns "developer" → "develop" and
       // "runs" → "run". We search for the stem; if the stemmer
       // is wired we get a match.

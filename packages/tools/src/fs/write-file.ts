@@ -13,7 +13,7 @@
 import * as fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
-import { BaseTool, type ToolContext, type ToolDescriptor } from '@lumen/core'
+import { AbortError, BaseTool, type ToolContext, type ToolDescriptor } from '@lumen/core'
 
 /** Zod schema for the tool's input. */
 export const WriteFileInputSchema = z.object({
@@ -53,11 +53,11 @@ export async function atomicWriteFile(
   // if it already does.
   await fs.mkdir(path.dirname(absPath), { recursive: true })
   try {
-    if (signal.aborted) throw new Error('aborted')
+    if (signal.aborted) throw new AbortError()
     await fs.writeFile(tmpPath, content, 'utf8')
     if (signal.aborted) {
       await safeUnlink(tmpPath)
-      throw new Error('aborted')
+      throw new AbortError()
     }
     await fs.rename(tmpPath, absPath)
   } catch (err) {
@@ -97,7 +97,7 @@ export class WriteFileTool extends BaseTool {
     }
     // Non-atomic path
     await fs.mkdir(path.dirname(absPath), { recursive: true })
-    if (ctx.signal.aborted) throw new Error('aborted')
+    if (ctx.signal.aborted) throw new AbortError()
     await fs.writeFile(absPath, content, 'utf8')
     return { bytesWritten: Buffer.byteLength(content, 'utf8'), path: absPath }
   }

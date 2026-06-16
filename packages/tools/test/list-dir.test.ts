@@ -58,10 +58,9 @@ describe('ListDirTool', () => {
     await fs.mkdir(path.join(tmpDir, 'a', 'b', 'c'), { recursive: true })
     await fs.writeFile(path.join(tmpDir, 'a', 'b', 'c', 'leaf.txt'), 'z', 'utf8')
     const tool = new ListDirTool()
-    const result = (await tool.call(
-      { path: '.', recursive: true, maxDepth: 2 },
-      ctx,
-    )) as { entries: Array<{ name: string; type: string }> }
+    const result = (await tool.call({ path: '.', recursive: true, maxDepth: 2 }, ctx)) as {
+      entries: Array<{ name: string; type: string }>
+    }
     const names = result.entries.map((e) => e.name)
     expect(names).toContain('a')
     expect(names).toContain(path.join('a', 'b'))

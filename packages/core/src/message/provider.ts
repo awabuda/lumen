@@ -18,6 +18,7 @@ import type { z } from 'zod'
 import type { Message } from './index.js'
 import type { AssistantMessage, StreamEvent, StreamOptions } from './index.js'
 import type { ToolDescriptor } from '../tools/index.js'
+import { ProviderError } from '../errors/index.js'
 
 export interface ProviderCapabilities {
   /** Provider can stream responses incrementally. */
@@ -151,7 +152,10 @@ export abstract class BaseProvider {
    * support it (and set `capabilities.embeddings = true`).
    */
   public async embed(_request: EmbedRequest, _options?: StreamOptions): Promise<EmbedResponse> {
-    throw new Error(`Provider ${this.id} does not support embeddings`)
+    throw new ProviderError(`Provider ${this.id} does not support embeddings`, {
+      providerId: this.id,
+      retryable: false,
+    })
   }
 
   /**

@@ -18,6 +18,7 @@
  */
 
 import { z } from 'zod'
+import { ConfigError } from '../errors/index.js'
 
 /** A cron job — an async function with metadata. */
 export type CronJob = () => Promise<void>
@@ -385,7 +386,7 @@ export class CronScheduler {
   /** Register a cron. Returns the registered cron. */
   public register(cron: BaseCron): BaseCron {
     if (this.crons.has(cron.id)) {
-      throw new Error(`Cron with id "${cron.id}" is already registered`)
+      throw new ConfigError(`Cron with id "${cron.id}" is already registered`, { field: 'id' })
     }
     this.crons.set(cron.id, cron)
     return cron

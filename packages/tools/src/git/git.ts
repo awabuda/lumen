@@ -71,7 +71,12 @@ export const GitInputSchema = z
      */
     maxCount: z.number().int().min(1).max(500).optional(),
     /** For `log` and `diff` only: cap bytes of output. Defaults to 256 KiB. */
-    maxBytes: z.number().int().min(1024).max(5 * 1024 * 1024).optional(),
+    maxBytes: z
+      .number()
+      .int()
+      .min(1024)
+      .max(5 * 1024 * 1024)
+      .optional(),
     /**
      * For `commit` only: the commit message. Conventional-commits
      * subject line max 72 chars; we don't enforce a style, we
@@ -86,10 +91,9 @@ export const GitInputSchema = z
      */
     stageAll: z.boolean().optional(),
   })
-  .refine(
-    (v) => (v.op === 'commit') === (v.message !== undefined),
-    { message: '`message` is required for `commit` and forbidden otherwise' },
-  )
+  .refine((v) => (v.op === 'commit') === (v.message !== undefined), {
+    message: '`message` is required for `commit` and forbidden otherwise',
+  })
 
 export type GitInput = z.infer<typeof GitInputSchema>
 
@@ -239,10 +243,7 @@ export class GitTool extends BaseTool {
    * `git`. Returns `{ execArgv, cwd }` so a derived class can also
    * relocate the working directory.
    */
-  protected spawnGit(
-    argv: string[],
-    cwd: string,
-  ): { execArgv: string[]; cwd: string } {
+  protected spawnGit(argv: string[], cwd: string): { execArgv: string[]; cwd: string } {
     return { execArgv: ['git', ...argv], cwd }
   }
 
@@ -252,11 +253,7 @@ export class GitTool extends BaseTool {
    * a JSON it can reason about instead of a string it has
    * to re-parse.
    */
-  private parseOutput(
-    op: GitOp,
-    raw: string,
-    _truncated: boolean,
-  ): Record<string, unknown> {
+  private parseOutput(op: GitOp, raw: string, _truncated: boolean): Record<string, unknown> {
     switch (op) {
       case 'status': {
         // `git status --porcelain=v2 -b` produces:
@@ -297,7 +294,12 @@ export class GitTool extends BaseTool {
         const lines = raw.split('\n').filter(Boolean)
         const commits = lines.map((line) => {
           const [sha, an, ae, at, ...rest] = line.split('\t')
-          return { sha, author: { name: an, email: ae }, timestamp: Number(at), subject: rest.join('\t') }
+          return {
+            sha,
+            author: { name: an, email: ae },
+            timestamp: Number(at),
+            subject: rest.join('\t'),
+          }
         })
         return { commits }
       }

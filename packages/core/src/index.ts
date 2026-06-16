@@ -20,13 +20,15 @@
 
 // Errors
 export {
+  AbortError,
   AgentError,
   BudgetExceededError,
+  ConfigError,
   MaxIterationsExceededError,
   ProviderError,
   ToolError,
   ToolValidationError,
-  AbortError,
+  ValidationError,
 } from './errors/index.js'
 
 // Retry helper (consumes ProviderError.retryable)
@@ -233,6 +235,7 @@ export {
   AcquireTimeoutError,
   BaseMutex,
   Mutex,
+  MutexDisposedError,
   MutexOptionsSchema,
   type AcquireResult,
   type MutexOptions,

@@ -69,7 +69,9 @@ export class FakeMemoryStore extends BaseMemoryStore {
     return typeof limit === 'number' ? all.slice(0, limit) : all
   }
 
-  public async appendMessage(message: Omit<SessionMessage, 'id' | 'createdAt'>): Promise<SessionMessage> {
+  public async appendMessage(
+    message: Omit<SessionMessage, 'id' | 'createdAt'>,
+  ): Promise<SessionMessage> {
     const full: SessionMessage = {
       ...message,
       id: this.nextMessageId++,

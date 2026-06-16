@@ -28,12 +28,14 @@ import {
   type EmbedRequest,
   type EmbedResponse,
   type Message,
+  ProviderError,
   type ProviderCapabilities,
   type RetryConfig,
   type StreamEvent,
   type StreamOptions,
   type ToolMessage,
   type UserMessage,
+  ValidationError,
   withRetry,
 } from '@lumen/core'
 
@@ -227,8 +229,9 @@ export class GeminiProvider extends BaseProvider {
       (typeof globalThis.fetch === 'function'
         ? (globalThis.fetch.bind(globalThis) as typeof fetch)
         : (() => {
-            throw new Error(
+            throw new ValidationError(
               'GeminiProvider: no fetch implementation available. Pass `fetchImpl` or run on Node 20+.',
+              { field: 'fetchImpl' },
             )
           })())
     this.capabilities = { ...defaultCapabilities(), ...(parsed.capabilities ?? {}) }
@@ -266,7 +269,10 @@ export class GeminiProvider extends BaseProvider {
     }
     const reader = response.body?.getReader()
     if (!reader) {
-      throw new Error('Gemini stream: no response body')
+      throw new ProviderError('Gemini stream: no response body', {
+        providerId: this.id,
+        retryable: true,
+      })
     }
     const decoder = new TextDecoder()
     let buffer = ''
@@ -326,7 +332,7 @@ export class GeminiProvider extends BaseProvider {
 
   protected override validateRequest(request: ChatRequest): void {
     if (!request.messages || request.messages.length === 0) {
-      throw new Error('GeminiProvider: messages array is empty')
+      throw new ValidationError('GeminiProvider: messages array is empty', { field: 'messages' })
     }
   }
 
@@ -353,7 +359,10 @@ export class GeminiProvider extends BaseProvider {
       }
     }
     if (contents.length === 0) {
-      throw new Error('GeminiProvider: no user/model messages after filtering')
+      throw new ProviderError('GeminiProvider: no user/model messages after filtering', {
+        providerId: this.id,
+        retryable: false,
+      })
     }
     const body: z.infer<typeof GeminiGenerateRequestSchema> = { contents }
     if (systemInstruction) body.systemInstruction = systemInstruction
@@ -379,7 +388,10 @@ export class GeminiProvider extends BaseProvider {
   ): ChatResponse {
     const candidate = parsed.candidates[0]
     if (!candidate) {
-      throw new Error('GeminiProvider: empty candidates array')
+      throw new ProviderError('GeminiProvider: empty candidates array', {
+        providerId: this.id,
+        retryable: false,
+      })
     }
     const message = this.candidateToMessage(parsed) ?? emptyAssistantMessage()
     const finishReason = mapFinishReason(candidate.finishReason, message)

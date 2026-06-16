@@ -19,7 +19,11 @@ import type { BaseMemoryStore, MemoryRecord } from '@lumen/core'
 
 /** Minimal provider type — mirrors @lumen/core's BaseProvider. */
 interface MinimalProvider {
-  chat(opts: { model: string; messages: Array<{ role: string; content: string }>; temperature?: number }): Promise<{ content: string }>
+  chat(opts: {
+    model: string
+    messages: Array<{ role: string; content: string }>
+    temperature?: number
+  }): Promise<{ content: string }>
 }
 
 /** A detected conflict between two records. */
@@ -94,7 +98,10 @@ export class KeywordConflictDetector extends BaseConflictDetector {
       const existingNegated = KeywordConflictDetector.NEGATION_RE.test(existing.content)
 
       // Conflict: one is negated and they share keywords.
-      if ((incomingNegated || existingNegated) && this.shareKeywords(incomingWords, existingWords)) {
+      if (
+        (incomingNegated || existingNegated) &&
+        this.shareKeywords(incomingWords, existingWords)
+      ) {
         conflicts.push({
           existing,
           incoming,

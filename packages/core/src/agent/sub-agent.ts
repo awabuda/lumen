@@ -116,10 +116,8 @@ export class SingleRunSubAgent extends BaseSubAgent {
 }
 
 /** Factory: create a sub-agent from a parent agent config + options. */
-export const createSubAgent = (
-  parent: AgentConfig,
-  options: SubAgentOptions,
-): BaseSubAgent => new SingleRunSubAgent(parent, options)
+export const createSubAgent = (parent: AgentConfig, options: SubAgentOptions): BaseSubAgent =>
+  new SingleRunSubAgent(parent, options)
 
 /** Build a new ToolRegistry containing only the named tools. */
 const buildRestrictedRegistry = (

@@ -30,6 +30,7 @@ import type {
   MemoryRecord,
   MemorySearchResult,
 } from '@lumen/core'
+import { ValidationError } from '@lumen/core'
 
 /** A retrieval query. Either `text` or `embedding` (or both) should be set. */
 export interface RetrievalQuery {
@@ -103,7 +104,10 @@ export class HybridRetriever extends BaseRetriever {
     this.store = store
     const vw = options.vectorWeight ?? 0.6
     if (vw < 0 || vw > 1) {
-      throw new Error(`HybridRetriever: vectorWeight must be in [0, 1], got ${vw}`)
+      throw new ValidationError(`HybridRetriever: vectorWeight must be in [0, 1], got ${vw}`, {
+        field: 'vectorWeight',
+        value: vw,
+      })
     }
     this.vectorWeight = vw
   }

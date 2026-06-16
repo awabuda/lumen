@@ -21,7 +21,9 @@ import {
 
 /** A stub `EmbeddingSource` whose every embed() call records the
  *  request and returns a programmable response. */
-const makeStubSource = (response: () => Promise<{ vectors: ReadonlyArray<ReadonlyArray<number>>; model: string }>) => {
+const makeStubSource = (
+  response: () => Promise<{ vectors: ReadonlyArray<ReadonlyArray<number>>; model: string }>,
+) => {
   const calls: Array<{ input: ReadonlyArray<string>; model: string }> = []
   const source: EmbeddingSource = {
     async embed(request) {
@@ -102,7 +104,9 @@ describe('createProviderEmbedder', () => {
         return { vectors: [], model: '' }
       },
     }
-    expect(() => createProviderEmbedder(source, { model: '' })).toThrow(/options\.model is required/)
+    expect(() => createProviderEmbedder(source, { model: '' })).toThrow(
+      /options\.model is required/,
+    )
   })
 
   it('propagates provider errors (e.g. Anthropic has no embedding)', async () => {

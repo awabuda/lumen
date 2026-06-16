@@ -29,6 +29,7 @@
  */
 
 import type { MemoryRecord } from './index.js'
+import { ValidationError } from '../errors/index.js'
 
 /**
  * One entry in working memory: a record plus a score and
@@ -101,7 +102,10 @@ export class RingBufferWorkingMemory extends BaseWorkingMemory {
   public constructor(capacity = 50) {
     super()
     if (!Number.isInteger(capacity) || capacity <= 0) {
-      throw new Error(`RingBufferWorkingMemory: capacity must be a positive integer, got ${capacity}`)
+      throw new ValidationError(
+        `RingBufferWorkingMemory: capacity must be a positive integer, got ${capacity}`,
+        { field: 'capacity', value: capacity },
+      )
     }
     this.capacity = capacity
   }
