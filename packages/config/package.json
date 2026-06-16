@@ -1,6 +1,6 @@
 {
   "name": "@lumen/config",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Layered configuration loader for Lumen: CLI > env > project file > user file > defaults, validated by Zod, with profile switching and hot reload.",
   "type": "module",

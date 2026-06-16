@@ -1,6 +1,6 @@
 {
   "name": "@lumen/llm",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Provider implementations: OpenAI-compatible, Anthropic Messages API, Ollama native, llama.cpp, Google Gemini, Mistral (chat + dedicated embeddings).",
   "type": "module",

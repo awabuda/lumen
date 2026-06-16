@@ -328,3 +328,13 @@ Subagent review notes for @lumen/llm:
 **P7 totals:** 2 commits (a53e80c, c8f11e0), 4 new files / 11 modified, +767 lines, +12 tests (875 → 887). Full monorepo: 81 test files / 887 tests / 0 fail / typecheck clean. Native binding rebuild 一步 (better-sqlite3)：root `pnpm rebuild` → `cd packages/memory && pnpm rebuild better-sqlite3`，等 `gyp info ok` 出现再跑 pnpm -r test。
 
 **Push status (2026-06-16):** Same — remote unreachable, no retry. 73 commits ahead of origin/main, working tree clean.
+
+## P8 — Release prep (2026-06-16, all done; committed)
+
+- [x] **P8.0** — TASKS.md P7 section sync *(commit 1a647ca, 1 file, +6/-5)* — replace "未提交 / working tree" wording with actual commit SHAs and final totals; add a Biome note about `noNonNullAssertion` in `retriever.ts`.
+- [x] **P8.1** — Release-prep docs *(commit 58e6ee1, 3 files, +216/-1)* — `README.md` stale-count sync (566 → 887 tests, 11 packages, 81 test files). `docs/ARCHITECTURE.md` adds `BaseVectorMemoryStore`, `BaseProviderPool`, `BaseMutex` to the base-contracts table; documents the new `packages/server`, `packages/desktop-bridge`, `packages/editor-bridge` as adjacent bridges; adds a "No global locks" note for the new `concurrency` module. `CHANGELOG.md` (203 lines, new file) records P0–P7 with commit SHAs, test-count deltas, and migration notes for the P7 source-incompatible changes.
+- [x] **P8.2** — Package-level READMEs + npm descriptions *(commit f8943a3, 20 files, +601/-13)* — every package gets a `README.md` (`@lumen/core` / `@lumen/llm` / `@lumen/memory` get full READMEs with the public surface, quick start, and code samples; the other 7 get shorter role + endpoint-matrix + quick-start READMEs). 7 packages gain a `description` field in `package.json`; the other 3 already had one. 4 pre-existing Biome format issues fixed in `package.json` (inline `files: ["dist"]` + trailing newline) for `mcp`, `server`, `desktop-bridge`, `editor-bridge`. Side effect: Biome's `--write` on a `package.json` re-triggers pnpm to re-link the workspace `node_modules`, which on a fresh Node version invalidates the better-sqlite3 native binding — `cd packages/memory && pnpm rebuild better-sqlite3` (wait for `gyp info ok`) before re-running tests. This footgun is already covered in `~/.hermes/skills/lumen-agent-framework/references/pitfalls.md` (lines 22–35).
+
+**P8 totals:** 3 commits (1a647ca, 58e6ee1, f8943a3), 24 files total, ~+823 lines, 0 test delta, 0 code delta. Full monorepo: 81 test files / 887 tests / 0 fail / typecheck clean / biome clean.
+
+**Push status (2026-06-16):** Same — remote unreachable, no retry. 76 commits ahead of origin/main, working tree clean.

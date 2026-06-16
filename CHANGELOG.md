@@ -10,11 +10,44 @@ Test counts are point-in-time totals across the monorepo. The pre-1.0 series
 (`0.x.y`) does not promise API stability; breaking changes are recorded as
 **Changed** entries with a note about the migration path.
 
-## [Unreleased]
+## [0.9.0] — 2026-06-16 — P8 Release prep
+
+**Totals:** 3 commits (1a647ca, 58e6ee1, f8943a3), 24 files total,
+~+823 lines, 0 test delta, 0 code delta. Typecheck clean. Biome clean.
 
 ### Added
-- Nothing yet. P8 work in progress: release prep (docs sync, package
-  READMEs, examples). P7 commits are the last shipped set; see below.
+- `CHANGELOG.md` (this file) — Keep-a-Changelog-style P0–P8 narrative
+  with commit SHAs, test-count deltas, and migration notes for the
+  P7 source-incompatible changes.
+- **Package-level READMEs.** Every package under `packages/` ships
+  its own `README.md`. `@lumen/core` / `@lumen/llm` / `@lumen/memory`
+  get full READMEs with the public surface, quick start, and code
+  samples; the other 7 get shorter role + endpoint-matrix +
+  quick-start READMEs. README in the repo root also gains an
+  updated test count (566 → 887).
+- **npm descriptions on 7 packages.** `package.json` `description`
+  field added to `@lumen/config`, `@lumen/core`, `@lumen/llm`,
+  `@lumen/mcp`, `@lumen/memory`, `@lumen/skills`, `@lumen/tools`.
+  The other 3 (`@lumen/desktop-bridge`, `@lumen/editor-bridge`,
+  `@lumen/server`) already had descriptions.
+
+### Changed
+- `docs/ARCHITECTURE.md` updated: `BaseVectorMemoryStore`,
+  `BaseProviderPool`, `BaseMutex` added to the base-contracts table.
+  Adjacent-bridges section documents `@lumen/server`,
+  `@lumen/desktop-bridge`, `@lumen/editor-bridge`. A new "No
+  global locks" item under "What is intentionally NOT in core"
+  documents the `concurrency` module without claiming a global
+  re-entrant lock.
+- **All 11 packages bumped to 0.9.0** (was 0.1.0 across the board).
+  The version now reflects P0 → P8 progress. All packages remain
+  `"private": true` — this is a documentation-grade version bump,
+  not a publishable release.
+
+### Fixed
+- 4 pre-existing Biome format issues in `package.json` files
+  (`files: ["dist"]` inline; trailing newline) for `@lumen/mcp`,
+  `@lumen/server`, `@lumen/desktop-bridge`, `@lumen/editor-bridge`.
 
 ## [0.8.0] — 2026-06-16 — P7 Framework internal cleanup
 
