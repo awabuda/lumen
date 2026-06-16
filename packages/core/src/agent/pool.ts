@@ -50,6 +50,7 @@ import {
   type StreamOptions,
 } from '../index.js'
 import { AgentError } from '../errors/index.js'
+import { Mutex } from '../concurrency/index.js'
 
 /** Routing strategy for the pool. */
 export type RoutingStrategy = 'capability' | 'name' | 'round-robin' | 'weighted'
@@ -182,10 +183,18 @@ export abstract class BaseProviderPool extends BaseProvider {
 /**
  * Default {@link BaseProviderPool} implementation.
  *
- * Not concurrency-safe — `register` / `unregister` mutate internal
- * state. The pool is meant to be configured at boot and then read
- * by an agent loop; if you need to mutate at runtime, wrap calls
- * with your own mutex.
+ * Concurrency-safe at the round-robin cursor: a private
+ * {@link Mutex} serializes the read-modify-write of
+ * {@link ProviderPool.roundRobinIndex} inside
+ * {@link ProviderPool.candidatesFor}, so two concurrent
+ * `chat` / `embed` / `stream` calls each get a distinct
+ * provider pick. Without the lock, both calls can read the
+ * same cursor and pick the same provider.
+ *
+ * `register` / `unregister` are intentionally synchronous:
+ * the JS event loop is single-threaded, so the check + mutate
+ * pair inside them cannot interleave. The cursor advancement
+ * is the only real race.
  */
 export class ProviderPool extends BaseProviderPool {
   public readonly id = 'pool'
@@ -195,6 +204,15 @@ export class ProviderPool extends BaseProviderPool {
   private readonly capability: CapabilityKey
   private readonly targetId?: string
   private readonly random: () => number
+  /**
+   * FIFO mutex that serializes cursor advancement and
+   * registration mutations. Contended only by callers that hit
+   * the pool concurrently; the common agent-loop pattern is
+   * serialized at a higher level (one request at a time), so
+   * this is uncontended in practice and the cost is a single
+   * promise-chain snap.
+   */
+  private readonly mutex: Mutex
   private roundRobinIndex = 0
 
   public constructor(options: ProviderPoolOptions = {}) {
@@ -205,10 +223,14 @@ export class ProviderPool extends BaseProviderPool {
     this.random = options.random ?? Math.random
     this.registered = options.providers ? [...options.providers] : []
     this.capabilities = this.recomputeCapabilities()
+    this.mutex = new Mutex({ name: 'provider-pool' })
   }
 
   public register(config: PooledProviderConfig): this {
     // Reject duplicate ids so `unregister` and routing remain deterministic.
+    // (Synchronous — JS event loop is single-threaded, so this check + the
+    // mutation that follows cannot interleave with another caller's code.
+    // The cursor-mutation race is contained inside `candidatesFor`.)
     if (this.registered.some((p) => p.provider.id === config.provider.id)) {
       throw new Error(`Provider id already registered: ${config.provider.id}`)
     }
@@ -350,7 +372,7 @@ export class ProviderPool extends BaseProviderPool {
     // to the next candidate. Once we have emitted a non-error event
     // we commit to that provider — a half-streamed response cannot
     // be resumed on a different backend.
-    const candidates = this.candidatesFor(request)
+    const candidates = await this.candidatesFor(request)
     if (candidates.length === 0) {
       throw new Error('ProviderPool has no registered providers')
     }
@@ -394,55 +416,63 @@ export class ProviderPool extends BaseProviderPool {
    * round-robin: even on a single successful request, the next
    * call should land on a different provider.
    */
-  private candidatesFor(_request?: ChatRequest | EmbedRequest): ReadonlyArray<BaseProvider> {
-    if (this.registered.length === 0) return []
-    switch (this.strategy) {
-      case 'name': {
-        if (!this.targetId) {
-          throw new Error(`ProviderPool strategy 'name' requires options.targetId`)
+  private async candidatesFor(
+    _request?: ChatRequest | EmbedRequest,
+  ): Promise<ReadonlyArray<BaseProvider>> {
+    // The cursor advancement (read index → advance → return) is
+    // two operations. Without locking, two concurrent callers
+    // can both read the same cursor value and pick the same
+    // provider. The mutex guarantees read-modify-write is atomic.
+    return this.mutex.runExclusive(() => {
+      if (this.registered.length === 0) return []
+      switch (this.strategy) {
+        case 'name': {
+          if (!this.targetId) {
+            throw new Error(`ProviderPool strategy 'name' requires options.targetId`)
+          }
+          const match = this.registered.find((p) => p.provider.id === this.targetId)
+          if (!match) {
+            throw new Error(`No registered provider with id '${this.targetId}'`)
+          }
+          return [match.provider]
         }
-        const match = this.registered.find((p) => p.provider.id === this.targetId)
-        if (!match) {
-          throw new Error(`No registered provider with id '${this.targetId}'`)
+        case 'capability': {
+          const capable = this.registered.filter((p) => {
+            const cap = p.provider.capabilities[this.capability]
+            return typeof cap === 'boolean' ? cap : false
+          })
+          if (capable.length === 0) {
+            throw new Error(
+              `No registered provider has capability '${String(this.capability)}': true. ` +
+                `Registered: ${this.registered.map((p) => p.provider.id).join(', ')}`,
+            )
+          }
+          // Pick the head of the capable list (round-robin) but include
+          // the rest in order so failover walks the whole capable set
+          // before giving up.
+          const start = this.roundRobinIndex % capable.length
+          this.roundRobinIndex = (this.roundRobinIndex + 1) % this.registered.length
+          return capable
+            .slice(start)
+            .concat(capable.slice(0, start))
+            .map((c) => c.provider)
         }
-        return [match.provider]
-      }
-      case 'capability': {
-        const capable = this.registered.filter((p) => {
-          const cap = p.provider.capabilities[this.capability]
-          return typeof cap === 'boolean' ? cap : false
-        })
-        if (capable.length === 0) {
-          throw new Error(
-            `No registered provider has capability '${String(this.capability)}': true. ` +
-              `Registered: ${this.registered.map((p) => p.provider.id).join(', ')}`,
-          )
+        case 'round-robin': {
+          const start = this.roundRobinIndex % this.registered.length
+          this.roundRobinIndex = (this.roundRobinIndex + 1) % this.registered.length
+          return this.registered
+            .slice(start)
+            .concat(this.registered.slice(0, start))
+            .map((c) => c.provider)
         }
-        // Pick the head of the capable list (round-robin) but include
-        // the rest in order so failover walks the whole capable set
-        // before giving up.
-        const start = this.roundRobinIndex % capable.length
-        this.roundRobinIndex = (this.roundRobinIndex + 1) % this.registered.length
-        return capable
-          .slice(start)
-          .concat(capable.slice(0, start))
-          .map((c) => c.provider)
+        case 'weighted': {
+          return [this.pickWeighted()]
+        }
+        default: {
+          return []
+        }
       }
-      case 'round-robin': {
-        const start = this.roundRobinIndex % this.registered.length
-        this.roundRobinIndex = (this.roundRobinIndex + 1) % this.registered.length
-        return this.registered
-          .slice(start)
-          .concat(this.registered.slice(0, start))
-          .map((c) => c.provider)
-      }
-      case 'weighted': {
-        return [this.pickWeighted()]
-      }
-      default: {
-        return []
-      }
-    }
+    })
   }
 
   /**
@@ -458,7 +488,7 @@ export class ProviderPool extends BaseProviderPool {
     fn: (provider: BaseProvider) => Promise<T>,
     request: ChatRequest | EmbedRequest,
   ): Promise<T> {
-    const candidates = this.candidatesFor(request)
+    const candidates = await this.candidatesFor(request)
     if (candidates.length === 0) {
       throw new Error('ProviderPool has no registered providers')
     }

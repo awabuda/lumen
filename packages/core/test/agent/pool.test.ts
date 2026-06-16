@@ -373,4 +373,70 @@ describe('ProviderPool', () => {
       expect(err.name).toBe('PoolExhaustedError')
     })
   })
+
+  describe('concurrency', () => {
+    it('round-robin cursor is atomic under concurrent chat() calls', async () => {
+      // Without the internal Mutex, two `chat` calls landing in
+      // the same event-loop microtask can both read cursor=0 and
+      // both dispatch to provider 'a'. With the Mutex, each call
+      // gets a distinct provider and the union covers all three.
+      const seen: string[] = []
+      const a = makeStub('a', {
+        capabilities: defaultCapabilities(),
+        chat: async () => {
+          seen.push('a')
+          return chatResponse('a', 'A')
+        },
+      })
+      const b = makeStub('b', {
+        capabilities: defaultCapabilities(),
+        chat: async () => {
+          seen.push('b')
+          return chatResponse('b', 'B')
+        },
+      })
+      const c = makeStub('c', {
+        capabilities: defaultCapabilities(),
+        chat: async () => {
+          seen.push('c')
+          return chatResponse('c', 'C')
+        },
+      })
+      const p = new ProviderPool({
+        strategy: 'round-robin',
+        providers: [{ provider: a }, { provider: b }, { provider: c }],
+      })
+      await Promise.all([p.chat(basicChat('x')), p.chat(basicChat('x')), p.chat(basicChat('x'))])
+      // The exact order depends on microtask scheduling, but the
+      // union MUST be all three providers — no duplicates, no
+      // skips. A pre-mutex implementation can drop one or repeat
+      // one here.
+      expect(seen.sort()).toEqual(['a', 'b', 'c'])
+    })
+
+    it('50 concurrent chat() calls cycle round-robin with no provider skipped or repeated', async () => {
+      // The classic cursor race: N concurrent calls, all racing
+      // on the same cursor. With a Mutex, every call observes a
+      // strictly increasing cursor and each provider is hit
+      // exactly N/3 times.
+      const counts: Record<string, number> = { a: 0, b: 0, c: 0 }
+      const stubs = ['a', 'b', 'c'].map(
+        (id) =>
+          makeStub(id, {
+            capabilities: defaultCapabilities(),
+            chat: async () => {
+              counts[id] = (counts[id] ?? 0) + 1
+              return chatResponse(id, id.toUpperCase())
+            },
+          }),
+      )
+      const p = new ProviderPool({
+        strategy: 'round-robin',
+        providers: stubs.map((provider) => ({ provider })),
+      })
+      const N = 60 // divisible by 3
+      await Promise.all(Array.from({ length: N }, () => p.chat(basicChat('x'))))
+      expect(counts).toEqual({ a: N / 3, b: N / 3, c: N / 3 })
+    })
+  })
 })

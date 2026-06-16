@@ -219,3 +219,13 @@ export {
   type AgentRunResult,
   type RunEvent,
 } from './agent/index.js'
+
+// Concurrency primitives (async mutex)
+export {
+  AcquireTimeoutError,
+  BaseMutex,
+  Mutex,
+  MutexOptionsSchema,
+  type AcquireResult,
+  type MutexOptions,
+} from './concurrency/index.js'
