@@ -35,6 +35,7 @@ export {
   type SessionMessage,
   type SessionRecord,
   BaseMemoryStore,
+  BaseVectorMemoryStore,
 } from './base.js'
 
 export { InMemoryStore } from './in-memory-store.js'

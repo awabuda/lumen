@@ -14,6 +14,7 @@
 
 export {
   BaseMemoryStore,
+  BaseVectorMemoryStore,
   type MemoryQuery,
   type MemoryRecord,
   type MemorySearchResult,

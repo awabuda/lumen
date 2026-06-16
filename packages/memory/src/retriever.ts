@@ -23,7 +23,13 @@
  * the top-K results into the working-memory ring buffer.
  */
 
-import type { BaseMemoryStore, MemoryQuery, MemoryRecord, MemorySearchResult } from '@lumen/core'
+import type {
+  BaseMemoryStore,
+  BaseVectorMemoryStore,
+  MemoryQuery,
+  MemoryRecord,
+  MemorySearchResult,
+} from '@lumen/core'
 
 /** A retrieval query. Either `text` or `embedding` (or both) should be set. */
 export interface RetrievalQuery {
@@ -33,7 +39,7 @@ export interface RetrievalQuery {
    * Float32-packed little-endian query embedding, same
    * dimensionality as the active vector backend. When
    * provided, the retriever asks the store for a vector
-   * search via {@link BaseMemoryStore.vectorSearch}.
+   *   search via {@link BaseVectorMemoryStore.vectorSearch}.
    */
   readonly embedding?: Uint8Array
   /** Restrict to records of a specific kind. */
@@ -69,32 +75,30 @@ export abstract class BaseRetriever {
  *      {@link BaseMemoryStore.search} for the keyword
  *      score. Records in the result are tagged 'text'.
  *   2. If the query has an `embedding` part, call
- *      {@link BaseMemoryStore.vectorSearch} for the
+ *      {@link BaseVectorMemoryStore.vectorSearch} for the
  *      vector score. Records are tagged 'vector'.
  *   3. Records appearing in both lists get a fused
  *      score: `(1 - vectorWeight) * textScore +
- *      vectorWeight * vectorScore`. Records appearing
- *      in only one list keep their score from that list.
+ *      vectorWeight * vectorScore`. Records appearing in
+ *      only one list keep their score from that list.
  *
  * This is a *reciprocal-rank-free* fusion. RRF would be
  * better in adversarial corpora; the linear blend is
  * easier to reason about and works well for the small
  * (< 10K) corpora we expect on a single-machine Lumen
  * install.
+ *
+ * The vector store is required (not optional) at the type
+ * level: a {@link BaseVectorMemoryStore} contractually
+ * provides `vectorSearch`. If a caller doesn't need
+ * vectors they use {@link TextOnlyRetriever} instead.
  */
 export class HybridRetriever extends BaseRetriever {
   public readonly id = 'hybrid'
-  private readonly store: BaseMemoryStore
+  private readonly store: BaseVectorMemoryStore
   private readonly vectorWeight: number
-  /**
-   * The store is duck-typed: we check at construction
-   * time whether it exposes a `vectorSearch` method. If
-   * it does, the vector path is enabled; otherwise we
-   * silently fall back to text-only.
-   */
-  private readonly hasVector: boolean
 
-  public constructor(store: BaseMemoryStore, options: { vectorWeight?: number } = {}) {
+  public constructor(store: BaseVectorMemoryStore, options: { vectorWeight?: number } = {}) {
     super()
     this.store = store
     const vw = options.vectorWeight ?? 0.6
@@ -102,21 +106,23 @@ export class HybridRetriever extends BaseRetriever {
       throw new Error(`HybridRetriever: vectorWeight must be in [0, 1], got ${vw}`)
     }
     this.vectorWeight = vw
-    this.hasVector = typeof (store as { vectorSearch?: unknown }).vectorSearch === 'function'
   }
 
   public async retrieve(query: RetrievalQuery): Promise<ReadonlyArray<RetrievalResult>> {
     const limit = query.limit ?? 10
     const minTrust = query.minTrust ?? 0
-    const textResults = query.text ? await this.textQuery(query, minTrust) : new Map<string, RetrievalResult>()
-    const vectorResults = query.embedding && this.hasVector
+    const textResults = query.text
+      ? await this.textQuery(query, minTrust)
+      : new Map<string, RetrievalResult>()
+    const vectorResults = query.embedding
       ? await this.vectorQuery(query, limit)
       : new Map<string, RetrievalResult>()
     // Apply kind filter to both sides. A vector hit that
     // does not match the kind filter is dropped here.
     if (query.kind) {
       for (const [id, r] of textResults) if (r.record.kind !== query.kind) textResults.delete(id)
-      for (const [id, r] of vectorResults) if (r.record.kind !== query.kind) vectorResults.delete(id)
+      for (const [id, r] of vectorResults)
+        if (r.record.kind !== query.kind) vectorResults.delete(id)
     }
     // Fuse the two maps. The id is the join key.
     const fused = new Map<string, RetrievalResult>()
@@ -140,7 +146,10 @@ export class HybridRetriever extends BaseRetriever {
     return [...fused.values()].sort((a, b) => b.score - a.score).slice(0, limit)
   }
 
-  private async textQuery(query: RetrievalQuery, minTrust: number): Promise<Map<string, RetrievalResult>> {
+  private async textQuery(
+    query: RetrievalQuery,
+    minTrust: number,
+  ): Promise<Map<string, RetrievalResult>> {
     const mq: MemoryQuery = {
       text: query.text,
       kind: query.kind,
@@ -155,14 +164,20 @@ export class HybridRetriever extends BaseRetriever {
     return out
   }
 
-  private async vectorQuery(query: RetrievalQuery, limit: number): Promise<Map<string, RetrievalResult>> {
-    // The store is duck-typed for vectorSearch; the
-    // existence check in the constructor guarantees this
-    // call is safe at runtime.
-    const vectorStore = this.store as BaseMemoryStore & {
-      vectorSearch: (e: Uint8Array, k: number) => Promise<ReadonlyArray<MemorySearchResult>>
+  private async vectorQuery(
+    query: RetrievalQuery,
+    limit: number,
+  ): Promise<Map<string, RetrievalResult>> {
+    // The store is statically typed as a {@link BaseVectorMemoryStore},
+    // so `vectorSearch` is part of the contract — no cast, no
+    // duck-typing, no runtime `hasVector` check.
+    // `query.embedding` is `Uint8Array | undefined`; this method is
+    // only reached when the caller has already gated on its presence
+    // (see `query()`), so the value is defined here.
+    if (query.embedding === undefined) {
+      return new Map<string, RetrievalResult>()
     }
-    const results = await vectorStore.vectorSearch(query.embedding!, limit)
+    const results = await this.store.vectorSearch(query.embedding, limit)
     const out = new Map<string, RetrievalResult>()
     for (const r of results) {
       out.set(r.record.id, { record: r.record, score: r.score, sources: ['vector'] })

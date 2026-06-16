@@ -78,7 +78,7 @@ export type {
   SessionRecord,
   SessionMessage,
 } from './memory/index.js'
-export { BaseMemoryStore } from './memory/index.js'
+export { BaseMemoryStore, BaseVectorMemoryStore } from './memory/index.js'
 export {
   BaseWorkingMemory,
   RingBufferWorkingMemory,

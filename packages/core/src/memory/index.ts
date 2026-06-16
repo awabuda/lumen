@@ -132,6 +132,41 @@ export abstract class BaseMemoryStore {
   public abstract prune(olderThanMs: number): Promise<number>
 }
 
+/**
+ * A {@link BaseMemoryStore} that additionally supports top-K vector
+ * similarity search. The vector path is *intentionally* split off
+ * from the base contract:
+ *
+ *   - Not every store can do vectors (an in-memory test fixture, a
+ *     read-only archive, a future Redis-backed implementation that
+ *     delegates vectors to a sidecar).
+ *   - Duck-typing `store as { vectorSearch?: ... }` is a banned
+ *     pattern in this codebase (CLAUDE.md rule #3: "No duck-typing").
+ *     Forcing the type at the boundary is the only honest answer.
+ *
+ * If a caller wants hybrid retrieval, they pass a
+ * {@link BaseVectorMemoryStore}; if they only need text, they pass
+ * a {@link BaseMemoryStore} to {@link TextOnlyRetriever}.
+ */
+export abstract class BaseVectorMemoryStore extends BaseMemoryStore {
+  /**
+   * Top-K vector similarity search over the stored embeddings.
+   *
+   * @param embedding Float32-packed little-endian query embedding,
+   *   same dimensionality as the active vector backend. The same
+   *   representation {@link TextEmbedder}-style backends use.
+   * @param k Maximum hits to return. Implementations may return
+   *   fewer when the corpus is small.
+   * @returns Up to `k` {@link MemorySearchResult} records ordered
+   *   by descending similarity. Records without a stored
+   *   embedding are NOT returned by this method.
+   */
+  public abstract vectorSearch(
+    embedding: Uint8Array,
+    k?: number,
+  ): Promise<ReadonlyArray<MemorySearchResult>>
+}
+
 export {
   BaseWorkingMemory,
   RingBufferWorkingMemory,

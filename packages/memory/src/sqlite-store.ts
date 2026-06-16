@@ -40,7 +40,14 @@
  *     runs the migration script separately. We do not silently
  *     mutate a user's database on `init()`.
  */
-import { BaseMemoryStore, type MemoryQuery, type MemoryRecord, type MemorySearchResult, type SessionMessage, type SessionRecord } from '@lumen/core'
+import {
+  BaseVectorMemoryStore,
+  type MemoryQuery,
+  type MemoryRecord,
+  type MemorySearchResult,
+  type SessionMessage,
+  type SessionRecord,
+} from '@lumen/core'
 import BetterSqlite3, { type Database as BetterSqlite3Database, type Statement } from 'better-sqlite3'
 import {
   BaseVectorBackend,
@@ -71,7 +78,7 @@ export interface SqliteStoreConfig {
   readonly verbose?: (sql: string) => void
 }
 
-export class SqliteStore extends BaseMemoryStore {
+export class SqliteStore extends BaseVectorMemoryStore {
   public readonly id = 'sqlite'
   private readonly db: BetterSqlite3Database
   /**
