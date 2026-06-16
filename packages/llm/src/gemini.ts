@@ -21,25 +21,23 @@
 import { z } from 'zod'
 
 import {
-  BaseProvider,
   type AssistantMessage,
+  BaseProvider,
   type ChatRequest,
   type ChatResponse,
   type EmbedRequest,
   type EmbedResponse,
   type Message,
   type ProviderCapabilities,
+  type RetryConfig,
   type StreamEvent,
   type StreamOptions,
   type ToolMessage,
   type UserMessage,
+  withRetry,
 } from '@lumen/core'
 
-import {
-  HttpStatusError,
-  isRetryableStatus,
-  parseResponseJson,
-} from './errors.js'
+import { HttpStatusError, isRetryableStatus, parseResponseJson } from './errors.js'
 
 // ---------------------------------------------------------------------------
 // Defaults + options
@@ -77,6 +75,19 @@ export const GeminiOptionsSchema = z.object({
     .optional(),
   /** Fetch implementation. */
   fetchImpl: z.custom<typeof fetch>().optional(),
+  /**
+   * Retry policy for transient HTTP failures (5xx, 408, 429).
+   * Defaults to no retry.
+   */
+  retry: z
+    .object({
+      maxAttempts: z.number().int().positive().optional(),
+      initialDelayMs: z.number().int().nonnegative().optional(),
+      maxDelayMs: z.number().int().nonnegative().optional(),
+      backoffFactor: z.number().positive().optional(),
+      jitter: z.number().min(0).max(1).optional(),
+    })
+    .optional(),
 })
 
 /** Options for {@link GeminiProvider}. */
@@ -163,9 +174,7 @@ const GeminiGenerateRequestSchema = z.object({
 
 const GeminiCandidateSchema = z.object({
   content: GeminiContentSchema.optional(),
-  finishReason: z
-    .enum(['STOP', 'MAX_TOKENS', 'SAFETY', 'RECITATION', 'OTHER'])
-    .optional(),
+  finishReason: z.enum(['STOP', 'MAX_TOKENS', 'SAFETY', 'RECITATION', 'OTHER']).optional(),
 })
 
 const GeminiUsageSchema = z.object({
@@ -201,6 +210,7 @@ export class GeminiProvider extends BaseProvider {
   private readonly embedModel: string
   private readonly timeoutMs: number
   private readonly fetchImpl: typeof fetch
+  private readonly retry: RetryConfig | undefined
 
   public constructor(options: GeminiOptions) {
     super()
@@ -211,6 +221,7 @@ export class GeminiProvider extends BaseProvider {
     this.defaultModel = parsed.defaultModel
     this.embedModel = parsed.embedModel
     this.timeoutMs = parsed.timeoutMs
+    this.retry = parsed.retry
     this.fetchImpl =
       parsed.fetchImpl ??
       (typeof globalThis.fetch === 'function'
@@ -227,10 +238,7 @@ export class GeminiProvider extends BaseProvider {
   // Public API
   // -------------------------------------------------------------------------
 
-  public override async chat(
-    request: ChatRequest,
-    options?: StreamOptions,
-  ): Promise<ChatResponse> {
+  public override async chat(request: ChatRequest, options?: StreamOptions): Promise<ChatResponse> {
     this.validateRequest(request)
     const start = Date.now()
     const body = this.buildRequestBody(request)
@@ -331,9 +339,7 @@ export class GeminiProvider extends BaseProvider {
     return `${this.baseUrl}/v1beta/models/${encodeURIComponent(model)}:embedContent?key=${encodeURIComponent(this.apiKey)}`
   }
 
-  private buildRequestBody(
-    request: ChatRequest,
-  ): z.infer<typeof GeminiGenerateRequestSchema> {
+  private buildRequestBody(request: ChatRequest): z.infer<typeof GeminiGenerateRequestSchema> {
     const contents: z.infer<typeof GeminiContentSchema>[] = []
     let systemInstruction: z.infer<typeof GeminiSystemInstructionSchema> | undefined
     for (const m of request.messages) {
@@ -352,9 +358,7 @@ export class GeminiProvider extends BaseProvider {
     const body: z.infer<typeof GeminiGenerateRequestSchema> = { contents }
     if (systemInstruction) body.systemInstruction = systemInstruction
     if (request.tools && request.tools.length > 0) {
-      body.tools = [
-        { functionDeclarations: request.tools.map(toToolDecl) },
-      ]
+      body.tools = [{ functionDeclarations: request.tools.map(toToolDecl) }]
     }
     if (
       request.temperature !== undefined ||
@@ -417,23 +421,36 @@ export class GeminiProvider extends BaseProvider {
     stream: boolean,
     options?: StreamOptions,
   ): Promise<Response> {
-    const init: RequestInit = {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
+    const doFetch = async (): Promise<Response> => {
+      const init: RequestInit = {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }
+      const baseSignal = options?.signal ?? new AbortController().signal
+      if (stream) {
+        ;(init.headers as Record<string, string>).accept = 'text/event-stream'
+      }
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), this.timeoutMs)
+      init.signal = mergeSignals(baseSignal, controller.signal)
+      try {
+        const response = await this.fetchImpl(url, init)
+        // See ollama.ts for rationale: throw ProviderError here so
+        // withRetry can re-issue on transient HTTP failures.
+        if (this.retry && !response.ok) {
+          const text = await response.text()
+          throw this.makeHttpError(response.status, text)
+        }
+        return response
+      } finally {
+        clearTimeout(timeout)
+      }
     }
-    const baseSignal = options?.signal ?? new AbortController().signal
-    if (stream) {
-      (init.headers as Record<string, string>)['accept'] = 'text/event-stream'
+    if (this.retry) {
+      return withRetry(doFetch, { ...this.retry, signal: options?.signal })
     }
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs)
-    init.signal = mergeSignals(baseSignal, controller.signal)
-    try {
-      return await this.fetchImpl(url, init)
-    } finally {
-      clearTimeout(timeout)
-    }
+    return doFetch()
   }
 
   private makeHttpError(status: number, body: string): Error {
@@ -495,9 +512,7 @@ const userMessageToParts = (m: UserMessage): z.infer<typeof GeminiPartSchema>[] 
   })
 }
 
-const assistantMessageToParts = (
-  m: AssistantMessage,
-): z.infer<typeof GeminiPartSchema>[] => {
+const assistantMessageToParts = (m: AssistantMessage): z.infer<typeof GeminiPartSchema>[] => {
   const parts: z.infer<typeof GeminiPartSchema>[] = []
   if (m.content) parts.push({ text: m.content })
   for (const tc of m.toolCalls ?? []) {
@@ -526,7 +541,11 @@ const toolMessageToPart = (m: ToolMessage): z.infer<typeof GeminiPartSchema> => 
   }
 }
 
-const toToolDecl = (t: { readonly name: string; readonly description?: string; readonly inputJsonSchema?: unknown }): z.infer<typeof GeminiToolDeclarationSchema> => {
+const toToolDecl = (t: {
+  readonly name: string
+  readonly description?: string
+  readonly inputJsonSchema?: unknown
+}): z.infer<typeof GeminiToolDeclarationSchema> => {
   const out: z.infer<typeof GeminiToolDeclarationSchema> = { name: t.name }
   if (t.description) out.description = t.description
   if (t.inputJsonSchema) out.parameters = t.inputJsonSchema as Record<string, unknown>
@@ -550,10 +569,7 @@ const emptyAssistantMessage = (): AssistantMessage => ({
   toolCalls: [],
 })
 
-const mergeSignals = (
-  a: AbortSignal,
-  b: AbortSignal,
-): AbortSignal => {
+const mergeSignals = (a: AbortSignal, b: AbortSignal): AbortSignal => {
   if (a.aborted || b.aborted) {
     return AbortSignal.abort()
   }

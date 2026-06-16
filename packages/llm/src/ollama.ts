@@ -47,27 +47,34 @@
  * (no extended thinking), or any auth beyond the optional bearer.
  */
 
-import { z } from 'zod'
 import {
+  type AssistantMessage,
   BaseProvider,
-  ProviderError,
   type ChatRequest,
   type ChatResponse,
+  type ContentPart,
   type EmbedRequest,
   type EmbedResponse,
-  type ProviderCapabilities,
-  type StreamEvent,
-  type StreamOptions,
-  type AssistantMessage,
-  type ContentPart,
   type ImagePart,
   type Message,
+  type ProviderCapabilities,
+  ProviderError,
+  type RetryConfig,
+  type StreamEvent,
+  type StreamOptions,
   type TextPart,
   type ToolCall,
   type ToolDescriptor,
   type UserMessage,
+  withRetry,
 } from '@lumen/core'
-import { HttpStatusError, ResponseShapeError, isRetryableStatus, parseResponseJson } from './errors.js'
+import { z } from 'zod'
+import {
+  HttpStatusError,
+  ResponseShapeError,
+  isRetryableStatus,
+  parseResponseJson,
+} from './errors.js'
 
 // ---------------------------------------------------------------------------
 // Zod schemas for the Ollama wire format
@@ -228,6 +235,13 @@ export interface OllamaOptions {
   readonly capabilities?: Partial<ProviderCapabilities>
   /** Inject a custom fetch implementation (used by tests). */
   readonly fetchImpl?: typeof fetch
+  /**
+   * Retry policy for transient HTTP failures (5xx, 408, 429). Defaults
+   * to no retry — supply `maxAttempts: 3` (etc.) to opt in. The
+   * {@link ProviderError.retryable} flag set by `makeHttpError` drives
+   * the loop, so non-retryable 4xx responses short-circuit immediately.
+   */
+  readonly retry?: RetryConfig
 }
 
 // ---------------------------------------------------------------------------
@@ -465,6 +479,7 @@ export class OllamaProvider extends BaseProvider {
   private readonly timeoutMs: number
   private readonly useLegacyEmbeddings: boolean
   private readonly fetchImpl: typeof fetch
+  private readonly retry: RetryConfig | undefined
 
   constructor(options: OllamaOptions) {
     super()
@@ -478,6 +493,7 @@ export class OllamaProvider extends BaseProvider {
     this.defaultHeaders = options.defaultHeaders ?? {}
     this.timeoutMs = options.timeoutMs ?? 120_000
     this.useLegacyEmbeddings = options.useLegacyEmbeddings ?? false
+    this.retry = options.retry
     this.fetchImpl =
       options.fetchImpl ??
       (typeof globalThis.fetch === 'function'
@@ -601,7 +617,10 @@ export class OllamaProvider extends BaseProvider {
     }
   }
 
-  public override async embed(request: EmbedRequest, options?: StreamOptions): Promise<EmbedResponse> {
+  public override async embed(
+    request: EmbedRequest,
+    options?: StreamOptions,
+  ): Promise<EmbedResponse> {
     if (request.input.length === 0) {
       throw new ProviderError('EmbedRequest.input must contain at least one string', {
         providerId: this.id,
@@ -623,7 +642,12 @@ export class OllamaProvider extends BaseProvider {
         const parsed = parseResponseJson(rawText, OllamaEmbedResponseSchema)
         if (!parsed.embedding) {
           throw new ResponseShapeError(
-            [{ path: 'embedding', message: 'Ollama /api/embeddings response missing `embedding` field' }],
+            [
+              {
+                path: 'embedding',
+                message: 'Ollama /api/embeddings response missing `embedding` field',
+              },
+            ],
             rawText,
           )
         }
@@ -673,7 +697,8 @@ export class OllamaProvider extends BaseProvider {
       model: request.model || this.defaultModel,
       messages: messagesToOllama(request.messages),
     }
-    if (request.temperature !== undefined) body.options = { ...(body.options as object | undefined), temperature: request.temperature }
+    if (request.temperature !== undefined)
+      body.options = { ...(body.options as object | undefined), temperature: request.temperature }
     if (request.maxTokens !== undefined) {
       const opts = (body.options as Record<string, unknown> | undefined) ?? {}
       opts.num_predict = request.maxTokens
@@ -696,51 +721,70 @@ export class OllamaProvider extends BaseProvider {
     return body
   }
 
-  private async performFetch(path: string, body: unknown, options?: StreamOptions): Promise<Response> {
-    const url = `${this.baseUrl}${path}`
-    const headers: Record<string, string> = {
-      'content-type': 'application/json',
-      accept: 'application/json',
-      ...this.defaultHeaders,
-      ...(options?.headers ?? {}),
-    }
-    if (this.apiKey.length > 0) {
-      headers.authorization = `Bearer ${this.apiKey}`
-    }
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(new Error('request timeout')), this.timeoutMs)
-    const signal = options?.signal
-    if (signal) {
-      if (signal.aborted) {
-        clearTimeout(timeout)
-        throw new DOMException('Aborted', 'AbortError')
+  private async performFetch(
+    path: string,
+    body: unknown,
+    options?: StreamOptions,
+  ): Promise<Response> {
+    const doFetch = async (): Promise<Response> => {
+      const url = `${this.baseUrl}${path}`
+      const headers: Record<string, string> = {
+        'content-type': 'application/json',
+        accept: 'application/json',
+        ...this.defaultHeaders,
+        ...(options?.headers ?? {}),
       }
-      signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true })
+      if (this.apiKey.length > 0) {
+        headers.authorization = `Bearer ${this.apiKey}`
+      }
+      const controller = new AbortController()
+      const timeout = setTimeout(
+        () => controller.abort(new Error('request timeout')),
+        this.timeoutMs,
+      )
+      const signal = options?.signal
+      if (signal) {
+        if (signal.aborted) {
+          clearTimeout(timeout)
+          throw new DOMException('Aborted', 'AbortError')
+        }
+        signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true })
+      }
+      try {
+        const response = await this.fetchImpl(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        })
+        // When retry is enabled, surface non-2xx as a ProviderError here so
+        // withRetry can re-issue the request. The caller's redundant
+        // `!response.ok` check is harmless (never sees non-2xx) and
+        // remains as the back-compat path when retry is disabled.
+        if (this.retry && !response.ok) {
+          const text = await response.text()
+          throw this.makeHttpError(response.status, text)
+        }
+        return response
+      } finally {
+        clearTimeout(timeout)
+      }
     }
-    try {
-      return await this.fetchImpl(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      })
-    } finally {
-      clearTimeout(timeout)
+    if (this.retry) {
+      return withRetry(doFetch, { ...this.retry, signal: options?.signal })
     }
+    return doFetch()
   }
 
   private makeHttpError(status: number, body: string): ProviderError {
     const retryable = isRetryableStatus(status)
     const upstreamMessage = extractOllamaErrorMessage(body)
-    return new ProviderError(
-      upstreamMessage ?? `Ollama provider returned HTTP ${status}`,
-      {
-        providerId: this.id,
-        statusCode: status,
-        retryable,
-        cause: new HttpStatusError(status, body, retryable),
-      },
-    )
+    return new ProviderError(upstreamMessage ?? `Ollama provider returned HTTP ${status}`, {
+      providerId: this.id,
+      statusCode: status,
+      retryable,
+      cause: new HttpStatusError(status, body, retryable),
+    })
   }
 }
 

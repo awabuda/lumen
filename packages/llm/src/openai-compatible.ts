@@ -24,27 +24,29 @@
  *     fabricating a value.
  */
 
-import { z } from 'zod'
 import {
+  type AssistantMessage,
   BaseProvider,
-  ProviderError,
   type ChatRequest,
   type ChatResponse,
+  type ContentPart,
   type EmbedRequest,
   type EmbedResponse,
+  type ImagePart,
+  type Message,
   type ProviderCapabilities,
+  ProviderError,
+  type RetryConfig,
   type StreamEvent,
   type StreamOptions,
-  type AssistantMessage,
-  type ToolCall,
-  type Message,
-  type ContentPart,
-  type ImagePart,
   type TextPart,
+  type ToolCall,
+  type ToolDescriptor,
   type ToolResult,
   type UserMessage,
-  type ToolDescriptor,
+  withRetry,
 } from '@lumen/core'
+import { z } from 'zod'
 import {
   HttpStatusError,
   ResponseShapeError,
@@ -99,7 +101,11 @@ const OpenAIChoiceSchema = z.object({
   index: z.number().int().nonnegative(),
   message: OpenAIMessageSchema,
   finish_reason: z
-    .union([z.enum(['stop', 'length', 'tool_calls', 'content_filter', 'function_call']), z.string(), z.null()])
+    .union([
+      z.enum(['stop', 'length', 'tool_calls', 'content_filter', 'function_call']),
+      z.string(),
+      z.null(),
+    ])
     .optional(),
 })
 
@@ -140,7 +146,11 @@ const OpenAIStreamChoiceSchema = z.object({
   index: z.number().int().nonnegative(),
   delta: OpenAIStreamDeltaSchema,
   finish_reason: z
-    .union([z.enum(['stop', 'length', 'tool_calls', 'content_filter', 'function_call']), z.string(), z.null()])
+    .union([
+      z.enum(['stop', 'length', 'tool_calls', 'content_filter', 'function_call']),
+      z.string(),
+      z.null(),
+    ])
     .optional(),
 })
 
@@ -199,6 +209,13 @@ export interface OpenAICompatibleOptions {
    * global `fetch` available in Node 20+.
    */
   readonly fetchImpl?: typeof fetch
+  /**
+   * Retry policy for transient HTTP failures (5xx, 408, 429). Defaults
+   * to no retry. The {@link ProviderError.retryable} flag set by
+   * `makeHttpError` drives the loop, so non-retryable 4xx responses
+   * short-circuit immediately.
+   */
+  readonly retry?: RetryConfig
 }
 
 // ---------------------------------------------------------------------------
@@ -267,7 +284,11 @@ function messagesToOpenAI(messages: ReadonlyArray<Message>): Array<Record<string
         break
       }
       case 'user': {
-        out.push({ role: 'user', content: userContentToOpenAI(m), ...(m.name ? { name: m.name } : {}) })
+        out.push({
+          role: 'user',
+          content: userContentToOpenAI(m),
+          ...(m.name ? { name: m.name } : {}),
+        })
         break
       }
       case 'assistant': {
@@ -354,7 +375,9 @@ function choiceToAssistantMessage(
     content,
     toolCalls,
     ...(model ? { model } : {}),
-    ...(mapFinishReason(choice.finish_reason) ? { finishReason: mapFinishReason(choice.finish_reason)! } : {}),
+    ...(mapFinishReason(choice.finish_reason)
+      ? { finishReason: mapFinishReason(choice.finish_reason)! }
+      : {}),
   }
 }
 
@@ -382,6 +405,7 @@ export class OpenAICompatibleProvider extends BaseProvider {
   private readonly defaultHeaders: Readonly<Record<string, string>>
   private readonly timeoutMs: number
   private readonly fetchImpl: typeof fetch
+  private readonly retry: RetryConfig | undefined
 
   constructor(options: OpenAICompatibleOptions) {
     super()
@@ -397,6 +421,7 @@ export class OpenAICompatibleProvider extends BaseProvider {
     this.defaultModel = options.defaultModel
     this.defaultHeaders = options.defaultHeaders ?? {}
     this.timeoutMs = options.timeoutMs ?? 60_000
+    this.retry = options.retry
     // Resolve the fetch implementation lazily: prefer the override, then
     // the global, then throw a helpful error if neither exists.
     this.fetchImpl =
@@ -536,10 +561,13 @@ export class OpenAICompatibleProvider extends BaseProvider {
       if (!acc.id || !acc.name) {
         // Some servers omit id on intermediate chunks; bail rather than emit a
         // broken tool call.
-        throw new ProviderError('OpenAI-compatible provider streamed a tool call without an id or name', {
-          providerId: this.id,
-          retryable: false,
-        })
+        throw new ProviderError(
+          'OpenAI-compatible provider streamed a tool call without an id or name',
+          {
+            providerId: this.id,
+            retryable: false,
+          },
+        )
       }
       const toolCall: ToolCall = {
         id: acc.id,
@@ -567,11 +595,17 @@ export class OpenAICompatibleProvider extends BaseProvider {
    * this class targets. Override in a subclass or build a dedicated
    * `OpenAIEmbeddingProvider` if you need them.
    */
-  public override async embed(_request: EmbedRequest, _options?: StreamOptions): Promise<EmbedResponse> {
-    throw new ProviderError(`Provider ${this.id} does not implement embeddings via chat-completions`, {
-      providerId: this.id,
-      retryable: false,
-    })
+  public override async embed(
+    _request: EmbedRequest,
+    _options?: StreamOptions,
+  ): Promise<EmbedResponse> {
+    throw new ProviderError(
+      `Provider ${this.id} does not implement embeddings via chat-completions`,
+      {
+        providerId: this.id,
+        retryable: false,
+      },
+    )
   }
 
   // -------------------------------------------------------------------------
@@ -593,7 +627,8 @@ export class OpenAICompatibleProvider extends BaseProvider {
     if (request.temperature !== undefined) body.temperature = request.temperature
     if (request.maxTokens !== undefined) body.max_tokens = request.maxTokens
     if (request.topP !== undefined) body.top_p = request.topP
-    if (request.stop !== undefined) body.stop = request.stop.length === 1 ? request.stop[0] : [...request.stop]
+    if (request.stop !== undefined)
+      body.stop = request.stop.length === 1 ? request.stop[0] : [...request.stop]
     if (request.tools && request.tools.length > 0) {
       body.tools = request.tools.map((t: ToolDescriptor) => ({
         type: 'function' as const,
@@ -609,37 +644,57 @@ export class OpenAICompatibleProvider extends BaseProvider {
   }
 
   /** Build a request, attach auth/headers, and execute the fetch. */
-  private async performFetch(path: string, body: unknown, options?: StreamOptions): Promise<Response> {
-    const url = `${this.baseUrl}${path}`
-    const headers: Record<string, string> = {
-      'content-type': 'application/json',
-      accept: 'application/json',
-      ...this.defaultHeaders,
-      ...(options?.headers ?? {}),
-    }
-    if (this.apiKey.length > 0) {
-      headers.authorization = `Bearer ${this.apiKey}`
-    }
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(new Error('request timeout')), this.timeoutMs)
-    const signal = options?.signal
-    if (signal) {
-      if (signal.aborted) {
-        clearTimeout(timeout)
-        throw new DOMException('Aborted', 'AbortError')
+  private async performFetch(
+    path: string,
+    body: unknown,
+    options?: StreamOptions,
+  ): Promise<Response> {
+    const doFetch = async (): Promise<Response> => {
+      const url = `${this.baseUrl}${path}`
+      const headers: Record<string, string> = {
+        'content-type': 'application/json',
+        accept: 'application/json',
+        ...this.defaultHeaders,
+        ...(options?.headers ?? {}),
       }
-      signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true })
+      if (this.apiKey.length > 0) {
+        headers.authorization = `Bearer ${this.apiKey}`
+      }
+      const controller = new AbortController()
+      const timeout = setTimeout(
+        () => controller.abort(new Error('request timeout')),
+        this.timeoutMs,
+      )
+      const signal = options?.signal
+      if (signal) {
+        if (signal.aborted) {
+          clearTimeout(timeout)
+          throw new DOMException('Aborted', 'AbortError')
+        }
+        signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true })
+      }
+      try {
+        const response = await this.fetchImpl(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        })
+        // See ollama.ts for rationale: throw ProviderError here so
+        // withRetry can re-issue on transient HTTP failures.
+        if (this.retry && !response.ok) {
+          const text = await response.text()
+          throw this.makeHttpError(response.status, text)
+        }
+        return response
+      } finally {
+        clearTimeout(timeout)
+      }
     }
-    try {
-      return await this.fetchImpl(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      })
-    } finally {
-      clearTimeout(timeout)
+    if (this.retry) {
+      return withRetry(doFetch, { ...this.retry, signal: options?.signal })
     }
+    return doFetch()
   }
 
   /** Convert a non-2xx HTTP response into a typed `ProviderError`. */
@@ -650,7 +705,12 @@ export class OpenAICompatibleProvider extends BaseProvider {
     const upstreamMessage = extractUpstreamMessage(body)
     return new ProviderError(
       upstreamMessage ?? `OpenAI-compatible provider returned HTTP ${status}`,
-      { providerId: this.id, statusCode: status, retryable, cause: new HttpStatusError(status, body, retryable) },
+      {
+        providerId: this.id,
+        statusCode: status,
+        retryable,
+        cause: new HttpStatusError(status, body, retryable),
+      },
     )
   }
 }
@@ -672,7 +732,9 @@ const SSE_DONE_MARKER = '[DONE]'
  * concatenate multi-line data values according to the SSE spec, although the
  * OpenAI providers we've seen never split a single event across lines.
  */
-export async function* parseSseChunks(body: ReadableStream<Uint8Array>): AsyncGenerator<string, void, void> {
+export async function* parseSseChunks(
+  body: ReadableStream<Uint8Array>,
+): AsyncGenerator<string, void, void> {
   const decoder = new TextDecoder('utf-8')
   const reader = body.getReader()
   let buffer = ''

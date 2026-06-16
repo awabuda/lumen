@@ -29,27 +29,34 @@
  * Messages API does not expose one. `embed()` throws a `ProviderError`.
  */
 
-import { z } from 'zod'
 import {
+  type AssistantMessage,
   BaseProvider,
-  ProviderError,
   type ChatRequest,
   type ChatResponse,
+  type ContentPart,
   type EmbedRequest,
   type EmbedResponse,
-  type ProviderCapabilities,
-  type StreamEvent,
-  type StreamOptions,
-  type AssistantMessage,
-  type ContentPart,
   type ImagePart,
   type Message,
+  type ProviderCapabilities,
+  ProviderError,
+  type RetryConfig,
+  type StreamEvent,
+  type StreamOptions,
   type TextPart,
   type ToolCall,
   type ToolResult,
   type UserMessage,
+  withRetry,
 } from '@lumen/core'
-import { HttpStatusError, ResponseShapeError, isRetryableStatus, parseResponseJson } from './errors.js'
+import { z } from 'zod'
+import {
+  HttpStatusError,
+  ResponseShapeError,
+  isRetryableStatus,
+  parseResponseJson,
+} from './errors.js'
 import { parseSseChunks } from './openai-compatible.js'
 
 // ---------------------------------------------------------------------------
@@ -92,11 +99,7 @@ const AnthropicMessageResponseSchema = z.object({
   model: z.string().optional(),
   content: z.array(AnthropicContentBlockSchema),
   stop_reason: z
-    .union([
-      z.enum(['end_turn', 'max_tokens', 'stop_sequence', 'tool_use']),
-      z.string(),
-      z.null(),
-    ])
+    .union([z.enum(['end_turn', 'max_tokens', 'stop_sequence', 'tool_use']), z.string(), z.null()])
     .optional(),
   stop_sequence: z.string().nullable().optional(),
   usage: AnthropicUsageSchema.optional(),
@@ -212,9 +215,7 @@ export interface AnthropicCacheControl {
 const AnthropicSystemBlockSchema = z.object({
   type: z.literal('text'),
   text: z.string(),
-  cache_control: z
-    .object({ type: z.literal('ephemeral') })
-    .optional(),
+  cache_control: z.object({ type: z.literal('ephemeral') }).optional(),
 })
 
 // ---------------------------------------------------------------------------
@@ -259,6 +260,11 @@ export interface AnthropicOptions {
   readonly capabilities?: Partial<ProviderCapabilities>
   /** Inject a custom fetch implementation (used by tests). */
   readonly fetchImpl?: typeof fetch
+  /**
+   * Retry policy for transient HTTP failures (5xx, 408, 429). Defaults
+   * to no retry.
+   */
+  readonly retry?: RetryConfig
 }
 
 // ---------------------------------------------------------------------------
@@ -388,7 +394,9 @@ function assistantContentToAnthropic(m: AssistantMessage): Array<Record<string, 
   return blocks
 }
 
-function toolResultsToAnthropic(results: ReadonlyArray<ToolResult>): Array<Record<string, unknown>> {
+function toolResultsToAnthropic(
+  results: ReadonlyArray<ToolResult>,
+): Array<Record<string, unknown>> {
   return results.map((r) => {
     if (r.isError) {
       return {
@@ -414,7 +422,9 @@ function mapStopReason(reason: string | null | undefined): AssistantMessage['fin
   return undefined
 }
 
-function mapUsage(usage: z.infer<typeof AnthropicUsageSchema> | undefined): AssistantMessage['usage'] {
+function mapUsage(
+  usage: z.infer<typeof AnthropicUsageSchema> | undefined,
+): AssistantMessage['usage'] {
   if (!usage) return undefined
   return {
     inputTokens: usage.input_tokens,
@@ -447,7 +457,9 @@ function responseToAssistantMessage(
     ...(content !== undefined ? { content } : {}),
     toolCalls,
     ...(parsed.model ? { model: parsed.model } : { model: fallbackModel }),
-    ...(mapStopReason(parsed.stop_reason) ? { finishReason: mapStopReason(parsed.stop_reason)! } : {}),
+    ...(mapStopReason(parsed.stop_reason)
+      ? { finishReason: mapStopReason(parsed.stop_reason)! }
+      : {}),
     ...(parsed.usage ? { usage: mapUsage(parsed.usage)! } : {}),
   }
 }
@@ -472,6 +484,7 @@ export class AnthropicProvider extends BaseProvider {
   private readonly defaultHeaders: Readonly<Record<string, string>>
   private readonly timeoutMs: number
   private readonly fetchImpl: typeof fetch
+  private readonly retry: RetryConfig | undefined
 
   constructor(options: AnthropicOptions) {
     super()
@@ -492,6 +505,7 @@ export class AnthropicProvider extends BaseProvider {
     this.defaultMaxTokens = options.defaultMaxTokens ?? DEFAULT_MAX_TOKENS
     this.defaultHeaders = options.defaultHeaders ?? {}
     this.timeoutMs = options.timeoutMs ?? 60_000
+    this.retry = options.retry
     this.fetchImpl =
       options.fetchImpl ??
       (typeof globalThis.fetch === 'function'
@@ -612,7 +626,11 @@ export class AnthropicProvider extends BaseProvider {
               if (tool.args.length > 0) {
                 try {
                   const parsed_args: unknown = JSON.parse(tool.args)
-                  if (parsed_args && typeof parsed_args === 'object' && !Array.isArray(parsed_args)) {
+                  if (
+                    parsed_args &&
+                    typeof parsed_args === 'object' &&
+                    !Array.isArray(parsed_args)
+                  ) {
                     args = parsed_args as Record<string, unknown>
                   }
                 } catch (cause) {
@@ -690,7 +708,10 @@ export class AnthropicProvider extends BaseProvider {
     yield { type: 'message_complete', message: finalMessage }
   }
 
-  public override async embed(_request: EmbedRequest, _options?: StreamOptions): Promise<EmbedResponse> {
+  public override async embed(
+    _request: EmbedRequest,
+    _options?: StreamOptions,
+  ): Promise<EmbedResponse> {
     throw new ProviderError(
       `Provider ${this.id} does not implement embeddings via the Anthropic Messages API`,
       { providerId: this.id, retryable: false },
@@ -713,15 +734,12 @@ export class AnthropicProvider extends BaseProvider {
     // request time rather than 400ing on the wire), and hand them to
     // the splitter. An invalid shape throws a typed ProviderError.
     const systemBlocks = this.resolveSystemBlocks(request)
-    const { system, anthropicMessages } = splitSystemAndMessages(
-      request.messages,
-      systemBlocks,
-    )
+    const { system, anthropicMessages } = splitSystemAndMessages(request.messages, systemBlocks)
     if (anthropicMessages.length === 0) {
-      throw new ProviderError(
-        'Anthropic requires at least one non-system message in `messages`',
-        { providerId: this.id, retryable: false },
-      )
+      throw new ProviderError('Anthropic requires at least one non-system message in `messages`', {
+        providerId: this.id,
+        retryable: false,
+      })
     }
     const body: Record<string, unknown> = {
       model: request.model || this.defaultModel,
@@ -766,7 +784,7 @@ export class AnthropicProvider extends BaseProvider {
   private resolveSystemBlocks(
     request: ChatRequest,
   ): ReadonlyArray<AnthropicSystemBlock> | undefined {
-    const raw = request.providerOptions?.['anthropicSystemBlocks']
+    const raw = request.providerOptions?.anthropicSystemBlocks
     if (raw === undefined) return undefined
     const parsed = z.array(AnthropicSystemBlockSchema).safeParse(raw)
     if (!parsed.success) {
@@ -787,55 +805,72 @@ export class AnthropicProvider extends BaseProvider {
    * size, and we'd rather cache a strict subset than throw.
    */
   private resolveToolCacheControl(request: ChatRequest): ReadonlyArray<number> {
-    const raw = request.providerOptions?.['anthropicCacheTools']
+    const raw = request.providerOptions?.anthropicCacheTools
     if (raw === undefined || !Array.isArray(raw)) return []
     return raw.filter((v): v is number => typeof v === 'number' && Number.isInteger(v))
   }
 
-  private async performFetch(path: string, body: unknown, options?: StreamOptions): Promise<Response> {
-    const url = `${this.baseUrl}${path}`
-    const headers: Record<string, string> = {
-      'content-type': 'application/json',
-      accept: 'application/json',
-      'x-api-key': this.apiKey,
-      'anthropic-version': this.anthropicVersion,
-      ...this.defaultHeaders,
-      ...(options?.headers ?? {}),
-    }
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(new Error('request timeout')), this.timeoutMs)
-    const signal = options?.signal
-    if (signal) {
-      if (signal.aborted) {
-        clearTimeout(timeout)
-        throw new DOMException('Aborted', 'AbortError')
+  private async performFetch(
+    path: string,
+    body: unknown,
+    options?: StreamOptions,
+  ): Promise<Response> {
+    const doFetch = async (): Promise<Response> => {
+      const url = `${this.baseUrl}${path}`
+      const headers: Record<string, string> = {
+        'content-type': 'application/json',
+        accept: 'application/json',
+        'x-api-key': this.apiKey,
+        'anthropic-version': this.anthropicVersion,
+        ...this.defaultHeaders,
+        ...(options?.headers ?? {}),
       }
-      signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true })
+      const controller = new AbortController()
+      const timeout = setTimeout(
+        () => controller.abort(new Error('request timeout')),
+        this.timeoutMs,
+      )
+      const signal = options?.signal
+      if (signal) {
+        if (signal.aborted) {
+          clearTimeout(timeout)
+          throw new DOMException('Aborted', 'AbortError')
+        }
+        signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true })
+      }
+      try {
+        const response = await this.fetchImpl(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        })
+        // See ollama.ts for rationale: throw ProviderError here so
+        // withRetry can re-issue on transient HTTP failures.
+        if (this.retry && !response.ok) {
+          const text = await response.text()
+          throw this.makeHttpError(response.status, text)
+        }
+        return response
+      } finally {
+        clearTimeout(timeout)
+      }
     }
-    try {
-      return await this.fetchImpl(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      })
-    } finally {
-      clearTimeout(timeout)
+    if (this.retry) {
+      return withRetry(doFetch, { ...this.retry, signal: options?.signal })
     }
+    return doFetch()
   }
 
   private makeHttpError(status: number, body: string): ProviderError {
     const retryable = isRetryableStatus(status)
     const upstreamMessage = extractAnthropicErrorMessage(body)
-    return new ProviderError(
-      upstreamMessage ?? `Anthropic provider returned HTTP ${status}`,
-      {
-        providerId: this.id,
-        statusCode: status,
-        retryable,
-        cause: new HttpStatusError(status, body, retryable),
-      },
-    )
+    return new ProviderError(upstreamMessage ?? `Anthropic provider returned HTTP ${status}`, {
+      providerId: this.id,
+      statusCode: status,
+      retryable,
+      cause: new HttpStatusError(status, body, retryable),
+    })
   }
 }
 

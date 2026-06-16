@@ -1,3 +1,5 @@
+import { ProviderError, RetryExhaustedError } from '@lumen/core'
+import type { ChatRequest, Message, StreamEvent, ToolCall, UserMessage } from '@lumen/core'
 /**
  * Tests for the Ollama provider.
  *
@@ -32,14 +34,6 @@ import {
   createOllamaProvider,
   parseNdjsonLines,
 } from '../src/index.js'
-import { ProviderError } from '@lumen/core'
-import type {
-  ChatRequest,
-  Message,
-  StreamEvent,
-  ToolCall,
-  UserMessage,
-} from '@lumen/core'
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -114,7 +108,10 @@ describe('OllamaProvider', () => {
     ])
     const provider = makeProvider(fetchImpl)
     await provider.chat(basicRequest([{ role: 'user', content: 'hello' }]))
-    const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit]
+    const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      RequestInit,
+    ]
     expect(url).toBe('http://127.0.0.1:11434/api/chat')
     const headers = init.headers as Record<string, string>
     expect(headers['content-type']).toBe('application/json')
@@ -133,8 +130,8 @@ describe('OllamaProvider', () => {
     ])
     const provider = makeProvider(fetchImpl, { apiKey: 'proxy-token' })
     await provider.chat(basicRequest([{ role: 'user', content: 'hi' }]))
-    const headers = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock
-      .calls[0][1].headers as Record<string, string>
+    const headers = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]
+      .headers as Record<string, string>
     expect(headers.authorization).toBe('Bearer proxy-token')
   })
 
@@ -440,16 +437,16 @@ describe('OllamaProvider', () => {
     // exercise the streaming path by giving the provider a fetch that
     // returns a streaming response.
     const streamBody = ndjsonStream([
-      JSON.stringify({ model: 'llama3.1-test', message: { role: 'assistant', content: 'Hel' } }) + '\n',
-      JSON.stringify({ model: 'llama3.1-test', message: { role: 'assistant', content: 'lo' } }) + '\n',
-      JSON.stringify({
+      `${JSON.stringify({ model: 'llama3.1-test', message: { role: 'assistant', content: 'Hel' } })}\n`,
+      `${JSON.stringify({ model: 'llama3.1-test', message: { role: 'assistant', content: 'lo' } })}\n`,
+      `${JSON.stringify({
         model: 'llama3.1-test',
         done: true,
         done_reason: 'stop',
         message: { role: 'assistant', content: '' },
         prompt_eval_count: 4,
         eval_count: 1,
-      }) + '\n',
+      })}\n`,
     ])
     const streamingFetch: typeof fetch = vi.fn(async () => {
       return new Response(streamBody, {
@@ -463,9 +460,10 @@ describe('OllamaProvider', () => {
       events.push(ev)
     }
     expect(events[0]?.type).toBe('message_start')
-    const deltas = events.filter(
-      (e) => e.type === 'content_delta',
-    ) as Array<{ type: 'content_delta'; delta: string }>
+    const deltas = events.filter((e) => e.type === 'content_delta') as Array<{
+      type: 'content_delta'
+      delta: string
+    }>
     expect(deltas.map((d) => d.delta).join('')).toBe('Hello')
     const last = events.at(-1)
     expect(last?.type).toBe('message_complete')
@@ -478,8 +476,8 @@ describe('OllamaProvider', () => {
 
   it('streams tool_call_complete when the final `done:true` line carries tool_calls', async () => {
     const streamBody = ndjsonStream([
-      JSON.stringify({ model: 'llama3.1-test', message: { role: 'assistant', content: '' } }) + '\n',
-      JSON.stringify({
+      `${JSON.stringify({ model: 'llama3.1-test', message: { role: 'assistant', content: '' } })}\n`,
+      `${JSON.stringify({
         model: 'llama3.1-test',
         done: true,
         done_reason: 'stop',
@@ -488,7 +486,7 @@ describe('OllamaProvider', () => {
           content: '',
           tool_calls: [{ function: { name: 'lookup', arguments: { q: 'sf' } } }],
         },
-      }) + '\n',
+      })}\n`,
     ])
     const streamingFetch: typeof fetch = vi.fn(async () => {
       return new Response(streamBody, {
@@ -540,7 +538,10 @@ describe('OllamaProvider', () => {
       model: 'nomic-embed-text',
       input: ['hello', 'world'],
     })
-    const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit]
+    const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      RequestInit,
+    ]
     expect(url).toBe('http://127.0.0.1:11434/api/embed')
     const body = JSON.parse(init.body as string)
     expect(body).toEqual({ model: 'nomic-embed-text', input: ['hello', 'world'] })
@@ -623,8 +624,8 @@ describe('OllamaProvider', () => {
 
   it('parseNdjsonLines splits a stream on newline boundaries and trims whitespace', async () => {
     const stream = ndjsonStream([
-      JSON.stringify({ a: 1 }) + '\n',
-      JSON.stringify({ a: 2 }) + '\n',
+      `${JSON.stringify({ a: 1 })}\n`,
+      `${JSON.stringify({ a: 2 })}\n`,
       JSON.stringify({ a: 3 }),
     ])
     const out: string[] = []
@@ -660,6 +661,62 @@ describe('OllamaProvider', () => {
 })
 
 // ---------------------------------------------------------------------------
+// P9 — Retry boundary (transient HTTP failures)
+// ---------------------------------------------------------------------------
+
+describe('OllamaProvider retry boundary', () => {
+  it('retries 5xx and returns the eventual 2xx response', async () => {
+    const fetchImpl = makeFetch([
+      { status: 503, body: { error: 'unavailable' } },
+      {
+        status: 200,
+        body: {
+          model: 'llama3.1-test',
+          message: { role: 'assistant', content: 'hi back' },
+          done: true,
+        },
+      },
+    ])
+    const provider = makeProvider(fetchImpl, { retry: { maxAttempts: 3, sleep: async () => {} } })
+    const res = await provider.chat(basicRequest([{ role: 'user', content: 'hi' }]))
+    expect(res.message.content).toBe('hi back')
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('does NOT retry a 4xx (non-retryable) — single attempt', async () => {
+    const fetchImpl = makeFetch([{ status: 400, body: { error: 'bad request' } }])
+    const provider = makeProvider(fetchImpl, { retry: { maxAttempts: 3, sleep: async () => {} } })
+    await expect(
+      provider.chat(basicRequest([{ role: 'user', content: 'hi' }])),
+    ).rejects.toBeInstanceOf(ProviderError)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('exhausts maxAttempts on persistent 5xx and throws RetryExhaustedError wrapping ProviderError', async () => {
+    const fetchImpl = makeFetch([{ status: 500, body: { error: 'kaboom' } }])
+    const provider = makeProvider(fetchImpl, { retry: { maxAttempts: 3, sleep: async () => {} } })
+    let caught: unknown
+    try {
+      await provider.chat(basicRequest([{ role: 'user', content: 'hi' }]))
+    } catch (err) {
+      caught = err
+    }
+    expect(caught).toBeInstanceOf(RetryExhaustedError)
+    expect((caught as RetryExhaustedError).cause).toBeInstanceOf(ProviderError)
+    expect(fetchImpl).toHaveBeenCalledTimes(3)
+  })
+
+  it('does NOT retry when no retry config is supplied (back-compat)', async () => {
+    const fetchImpl = makeFetch([{ status: 503, body: { error: 'unavailable' } }])
+    const provider = makeProvider(fetchImpl)
+    await expect(
+      provider.chat(basicRequest([{ role: 'user', content: 'hi' }])),
+    ).rejects.toBeInstanceOf(ProviderError)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // P6.2 fixtures — Ollama streaming edge cases + chat robustness
 // ---------------------------------------------------------------------------
 
@@ -678,10 +735,28 @@ describe('OllamaProvider P6.2 fixtures', () => {
 
   it('streams multiple content deltas and coalesces them into a single message_complete', async () => {
     const lines = [
-      JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: 'Hello' }, done: false }),
-      JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: ' ' }, done: false }),
-      JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: 'world' }, done: false }),
-      JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: '' }, done: true, done_reason: 'stop', total_duration: 0 }),
+      JSON.stringify({
+        model: 'llama3',
+        message: { role: 'assistant', content: 'Hello' },
+        done: false,
+      }),
+      JSON.stringify({
+        model: 'llama3',
+        message: { role: 'assistant', content: ' ' },
+        done: false,
+      }),
+      JSON.stringify({
+        model: 'llama3',
+        message: { role: 'assistant', content: 'world' },
+        done: false,
+      }),
+      JSON.stringify({
+        model: 'llama3',
+        message: { role: 'assistant', content: '' },
+        done: true,
+        done_reason: 'stop',
+        total_duration: 0,
+      }),
     ]
     const fetchImpl = vi.fn(async () => {
       return new Response(ndjsonStream(lines), {
@@ -695,7 +770,9 @@ describe('OllamaProvider P6.2 fixtures', () => {
     for await (const ev of p.stream(basicRequest([{ role: 'user', content: 'hi' }]))) {
       events.push(ev)
     }
-    const deltas = events.filter((e): e is { type: 'content_delta'; delta: string; id?: string } => e.type === 'content_delta')
+    const deltas = events.filter(
+      (e): e is { type: 'content_delta'; delta: string; id?: string } => e.type === 'content_delta',
+    )
     expect(deltas.map((d) => d.delta).join('')).toBe('Hello world')
     const last = events[events.length - 1]
     expect(last?.type).toBe('message_complete')
@@ -715,11 +792,24 @@ describe('OllamaProvider P6.2 fixtures', () => {
 
   it('skips NDJSON lines that lack a `message` field, only emitting deltas from content-carrying lines', async () => {
     const lines = [
-      JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: 'one' }, done: false }),
+      JSON.stringify({
+        model: 'llama3',
+        message: { role: 'assistant', content: 'one' },
+        done: false,
+      }),
       // A heartbeat / status line with no message — should be ignored.
       JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: '' }, done: false }),
-      JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: ' two' }, done: false }),
-      JSON.stringify({ model: 'llama3', message: { role: 'assistant', content: '' }, done: true, done_reason: 'stop' }),
+      JSON.stringify({
+        model: 'llama3',
+        message: { role: 'assistant', content: ' two' },
+        done: false,
+      }),
+      JSON.stringify({
+        model: 'llama3',
+        message: { role: 'assistant', content: '' },
+        done: true,
+        done_reason: 'stop',
+      }),
     ]
     const fetchImpl = vi.fn(async () => {
       return new Response(ndjsonStream(lines), {
@@ -732,7 +822,9 @@ describe('OllamaProvider P6.2 fixtures', () => {
     for await (const ev of p.stream(basicRequest([{ role: 'user', content: 'x' }]))) {
       events.push(ev)
     }
-    const deltas = events.filter((e): e is { type: 'content_delta'; delta: string } => e.type === 'content_delta')
+    const deltas = events.filter(
+      (e): e is { type: 'content_delta'; delta: string } => e.type === 'content_delta',
+    )
     expect(deltas.map((d) => d.delta).join('')).toBe('one two')
   })
 
@@ -763,7 +855,9 @@ describe('OllamaProvider P6.2 fixtures', () => {
     ]
     await p.chat({ messages, model: 'llama3' })
     expect(capturedBody.length).toBe(1)
-    const body = capturedBody[0] as { messages: Array<{ role: string; content: string; toolCalls?: unknown[] }> }
+    const body = capturedBody[0] as {
+      messages: Array<{ role: string; content: string; toolCalls?: unknown[] }>
+    }
     // Round-trip: every message's role + content survives, regardless
     // of any Lumen-internal-only fields (Ollama drops empty toolCalls).
     expect(body.messages.map((m) => ({ role: m.role, content: m.content }))).toEqual(
