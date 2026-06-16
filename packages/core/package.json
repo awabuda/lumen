@@ -2,6 +2,7 @@
   "name": "@lumen/core",
   "version": "0.1.0",
   "private": true,
+  "description": "Agent runtime. Defines BaseProvider / BaseTool / BaseMemoryStore / BaseVectorMemoryStore / BaseProviderPool / BaseMutex / Agent and ships hook registry, telemetry, cron, multi-user, and plan/act sub-modules.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

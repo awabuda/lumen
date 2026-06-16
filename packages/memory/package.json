@@ -2,6 +2,7 @@
   "name": "@lumen/memory",
   "version": "0.1.0",
   "private": true,
+  "description": "Concrete memory stores (InMemory, Sqlite+FTS5+WAL), vector backend, hybrid retriever, RAG pipeline, reflection, conflict detection, and long-term user profile builder.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
