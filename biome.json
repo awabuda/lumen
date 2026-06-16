@@ -16,7 +16,7 @@
     "rules": {
       "recommended": true,
       "suspicious": { "noExplicitAny": "warn" },
-      "style": { "useImportType": "warn" }
+      "style": { "useImportType": "warn", "noNonNullAssertion": "off" }
     }
   },
   "javascript": {

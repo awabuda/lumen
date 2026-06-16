@@ -29,6 +29,14 @@ export {
   AbortError,
 } from './errors/index.js'
 
+// Retry helper (consumes ProviderError.retryable)
+export {
+  withRetry,
+  RetryExhaustedError,
+  RetryAbortedError,
+  type RetryConfig,
+} from './retry.js'
+
 // Message types
 export {
   // value types
