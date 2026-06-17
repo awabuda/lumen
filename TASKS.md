@@ -369,3 +369,51 @@ Goal: audit the framework for (a) typed error coverage, (b) sandbox/path safety,
 **P9 totals (so far):** 4 feature commits (2108a00, f65973a, 56f6333, 53e65c3), 4 new files / ~28 modified, ~+1,400 lines, +33 tests (887 → 920). Full monorepo: 82 test files / 920 tests / 0 fail / typecheck clean / biome clean on touched files. 43 commits ahead of origin/main.
 
 **Push status (2026-06-16):** Same — remote unreachable, no retry. Local commits are safe.
+
+## P10 — Public input validation for @lumen/memory (2026-06-17, all done; committed)
+
+Goal: add a Zod schema at every public input boundary of `@lumen/memory` so user-supplied data is rejected with a typed `ValidationError` before reaching the SQLite driver, the embedder, the chunker, or the RAG pipeline. The 9 sibling packages all use Zod already; this brings `memory` in line.
+
+### Why this scope
+
+`@lumen/memory` was the only `lumen` package without Zod input validation. Of the four P2 items deferred from the P9 audit (memory Zod schemas, mistral `!` cleanup, SqliteStore init-order enforcement, 13 pre-existing biome errors in test files + `mcp/discover.ts`), the Zod gap was the most impactful for downstream consumers and the largest in surface area — six input types:
+
+| Input type              | Entry point(s)                                        |
+|-------------------------|-------------------------------------------------------|
+| `SqliteStoreConfig`     | `new SqliteStore(config)`                             |
+| `RagPipelineOptions`    | `new RagPipeline(options)`                            |
+| `ProviderEmbedderOptions` | `createProviderEmbedder(source, options)`            |
+| `MemoryQuery`           | `InMemoryStore.search` + `SqliteStore.search`          |
+| `IngestInput`           | `RagPipeline.ingest`                                  |
+| `RetrieveInput`         | `RagPipeline.retrieve`                                |
+
+Output types (`MemoryRecord`, `RagHit`, `VectorHit`, …) are constructed internally and returned to the caller; TypeScript types are sufficient — schemas are reserved for inputs.
+
+### Key decisions
+
+1. **Single `parseOrThrow(schema, input, field)` helper.** Re-shapes a `ZodError` into the typed `ValidationError` from `@lumen/core` (P9), chaining the original `ZodError` as `cause` so a logger can still dump the full issue list. Field name is embedded in the message: `"schema for <field>: <path>: <message>"`.
+2. **`z.unknown()` for RAG collaborators.** The naive `z.object({}).passthrough()` would have **cloned the input**, losing the class prototype chain on real instances (`BruteForceVectorBackend`, `TextEmbedder`, `ChunkerFunction`) — tests immediately fail with `backend.upsert is not a function`. `z.unknown()` preserves the reference, and TypeScript enforces the actual contract at the call site.
+3. **`.strict()` on every schema.** Reject unknown extra keys (catches typos early: `path` vs `pth`).
+4. **Smallest constraint set.** `min(1)` on required strings, `int().positive()` on counts and dimensions, `min(0).max(1)` on trust scores. No length caps, no regex constraints — TS handles structure, the schema handles value.
+5. **`RagChunkSchema` uses `refine` for `endOffset >= startOffset`** rather than a custom Zod function — keeps the error path declarative.
+6. **No version bump.** P10 is an additive validation layer: valid inputs behave identically. The error *message* text changed (e.g. `"options.model is required"` → `"schema for options: model: model must not be empty"`), but two existing tests were updated to match; no other call-site breakage.
+
+### Commits
+- [x] **P10.0** — `feat(memory): P10 — Zod schema validation for public input surface` *(commit `4031a5d`)* — 10 files changed, +507/-29. Adds `packages/memory/src/schemas.ts` (1 new file, 182 lines: 6 schemas + `parseOrThrow` helper), wires validation into 6 entry points (SqliteStore ctor, InMemoryStore + SqliteStore search, createProviderEmbedder, RagPipeline ctor + ingest + retrieve), updates 2 existing tests to match the new `ValidationError` message shape, adds 27 new tests in `test/schemas.test.ts` (parseOrThrow + 6 schema suites).
+
+### Tests
+- **27 new tests** in `test/schemas.test.ts`:
+  - `parseOrThrow` helper: 3 tests (success, ValidationError + cause chain, field path in message)
+  - `SqliteStoreConfigSchema`: 4 (minimal, empty path, unknown field, verbose function)
+  - `ProviderEmbedderOptionsSchema`: 5 (minimal, empty model, non-positive dimensions, non-integer dimensions, AbortSignal)
+  - `RagPipelineOptionsSchema`: 3 (accepts any object, unknown extra key rejected, empty object OK because `z.unknown()` is optional)
+  - `MemoryQuerySchema`: 4 (empty, minTrust range, limit positivity, tag element type)
+  - `IngestInputSchema`: 5 (minimal, empty documentId, empty chunk text, endOffset < startOffset, endOffset == startOffset valid)
+  - `RetrieveInputSchema`: 3 (no limit, empty query, non-positive limit)
+- **2 existing tests updated** (P10 changed their expected error message text):
+  - `test/embedder.test.ts`: `createProviderEmbedder rejects when constructed without a model` now matches `/model must not be empty/`
+  - `test/rag.test.ts`: `RagPipeline rejects chunks with invalid shape (validation)` now matches `/startOffset/`
+
+**P10 totals:** 1 commit, 2 new files (`schemas.ts`, `schemas.test.ts`), 8 modified. Memory package: 98 → 125 tests (+27). Monorepo: 920 → 947 tests (+27). Typecheck clean. Biome clean. 44 commits ahead of origin/main.
+
+**Push status (2026-06-17):** Same — remote unreachable, no retry. Local commits are safe.

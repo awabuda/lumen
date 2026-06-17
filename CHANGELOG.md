@@ -99,6 +99,66 @@ on touched files.
   `packages/core/src/concurrency/mutex.ts` and is re-exported from
   `packages/core/src/concurrency/index.ts` and the core barrel.
 
+## [0.10.0] — 2026-06-17 — P10 Input validation for @lumen/memory
+
+**Totals:** 1 commit (`4031a5d`), 2 new files / 8 modified, +507/-29 lines,
++27 tests (920 → 947), 83 test files. Typecheck clean. Biome clean.
+
+### Added
+- **`packages/memory/src/schemas.ts`** (new, 182 lines) — six Zod
+  schemas covering every user-supplied input type for
+  `@lumen/memory`:
+  - `SqliteStoreConfigSchema` (path non-empty, optional `readonly`
+    and `verbose` function)
+  - `RagPipelineOptionsSchema` (three collaborators typed as
+    `z.unknown()` — see Migration note below)
+  - `ProviderEmbedderOptionsSchema` (model non-empty,
+    `dimensions` int+optional, `signal` AbortSignal)
+  - `MemoryQuerySchema` (`minTrust` 0–1, `limit` int+)
+  - `IngestInputSchema` (+ internal `RagChunkSchema` with
+    `endOffset >= startOffset` refine)
+  - `RetrieveInputSchema` (query non-empty, `limit` int+)
+  - `parseOrThrow(schema, input, field)` helper that re-shapes a
+    `ZodError` into the typed `ValidationError` from `@lumen/core`
+    (chained as `cause`) and embeds the field path in the message.
+
+- **Validation wired at 6 entry points** in `@lumen/memory`:
+  - `SqliteStore` constructor
+  - `InMemoryStore.search` and `SqliteStore.search` (both)
+  - `createProviderEmbedder` factory
+  - `RagPipeline` constructor, `RagPipeline.ingest`, and
+    `RagPipeline.retrieve`
+
+- **27 new tests** in `test/schemas.test.ts` — `parseOrThrow` helper
+  + valid/invalid paths for each schema (empty strings, out-of-range
+  numerics, unknown extra keys, `z.unknown()` optionality).
+
+### Changed
+- `packages/memory/package.json` — added `zod: ^3.23.0` to
+  `dependencies` (matching the 9 sibling packages).
+- Two existing tests in `test/embedder.test.ts` and
+  `test/rag.test.ts` were updated to match the new
+  `ValidationError` message shape (Zod's structured path-based
+  message replaces the previous hand-rolled text).
+
+### Migration notes
+- **`RagPipelineOptionsSchema` uses `z.unknown()` for `embedder` /
+  `backend` / `chunker`.** The naive `z.object({}).passthrough()`
+  would clone the input, losing the class prototype chain on real
+  instances (`BruteForceVectorBackend`, `TextEmbedder`,
+  `ChunkerFunction`) and producing `backend.upsert is not a
+  function` at runtime. `z.unknown()` preserves the reference.
+  TypeScript continues to enforce the actual contract at the call
+  site; the schema's job is to reject unknown extra keys.
+- **No public type changes.** Valid inputs behave identically. The
+  only observable difference is the error message text on invalid
+  input — e.g. `"options.model is required"` →
+  `"schema for options: model: model must not be empty"`. Callers
+  that match on the old text should switch to
+  `instanceof ValidationError` + check the `field` property.
+- **No version bump** in this commit: the 0.10.0 series continues.
+  Next non-breaking feature batch will bump to 0.11.0.
+
 ## [0.9.0] — 2026-06-16 — P8 Release prep
 
 **Totals:** 3 commits (1a647ca, 58e6ee1, f8943a3), 24 files total,
