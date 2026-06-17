@@ -451,4 +451,38 @@ Replacing those with `delete` unblocked the tests, but biome's `performance/noDe
 
 **P11 totals:** 235 biome errors → 0. 9 `process.env.X = undefined` sites → `delete` + `biome-ignore`. 3 `as any` casts in `evolver.test.ts` removed via exported `ChatMessage` interface. `trajectory-hook.ts:73` now uses `as ReadonlyArray<ChatMessage>`. No new tests; no API changes. 47 commits ahead of origin/main.
 
+---
+
+## P12 — Drop redundant `!` and JSDoc apiKey footgun (2026-06-17, all done; committed)
+
+Goal: close the second P2 item from the P9 audit (the "mistral.ts:280 `!` cleanup" deferred list entry). The audit was conservative — the `!` footprint was 10 sites across 4 files in `@lumen/llm`, not one.
+
+### Scope findings
+
+A fresh `pnpm grep` for `![ ,)]` inside `packages/llm/src` returned 10 matches:
+
+- **3 JSDoc quick-start examples** in `mistral.ts:276` and `llm/index.ts:31, 42` — the canonical "how to use this provider" docs used `apiKey: process.env.X!`. The `!` is a type-only assertion: at runtime, `process.env.MISSING` is `undefined`, `undefined!` is `undefined`, and `MistralProvider` would receive an undefined apiKey and throw a confusing auth error on the first request. New users copy this exact pattern.
+- **7 real-code sites** in `openai-compatible.ts:380, 478`, `anthropic.ts:462, 464`, `ollama.ts:417, 420, 619` — all the same shape: `cond ? { x: expr! } : {}`. The truthy check on the same expression was supposed to narrow the type, but `expr!` was kept "to be safe". Three issues:
+  1. `!` is redundant after a truthy check (TS already narrows)
+  2. The mapper is called twice (once for the check, once for the value) — wasted work
+  3. The pattern obscures the intent: the truthy check is the only thing making the spread safe
+
+### Decisions
+
+- **JSDoc guard pattern.** All 3 examples rewritten to the standard `if (!key) throw new Error(...)` form. Verbose but unambiguous, and matches what `@lumen/llm`'s error path expects when the provider makes its first call.
+- **Real-code `cond ? { x: expr! } : {}` → lift to const.** `const finishReason = mapStopReason(parsed.stop_reason); return { ..., ...(finishReason ? { finishReason } : {}) }`. Shorthand property name, single call, no assertion. Same shape across all 7 sites.
+- **Did NOT enable biome's `noNonNullAssertion` rule.** P9.0 disabled it deliberately (audit rationale preserved in pitfalls.md). This pass targets the *redundant* subset; legitimate `!` in e.g. `pool.ts` (P9.4 circuit breaker) stays.
+- **No version bump.** Pure refactor, public API unchanged. CHANGELOG 0.10.0 still covers in-flight.
+
+### Commits
+- [x] **P12.0** — `refactor(llm): P12 — drop redundant \`!\` and JSDoc apiKey pattern` *(commit `ade82fd`)* — 5 files changed, +23/-18.
+
+### Tests
+- 947 → 947 (no test count change). All 11 packages pass.
+- typecheck clean. `pnpm exec biome check` clean.
+
+**P12 totals:** 10 `!` sites removed (3 JSDoc + 7 real code), 3 redundant double-calls eliminated, 1 JSDoc footgun fixed. 49 commits ahead of origin/main. **Push status:** same — remote unreachable, no retry.
+
+**Remaining P2 deferred from P9.5:** SqliteStore init-order enforcement (P13 candidate).
+
 **Push status (2026-06-17):** Same — remote unreachable, no retry.

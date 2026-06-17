@@ -209,6 +209,34 @@ the start of the pass).
 - **Push status:** same — remote unreachable, no retry. Local commits
   are safe.
 
+## [0.10.0] — 2026-06-17 — P12 Redundant `!` cleanup in @lumen/llm
+
+**Totals:** 1 commit (`ade82fd`), 5 files modified, +23/-18 lines, no
+test count change (947 → 947), 11 packages, 49 commits on `main`.
+Typecheck clean. Biome clean.
+
+### Fixed
+- **3 JSDoc quick-start examples** in `mistral.ts:276`,
+  `llm/index.ts:31, 42` showed `apiKey: process.env.X!` — a type-only
+  assertion that silently passes `undefined` at runtime when the env
+  var is unset. Replaced with the standard `if (!apiKey) throw new
+  Error('X is required')` guard pattern in all 3 examples.
+- **7 real-code sites** in `openai-compatible.ts:380, 478`,
+  `anthropic.ts:462, 464`, and `ollama.ts:417, 420, 619` used
+  `cond ? { x: expr! } : {}` with a redundant non-null assertion after
+  a truthy check. The check already narrowed the type; the `!` was a
+  no-op that also hid a double call to the same mapper. All 7 sites
+  refactored to the `const x = expr; ...(x ? { x } : {})` shape — single
+  call, shorthand property name, no assertion.
+
+### Notes
+- **No version bump**: pure refactor, no public API change.
+- **`noNonNullAssertion` rule** stays disabled (P9.0 decision) — this
+  pass targets the *redundant* subset only. Legitimate `!` in
+  `packages/core/src/agent/pool.ts` (P9.4 circuit breaker) and similar
+  sites is preserved.
+- **Push status:** same — remote unreachable, no retry.
+
 ## [0.9.0] — 2026-06-16 — P8 Release prep
 
 **Totals:** 3 commits (1a647ca, 58e6ee1, f8943a3), 24 files total,
