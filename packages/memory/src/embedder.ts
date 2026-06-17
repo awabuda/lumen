@@ -29,7 +29,8 @@
  */
 
 import type { EmbedRequest, EmbedResponse } from '@lumen/core'
-import { ConfigError, ProviderError, ValidationError } from '@lumen/core'
+import { ConfigError, ProviderError } from '@lumen/core'
+import { ProviderEmbedderOptionsSchema, parseOrThrow } from './schemas.js'
 
 // ---------------------------------------------------------------------------
 // Structural type for an embedding source
@@ -98,16 +99,16 @@ export function createProviderEmbedder(
   source: EmbeddingSource,
   options: ProviderEmbedderOptions,
 ): TextEmbedder {
-  if (!options.model) {
-    throw new ValidationError('createProviderEmbedder: options.model is required', {
-      field: 'model',
-    })
-  }
+  // Validate at the boundary. Zod's `min(1)` on `model` already
+  // rejects empty strings, and the hand-rolled check that used to
+  // sit here is now folded into the schema. We keep the parsed
+  // value so the inner closure reads from a single source of truth.
+  const validated = parseOrThrow(ProviderEmbedderOptionsSchema, options, 'options')
   return async (texts: ReadonlyArray<string>): Promise<ReadonlyArray<Float32Array>> => {
     if (texts.length === 0) return []
     const response = await source.embed({
       input: texts,
-      model: options.model,
+      model: validated.model,
     })
     if (response.vectors.length === 0) {
       throw new ProviderError(
@@ -118,7 +119,7 @@ export function createProviderEmbedder(
         },
       )
     }
-    const expectedDimensions = options.dimensions ?? response.vectors[0]!.length
+    const expectedDimensions = validated.dimensions ?? response.vectors[0]!.length
     return response.vectors.map((vec, i) => toFloat32(vec, expectedDimensions, i, texts.length))
   }
 }

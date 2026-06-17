@@ -167,14 +167,17 @@ describe('RagPipeline', () => {
 
   it('rejects chunks with invalid shape (validation)', async () => {
     const pipe = new RagPipeline({ embedder, backend, chunker: charChunks })
+    // P10 switched hand-rolled validation to Zod. The error
+    // shape is now the schema's `startOffset: number().min(0)`
+    // reported as "Number must be greater than or equal to 0"
+    // on the field path `chunks.0.startOffset`.
     await expect(
       pipe.ingest({
         documentId: 'doc-8',
         text: 'ignored',
-        // @ts-expect-error — negative startOffset is invalid
         chunks: [{ text: 'x', startOffset: -1, endOffset: 2, index: 0 }],
       }),
-    ).rejects.toThrow(/invalid startOffset/)
+    ).rejects.toThrow(/startOffset/)
   })
 
   it('embedding bytes round-trip through bytesToFloat32', async () => {

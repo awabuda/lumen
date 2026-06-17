@@ -34,6 +34,7 @@ import {
   type SessionMessage,
   type SessionRecord,
 } from '@lumen/core'
+import { MemoryQuerySchema, parseOrThrow } from './schemas.js'
 
 /** Comparator for `getSessionMessages`: oldest first. */
 function byIdAsc(a: SessionMessage, b: SessionMessage): number {
@@ -100,7 +101,11 @@ export class InMemoryStore extends BaseMemoryStore {
   }
 
   public search(query: MemoryQuery): Promise<ReadonlyArray<MemorySearchResult>> {
-    return Promise.resolve(this.searchSync(query))
+    // Validate at the boundary. A typo'd `minTrust: 1.5` or a
+    // negative `limit` should surface as a typed `ValidationError`
+    // here, not as a silently-empty result set further down.
+    const validated = parseOrThrow(MemoryQuerySchema, query, 'query')
+    return Promise.resolve(this.searchSync(validated as MemoryQuery))
   }
 
   /**

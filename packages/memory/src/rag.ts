@@ -39,6 +39,7 @@
 import { type TextEmbedder, float32ToBytes } from './embedder.js'
 import { BaseVectorBackend, type VectorHit } from './vector-backend.js'
 import { ConfigError, ToolError } from '@lumen/core'
+import { IngestInputSchema, RagPipelineOptionsSchema, RetrieveInputSchema, parseOrThrow } from './schemas.js'
 
 /** Structural chunker type — accepts `chunkText` from @lumen/tools. */
 export type ChunkerFunction = (text: string) => ReadonlyArray<{
@@ -189,19 +190,30 @@ export class RagPipeline extends BaseRagPipeline {
 
   public constructor(options: RagPipelineOptions) {
     super()
-    this.embedder = options.embedder
-    this.backend = options.backend
-    this.chunker = options.chunker
+    // Validate at the boundary. The schema is intentionally
+    // permissive about the three collaborators (embedder /
+    // backend / chunker) because their contracts are duck-typed
+    // and TypeScript already guards the call sites.
+    const validated = parseOrThrow(RagPipelineOptionsSchema, options, 'options')
+    this.embedder = validated.embedder as TextEmbedder
+    this.backend = validated.backend as unknown as BaseVectorBackend
+    this.chunker = validated.chunker as ChunkerFunction
   }
 
   public async ingest(input: IngestInput): Promise<IngestResult> {
+    // Validate at the boundary. A missing `documentId` or an
+    // empty `query` should surface here, not deeper in the
+    // pipeline where the failure mode is less obvious.
+    const validated = parseOrThrow(IngestInputSchema, input, 'input')
     // First forget any chunks from a previous ingest of the same
     // document id. Re-ingestion is supposed to be idempotent.
-    await this.forget(input.documentId)
+    await this.forget(validated.documentId)
 
-    const chunks: ReadonlyArray<RagChunk> = validateChunks(input.chunks ?? this.chunker(input.text))
+    const chunks: ReadonlyArray<RagChunk> = validateChunks(
+      validated.chunks ?? this.chunker(validated.text),
+    )
     if (chunks.length === 0) {
-      return { documentId: input.documentId, chunkCount: 0, ids: [] }
+      return { documentId: validated.documentId, chunkCount: 0, ids: [] }
     }
 
     const vectors = await this.embedder(chunks.map((c) => c.text))
@@ -214,7 +226,7 @@ export class RagPipeline extends BaseRagPipeline {
     for (let i = 0; i < chunks.length; i += 1) {
       const chunk = chunks[i]!
       const vec = vectors[i]!
-      const id = deriveChunkId(input.documentId, chunk.index)
+      const id = deriveChunkId(validated.documentId, chunk.index)
       await this.backend.upsert({ id, embedding: float32ToBytes(vec) })
       this.chunkMeta.set(id, {
         text: chunk.text,
@@ -223,15 +235,18 @@ export class RagPipeline extends BaseRagPipeline {
         index: chunk.index,
       })
       ids.push(id)
-      if (input.onChunk) input.onChunk({ id, chunk })
+      if (validated.onChunk) validated.onChunk({ id, chunk })
     }
-    return { documentId: input.documentId, chunkCount: chunks.length, ids }
+    return { documentId: validated.documentId, chunkCount: chunks.length, ids }
   }
 
   public async retrieve(input: RetrieveInput): Promise<RetrieveResult> {
-    const limit = input.limit ?? 5
+    // Validate at the boundary. An empty `query` would otherwise
+    // produce a meaningless zero-vector lookup and a silent miss.
+    const validated = parseOrThrow(RetrieveInputSchema, input, 'input')
+    const limit = validated.limit ?? 5
     if (this.chunkMeta.size === 0) return { hits: [] }
-    const vectors = await this.embedder([input.query])
+    const vectors = await this.embedder([validated.query])
     const queryVec = vectors[0]
     if (!queryVec) return { hits: [] }
     const hits = await this.backend.topK(float32ToBytes(queryVec), limit)

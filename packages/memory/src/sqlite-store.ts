@@ -60,6 +60,8 @@ import {
   type VectorHit,
 } from './vector-backend.js'
 
+import { SqliteStoreConfigSchema, MemoryQuerySchema, parseOrThrow } from './schemas.js'
+
 /** Bumped when the schema shape changes incompatibly. */
 const SCHEMA_VERSION = 1
 
@@ -110,12 +112,16 @@ export class SqliteStore extends BaseVectorMemoryStore {
 
   constructor(config: SqliteStoreConfig) {
     super()
-    this.db = new BetterSqlite3(config.path, {
-      readonly: config.readonly ?? false,
+    // Validate at the boundary so a typo in `path` (e.g. `''`)
+    // surfaces as a typed `ValidationError` instead of an opaque
+    // `better-sqlite3` exception from the underlying driver.
+    const validated = parseOrThrow(SqliteStoreConfigSchema, config, 'config')
+    this.db = new BetterSqlite3(validated.path, {
+      readonly: validated.readonly ?? false,
       // better-sqlite3's `verbose` signature is a variadic
       // logger; we only care about the SQL string. The cast is
       // safe because we never read the trailing args.
-      verbose: config.verbose ? (config.verbose as never) : undefined,
+      verbose: validated.verbose ? (validated.verbose as never) : undefined,
     })
   }
 
@@ -381,7 +387,11 @@ export class SqliteStore extends BaseVectorMemoryStore {
   }
 
   public search(query: MemoryQuery): Promise<ReadonlyArray<MemorySearchResult>> {
-    return Promise.resolve(this.searchSync(query))
+    // Validate at the boundary. A typo'd `minTrust: 1.5` or a
+    // negative `limit` should surface as a typed `ValidationError`
+    // here, not as a silently-empty result set further down.
+    const validated = parseOrThrow(MemoryQuerySchema, query, 'query')
+    return Promise.resolve(this.searchSync(validated as MemoryQuery))
   }
 
   /**

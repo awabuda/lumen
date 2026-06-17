@@ -104,8 +104,11 @@ describe('createProviderEmbedder', () => {
         return { vectors: [], model: '' }
       },
     }
+    // P10 switched hand-rolled validation to Zod. The error
+    // shape is now the schema's "model must not be empty"
+    // (field path: model) wrapped by parseOrThrow.
     expect(() => createProviderEmbedder(source, { model: '' })).toThrow(
-      /options\.model is required/,
+      /model must not be empty/,
     )
   })
 
