@@ -603,3 +603,55 @@ Goal: stop the "NODE_MODULE_VERSION X vs Y" failure mode from biting future work
 
 **Push status:** same — remote unreachable, no retry.
 
+---
+
+## P16 — git.ts schema as discriminatedUnion (2026-06-17, all done; committed)
+
+Goal: close the thread P14 left open. P14 deliberately kept the `.refine()` on the git input schema and added a `ConfigError` defense-in-depth in `case 'commit':` because the old flat-object schema couldn't enforce "commit requires message, log forbids message" at the type level. This pass turns the schema into a `z.discriminatedUnion('op', [...]).strict()`, which moves the contract from "Zod refine + runtime check + cast" to "TypeScript-narrowed union + Zod strict parse".
+
+### What changed
+
+**Before** — a flat `z.object` with all fields typed `optional()`:
+```ts
+z.object({ op: GitOpSchema, message: z.string().optional(), ref: ..., ... })
+  .refine((v) => (v.op === 'commit') === (v.message !== undefined), {...})
+```
+The type `GitInput` had `message?: string` and `ref?: string` on every op, so:
+  - the type system couldn't tell you which fields each op accepts,
+  - the `.refine()` was a runtime check (Zod errors are good but the type was still loose),
+  - `argvFor`'s `case 'commit':` had to defensively re-check `input.message` because TS thought it could be `undefined`,
+  - unknown fields (e.g. `message` on `op: 'log'`) were silently stripped instead of rejected.
+
+**After** — a discriminated union with `.strict()`:
+```ts
+z.discriminatedUnion('op', [
+  z.object({ op: z.literal('status') }).strict(),
+  z.object({ op: z.literal('diff'), ref: ..., ref2: ..., maxBytes: ... }).strict(),
+  z.object({ op: z.literal('log'), ref: ..., maxCount: ..., maxBytes: ... }).strict(),
+  z.object({ op: z.literal('branch'), ref: ... }).strict(),
+  z.object({ op: z.literal('commit'), message: z.string().min(1).max(4096), stageAll: z.boolean().optional() }).strict(),
+])
+```
+Effects:
+  - `GitInput` is a true union. `switch (input.op)` narrows per case — `case 'commit':` now sees `message: string` (not `string | undefined`), so the defense-in-depth ConfigError is gone and so is its import.
+  - The `.refine()` is gone — the union enforces the contract structurally.
+  - `.strict()` makes unknown fields throw at parse time (caught by `BaseTool.call`'s `inputSchema.safeParse`).
+  - The new "rejects field set that does not match the chosen op" test covers three cases the old schema would have silently stripped: `op: 'log' + message`, `op: 'commit' + ref`, `op: 'status' + ref`.
+
+### Decisions
+- **`.strict()` on every variant**, not `passthrough`. The old schema's silent-stripping behavior is exactly the footgun this pass is meant to fix — an agent that sends the wrong field on the wrong op should get a clear "unknown field" error, not have the field vanish.
+- **Did not tighten `message.max(4096)` or `ref.max(256)`**. Those were already in the old schema and P10's review; kept as-is.
+- **Did not add a `maxCount` to `branch` or `diff`** even though both are list operations. The git CLI doesn't have a `--max-count` on `branch`/`diff` the way it does on `log`; adding the field would require implementing the truncation. Out of P16 scope.
+
+### Commits
+- [x] **P16.0** — `refactor(tools): P16 — git.ts schema as discriminatedUnion` *(commit `2cd0d6f`)* — 2 files modified, +73/-45.
+
+### Tests
+- 8 git tests pass (1 new: "rejects field set that does not match the chosen op").
+- 962 total tests pass (+1 vs. P15).
+- typecheck clean. `pnpm exec biome check` clean.
+
+**P16 totals:** 1 schema refactor, 1 defense-in-depth removed, 1 `.refine()` removed, 1 import removed, 1 new test, 0 behavior changes visible to users (the new rejections are tightenable; the previously-silent strips are now loud). 57 commits ahead of origin/main.
+
+**Push status:** same — remote unreachable, no retry.
+

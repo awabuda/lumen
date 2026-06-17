@@ -258,6 +258,51 @@ Typecheck clean. Biome clean.
   need to re-open construct a new `SqliteStore`.
 - **Push status:** same — remote unreachable, no retry.
 
+## [0.10.0] — 2026-06-17 — P16 git.ts schema as discriminatedUnion
+
+**Totals:** 1 commit (`2cd0d6f`), 2 files modified, +73/-45 lines,
+test count +1 (961 → 962), 12 packages, 57 commits on `main`.
+Typecheck clean. Biome clean.
+
+### Changed
+- **`packages/tools/src/git/git.ts`** — schema is now a
+  `z.discriminatedUnion('op', [...]).strict()`. Each variant
+  declares exactly the field set it's supposed to have:
+  - `op: 'status'` — no payload
+  - `op: 'diff'` — `ref` / `ref2` / `maxBytes`
+  - `op: 'log'` — `ref` / `maxCount` / `maxBytes`
+  - `op: 'branch'` — `ref`
+  - `op: 'commit'` — `message` (required) / `stageAll` (optional)
+- **`.refine()` at the bottom of the old schema**: removed.
+  The discriminated union enforces the contract structurally.
+- **`ConfigError` defense-in-depth in `case 'commit':`**:
+  removed. `input.message` is now `string` in that branch
+  (not `string | undefined`), so the type-narrow eliminates
+  the need for the runtime check.
+- **`ConfigError` import in git.ts**: removed (was the only
+  use).
+- **`packages/tools/test/git.test.ts`** — added test
+  "rejects field set that does not match the chosen op
+  (discriminated union)" covering three cases the old
+  schema would have silently stripped: `op: 'log' + message`,
+  `op: 'commit' + ref`, `op: 'status' + ref`.
+
+### Decisions
+- **`.strict()` on every variant**, not `passthrough`. The
+  old schema's silent-stripping was the footgun being fixed
+  — wrong field on wrong op should throw, not vanish.
+- **Did not tighten `message.max(4096)` or `ref.max(256)`**.
+  Those were already in the old schema and reviewed in P10.
+- **Did not add a `maxCount` to `branch` / `diff`**. The git
+  CLI doesn't expose a `--max-count` on those ops; adding
+  the field would require implementing truncation. Out of
+  P16 scope.
+
+### Notes
+- **No version bump**: schema is a stricter form of the same
+  contract; existing valid inputs still work.
+- **Push status:** same — remote unreachable, no retry.
+
 ## [0.10.0] — 2026-06-17 — P15 better-sqlite3 native rebuild automation
 
 **Totals:** 1 commit (`0a75e2b`), 2 files modified, +13/-2 lines,
