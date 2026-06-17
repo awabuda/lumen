@@ -371,14 +371,13 @@ function choiceToAssistantMessage(
     name: tc.function.name,
     arguments: parseToolCallArguments(tc.function.arguments, tc.id),
   }))
+  const finishReason = mapFinishReason(choice.finish_reason)
   return {
     role: 'assistant',
     content,
     toolCalls,
     ...(model ? { model } : {}),
-    ...(mapFinishReason(choice.finish_reason)
-      ? { finishReason: mapFinishReason(choice.finish_reason)! }
-      : {}),
+    ...(finishReason ? { finishReason } : {}),
   }
 }
 
@@ -473,9 +472,10 @@ export class OpenAICompatibleProvider extends BaseProvider {
     const message = choiceToAssistantMessage(choice, parsed.model ?? request.model)
     // Re-attach usage from the top-level `usage` field (choiceToAssistantMessage
     // does not have access to it).
+    const usage = mapUsage(parsed.usage)
     const messageWithUsage: AssistantMessage = {
       ...message,
-      ...(parsed.usage ? { usage: mapUsage(parsed.usage)! } : {}),
+      ...(usage ? { usage } : {}),
     }
     return {
       message: messageWithUsage,

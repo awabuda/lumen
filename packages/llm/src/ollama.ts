@@ -408,17 +408,15 @@ function responseToAssistantMessage(
       }
     })
     .filter((tc): tc is ToolCall => tc !== undefined)
+  const finishReason = mapDoneReason(parsed.done_reason, toolCalls.length > 0)
+  const usage = mapUsage(parsed.prompt_eval_count, parsed.eval_count)
   return {
     role: 'assistant',
     ...(text !== undefined && text.length > 0 ? { content: text } : {}),
     toolCalls,
     ...(parsed.model ? { model: parsed.model } : { model: fallbackModel }),
-    ...(mapDoneReason(parsed.done_reason, toolCalls.length > 0)
-      ? { finishReason: mapDoneReason(parsed.done_reason, toolCalls.length > 0)! }
-      : {}),
-    ...(mapUsage(parsed.prompt_eval_count, parsed.eval_count)
-      ? { usage: mapUsage(parsed.prompt_eval_count, parsed.eval_count)! }
-      : {}),
+    ...(finishReason ? { finishReason } : {}),
+    ...(usage ? { usage } : {}),
   }
 }
 
@@ -608,6 +606,7 @@ export class OllamaProvider extends BaseProvider {
       throw err
     }
 
+    const usage = mapUsage(promptEval, evalCount)
     yield {
       type: 'message_complete',
       message: {
@@ -616,7 +615,7 @@ export class OllamaProvider extends BaseProvider {
         toolCalls: completedToolCalls,
         ...(modelName ? { model: modelName } : { model: request.model }),
         ...(finishReason ? { finishReason } : {}),
-        ...(mapUsage(promptEval, evalCount) ? { usage: mapUsage(promptEval, evalCount)! } : {}),
+        ...(usage ? { usage } : {}),
       },
     }
   }

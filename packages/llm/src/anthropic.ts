@@ -453,15 +453,15 @@ function responseToAssistantMessage(
     }
   }
   const content = textParts.length > 0 ? textParts.join('') : undefined
+  const finishReason = mapStopReason(parsed.stop_reason)
+  const usage = mapUsage(parsed.usage)
   return {
     role: 'assistant',
     ...(content !== undefined ? { content } : {}),
     toolCalls,
     ...(parsed.model ? { model: parsed.model } : { model: fallbackModel }),
-    ...(mapStopReason(parsed.stop_reason)
-      ? { finishReason: mapStopReason(parsed.stop_reason)! }
-      : {}),
-    ...(parsed.usage ? { usage: mapUsage(parsed.usage)! } : {}),
+    ...(finishReason ? { finishReason } : {}),
+    ...(usage ? { usage } : {}),
   }
 }
 
