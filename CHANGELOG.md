@@ -258,6 +258,46 @@ Typecheck clean. Biome clean.
   need to re-open construct a new `SqliteStore`.
 - **Push status:** same — remote unreachable, no retry.
 
+## [0.10.0] — 2026-06-17 — P14 Sweep redundant `!` outside @lumen/llm
+
+**Totals:** 1 commit (`cb06032`), 5 files modified, +48/-17 lines,
+no test count change (961 → 961), 12 packages, 55 commits on `main`.
+Typecheck clean. Biome clean.
+
+### Fixed
+- **`packages/config/src/loader.ts` (lines 109-120)** — replaced
+  `path[path.length - 1]!` and `path[i]!` with const binding +
+  explicit `undefined` check. The `noUncheckedIndexedAccess`
+  option then propagates the type safely without the assertion.
+- **`packages/memory/src/sqlite-store.ts:546`** — hoisted
+  `query.embedding!` (redundant after truthy check) to
+  `const r = query.embedding`; also pulled `.sort()` out of the
+  chained call so the data flow is obvious.
+- **`packages/tools/src/git/git.ts:234`** — `input.message!` was
+  papering over the Zod schema's `optional()`. Replaced with
+  local const + typed `ConfigError` defense-in-depth check
+  (unreachable per the schema's `.refine()` but documents the
+  invariant for the next reader).
+- **`packages/llm/README.md` (2 sites) + `packages/core/README.md`
+  (1 site)** — the apiKey `!` footgun that P12 cleaned from
+  JSDoc also lived in two README quick-start snippets.
+  Replaced with the same `if (!apiKey) throw new Error(...)`
+  guard pattern.
+
+### Sites left alone (real invariants, not footguns)
+- `git.ts:161`, `gh.ts:105`, `default-sandbox.ts:148`,
+  `terminal.ts:170`: `execArgv[0]!` / `request.command[0]!`
+  sit on real invariants (Zod schema enforces `min(1)` array
+  length).
+- `default-sandbox.ts:89` `buf[end]!`: `while (end > 0 && ...)`
+  guards `end > 0`.
+- Test fixtures: `!` in those strings is a test-data
+  exclamation, not a TS operator.
+
+### Notes
+- **No version bump**: internal hardening, no public API change.
+- **Push status:** same — remote unreachable, no retry.
+
 ## [0.10.0] — 2026-06-17 — P12 Redundant `!` cleanup in @lumen/llm
 
 **Totals:** 1 commit (`ade82fd`), 5 files modified, +23/-18 lines, no
