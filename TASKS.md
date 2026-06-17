@@ -532,3 +532,43 @@ While writing the tests, found that `get`, `search`, `listSessions`, `getSession
 **P9.5 deferred list status:** P10 ✓ P11 ✓ P12 ✓ P13 ✓. **All P2 items closed.** **Push status:** same — remote unreachable, no retry.
 
 **Push status (2026-06-17):** Same — remote unreachable, no retry.
+
+---
+
+## P14 — Sweep redundant `!` outside @lumen/llm (2026-06-17, all done; committed)
+
+Goal: extend P12's "drop the `!`" pattern from the llm package to the rest of the source tree. P12 cleaned 10 sites in `@lumen/llm`; this pass closes the same footgun in `config/loader.ts`, `memory/sqlite-store.ts`, `tools/git/git.ts`, and two READMEs that the JSDoc pass had missed.
+
+### Sites fixed (5)
+
+1. **`packages/config/src/loader.ts` (lines 109-120)** — `path[path.length - 1]!` and `path[i]!` relied on a runtime invariant (`path.length > 0`) that the compiler couldn't see. Replaced with const binding + explicit undefined check; `noUncheckedIndexedAccess` then propagates the type safely without the assertion.
+
+2. **`packages/memory/src/sqlite-store.ts:546`** — `query.embedding!` sat inside a `if (query.embedding)` block. Hoisted to `const r = query.embedding` so the closure can use it twice (the `.map` and the sort) without re-reading the property. Also pulled the `.sort()` out of the chained call so the data flow is obvious — the previous one-liner was hard to follow.
+
+3. **`packages/tools/src/git/git.ts:234`** — `input.message!` was a real footgun: the Zod schema marks `message` as `optional()`, so the type is `string | undefined` even though a separate `.refine()` guarantees it cannot be undefined when `op === 'commit'`. Replaced with a local const and a typed `ConfigError` defense-in-depth check (unreachable per the schema, but gives a clear pointer if the refine is ever loosened).
+
+4. **`packages/llm/README.md` (2 sites) + `packages/core/README.md` (1 site)** — the apiKey `!` footgun that P12 cleaned from JSDoc also lived in two README quick-start snippets. Replaced with the same `if (!apiKey) throw new Error(...)` guard pattern.
+
+### Sites deliberately left alone (and why)
+
+- `git.ts:161`, `gh.ts:105`, `default-sandbox.ts:148`, `terminal.ts:170`: `execArgv[0]!` / `request.command[0]!` sit on real invariants (Zod schema enforces `min(1)` array length); the `!` is documenting that invariant, not papering over a defect.
+- `default-sandbox.ts:89` `buf[end]!`: `while (end > 0 && ...)` guards `end > 0`, so `buf[end]` is in-bounds.
+- Test fixtures (`evolver.test.ts:33`, `parser.test.ts:136`, `patch.test.ts:84-90`, `embedder.test.ts:57-58`): the `!` in those strings is a test-data exclamation, not a TS operator.
+
+### Decisions
+
+- **Used `ConfigError` (not `ToolValidationError`) for the git commit defense-in-depth.** `ToolValidationError` requires `(toolName, issues)` — too heavy for a single ad-hoc missing-field. `ConfigError` is the same family the loader uses for missing config at the composition root and reads correctly here ("the input shape is misconfigured for this op").
+- **Did not tighten the schema to require `message` for `commit`.** The current `optional() + refine` is a single canonical shape across all `op` values; tightening would mean making `message` required-when-commit and forbidden-otherwise at the type level, which is what the refine already enforces. Schema change would have rippled to the CLI flag surface and was out of P14's scope.
+- **Kept the unreachable ConfigError as defense-in-depth.** Removing it would leave the next refactor of the schema refinement free to silently break; the `if (message === undefined)` branch + comment documents the invariant for the next reader.
+
+### Commits
+- [x] **P14.0** — `refactor: P14 — sweep redundant \`!\` outside @lumen/llm + README footgun` *(commit `cb06032`)* — 5 files modified, +48/-17.
+
+### Tests
+- 961 tests pass (no count change — these are all no-op refactors with no behavior change).
+- typecheck clean. `pnpm exec biome check` clean.
+
+**P14 totals:** 5 sites fixed (3 source + 2 docs), 4 sites left alone (real invariants), 0 tests added (no behavior change). 55 commits ahead of origin/main.
+
+**Push status:** same — remote unreachable, no retry.
+
