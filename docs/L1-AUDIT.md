@@ -52,7 +52,14 @@ Notes:
 
 ```bash
 # L1.x itself — the whole suite
-cd packages/memory && pnpm rebuild better-sqlite3 && \
+# L1.x itself — the whole suite
+# better-sqlite3 is whitelisted in `pnpm.onlyBuiltDependencies`
+# at the root, so its install script runs and downloads the
+# prebuild that matches the current Node version. If you
+# upgrade Node mid-flight and see a `NODE_MODULE_VERSION
+# mismatch` error, run `pnpm rebuild:native` (rebuilds the
+# native binding from source via node-gyp) and re-test.
+pnpm rebuild:native && \
   pnpm -r --workspace-concurrency=1 test
 
 # Per-package spot check
