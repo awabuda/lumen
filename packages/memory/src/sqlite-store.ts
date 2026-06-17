@@ -96,7 +96,29 @@ export class SqliteStore extends BaseVectorMemoryStore {
    * keep `dispose → new instance → init` working.
    */
   private stmts: PreparedStatements | null = null
-  private initialized = false
+  /**
+   * Lifecycle state machine. Every public method dispatches on this:
+   *
+   *   - `'uninit'` — fresh from the constructor. The DB connection
+   *     is open (constructor opens it eagerly so schema errors are
+   *     surfaced synchronously) but no DDL has run. Only `init()`
+   *     and `dispose()` are valid here.
+   *   - `'ready'`  — `init()` has fully completed. All CRUD methods
+   *     are valid; `dispose()` moves us to `'closed'`.
+   *   - `'closed'` — `dispose()` has run, or `init()` failed
+   *     partway. The instance is single-use: callers must construct
+   *     a new one to continue. `dispose()` is idempotent and is the
+   *     only valid operation in this state.
+   *
+   * The previous design used a single `initialized: boolean` flag,
+   * which silently allowed `init()` to no-op when called twice and
+   * would crash on a closed DB if `init()` was called after
+   * `dispose()`. The state machine is explicit, surfaces every
+   * misorder with a typed `ConfigError`, and matches the contract
+   * asserted in `contract-suite.ts` (each instance gets one init,
+   * one dispose).
+   */
+  private state: 'uninit' | 'ready' | 'closed' = 'uninit'
   /**
    * Vector backend, set in {@link init}. The contract is:
    *   - `BruteForceVectorBackend` if `sqlite-vec` could not
@@ -126,33 +148,48 @@ export class SqliteStore extends BaseVectorMemoryStore {
   }
 
   public async init(): Promise<void> {
-    if (this.initialized) return
-    this.initialized = true
-    // PRAGMAs that affect connection-wide behaviour must be
-    // set **before** any transaction begins — `synchronous`
-    // and `journal_mode` are SQLite's "no go inside a tx"
-    // examples, and `pragma()` triggers an implicit
-    // transaction if one is already open.
-    this.applyPragmas()
-    // Run the DDL in a single transaction so a partial failure
-    // (e.g. a corrupted file) leaves the DB in its previous state
-    // rather than half-migrated.
-    this.db.exec(BEGIN)
+    if (this.state !== 'uninit') {
+      const why =
+        this.state === 'ready'
+          ? 'the instance is already ready'
+          : 'the instance has been disposed (or a previous init() failed); create a new one'
+      throw new ConfigError(`SqliteStore.init() called twice: ${why}.`)
+    }
+    // We mark state on completion. If any step throws, the
+    // `catch` below transitions to `'closed'` so the next call
+    // surfaces a clear "use a new instance" error rather than
+    // running against a half-applied DDL.
     try {
-      this.applySchema()
-      this.db.exec(COMMIT)
+      // PRAGMAs that affect connection-wide behaviour must be
+      // set **before** any transaction begins — `synchronous`
+      // and `journal_mode` are SQLite's "no go inside a tx"
+      // examples, and `pragma()` triggers an implicit
+      // transaction if one is already open.
+      this.applyPragmas()
+      // Run the DDL in a single transaction so a partial failure
+      // (e.g. a corrupted file) leaves the DB in its previous state
+      // rather than half-migrated.
+      this.db.exec(BEGIN)
+      try {
+        this.applySchema()
+        this.db.exec(COMMIT)
+      } catch (err) {
+        this.db.exec(ROLLBACK)
+        throw err
+      }
+      // Set up the vector backend. We try the sqlite-vec
+      // extension first; on any failure (package not
+      // installed, ABI mismatch, vec0 unsupported on this
+      // SQLite build) we silently fall back to the
+      // brute-force backend. The active backend's id is
+      // exposed via {@link vectorBackendId} so `lumen doctor`
+      // can surface the choice to the operator.
+      this.vector = this.buildVectorBackend()
+      this.state = 'ready'
     } catch (err) {
-      this.db.exec(ROLLBACK)
+      this.state = 'closed'
       throw err
     }
-    // Set up the vector backend. We try the sqlite-vec
-    // extension first; on any failure (package not
-    // installed, ABI mismatch, vec0 unsupported on this
-    // SQLite build) we silently fall back to the
-    // brute-force backend. The active backend's id is
-    // exposed via {@link vectorBackendId} so `lumen doctor`
-    // can surface the choice to the operator.
-    this.vector = this.buildVectorBackend()
   }
 
   /**
@@ -182,6 +219,18 @@ export class SqliteStore extends BaseVectorMemoryStore {
   }
 
   public async dispose(): Promise<void> {
+    // Idempotent: a second `dispose()` on the same instance is a
+    // no-op (returns immediately) rather than throwing on a
+    // closed `better-sqlite3` handle. Tests rely on this — see
+    // e.g. `contract-suite.ts`'s `afterEach` calling
+    // `await store.dispose()` on a fresh per-test instance and
+    // the dispose+init round-trip test.
+    if (this.state === 'closed') return
+    // Transition to `'closed'` *before* closing the DB so a
+    // failed `close()` (very rare, but possible if the file was
+    // unlinked mid-run) still leaves the instance in a terminal
+    // state that subsequent `assertReady()` calls will see.
+    this.state = 'closed'
     // better-sqlite3's `close()` is synchronous; we wrap it in a
     // resolved promise to satisfy the async contract.
     await this.vector?.dispose()
@@ -204,11 +253,22 @@ export class SqliteStore extends BaseVectorMemoryStore {
     embedding: Uint8Array,
     k = 10,
   ): Promise<ReadonlyArray<MemorySearchResult>> {
-    if (!this.vector) {
+    if (this.state === 'uninit') {
       throw new ConfigError('SqliteStore used before init() completed. Call init() first.')
     }
+    if (this.state === 'closed') {
+      throw new ConfigError('SqliteStore used after dispose(); create a new instance to continue.')
+    }
+    // state === 'ready' — by `init()`'s contract, `this.vector`
+    // is set in the same flow that transitions to `'ready'`.
+    // We narrow the local binding so the rest of the method
+    // can use the non-null type without per-line `!`.
+    const vector = this.vector
+    if (!vector) {
+      throw new ConfigError('SqliteStore: vector backend is missing in the ready state (init bug).')
+    }
     if (embedding.byteLength === 0) return []
-    const hits = await this.vector.topK(embedding, k)
+    const hits = await vector.topK(embedding, k)
     if (hits.length === 0) return []
     // Join vector hits back onto the records table so the
     // caller gets the full MemoryRecord, not just the id.
@@ -245,19 +305,28 @@ export class SqliteStore extends BaseVectorMemoryStore {
 
   /**
    * The statement bundle is always non-null after `init()`. This
-   * accessor centralises the `!` so the implementation methods
-   * stay readable, and the assertion is on a contract that is
+   * accessor centralises the ready-check so the implementation
+   * methods stay readable, and the error is on a contract that is
    * true by construction: every public method that touches a
    * statement requires `init()` to have completed, which is the
-   * composition root's responsibility.
+   * composition root's responsibility. Disposed instances throw
+   * the same error (the user must construct a new one), keeping
+   * the message consistent regardless of which side of the
+   * lifecycle the caller hit.
    */
   private get s(): PreparedStatements {
-    if (!this.stmts) {
+    if (this.state !== 'ready') {
       throw new ConfigError(
-        'SqliteStore used before init() completed. Call init() in your composition root.',
+        this.state === 'uninit'
+          ? 'SqliteStore used before init() completed. Call init() in your composition root.'
+          : 'SqliteStore used after dispose(); create a new instance to continue.',
       )
     }
-    return this.stmts
+    // `this.stmts` is set inside `applySchema()` which is part of
+    // `init()`, so it is guaranteed to be non-null whenever
+    // `state === 'ready'`. The `!` is on a real invariant, not a
+    // hope; the explicit state check above is what enforces it.
+    return this.stmts!
   }
 
   private applyPragmas(): void {
@@ -356,19 +425,30 @@ export class SqliteStore extends BaseVectorMemoryStore {
   }
 
   public get(id: string): Promise<MemoryRecord | undefined> {
-    const row = this.s.getRecord.get(id) as
-      | {
-          id: string
-          kind: string
-          content: string
-          trust: number
-          created_at: number
-          updated_at: number
-          tags: string
-          metadata: string
-        }
-      | undefined
-    return Promise.resolve(row ? rowToRecord(row) : undefined)
+    // Wrap in a `new Promise` so a `s`-accessor throw (state
+    // machine violation) becomes a rejected promise rather
+    // than escaping the function. This keeps the public
+    // surface uniformly async-throwing: a caller can rely on
+    // `.catch()` handling every failure mode.
+    return new Promise<MemoryRecord | undefined>((resolve, reject) => {
+      try {
+        const row = this.s.getRecord.get(id) as
+          | {
+              id: string
+              kind: string
+              content: string
+              trust: number
+              created_at: number
+              updated_at: number
+              tags: string
+              metadata: string
+            }
+          | undefined
+        resolve(row ? rowToRecord(row) : undefined)
+      } catch (err) {
+        reject(err)
+      }
+    })
   }
 
   public delete(id: string): Promise<boolean> {
@@ -389,7 +469,13 @@ export class SqliteStore extends BaseVectorMemoryStore {
     // negative `limit` should surface as a typed `ValidationError`
     // here, not as a silently-empty result set further down.
     const validated = parseOrThrow(MemoryQuerySchema, query, 'query')
-    return Promise.resolve(this.searchSync(validated as MemoryQuery))
+    return new Promise<ReadonlyArray<MemorySearchResult>>((resolve, reject) => {
+      try {
+        resolve(this.searchSync(validated as MemoryQuery))
+      } catch (err) {
+        reject(err)
+      }
+    })
   }
 
   /**
