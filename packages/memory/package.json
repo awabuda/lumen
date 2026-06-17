@@ -1,6 +1,6 @@
 {
   "name": "@lumen/memory",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "description": "Concrete memory stores (InMemory, Sqlite+FTS5+WAL), vector backend, hybrid retriever, RAG pipeline, reflection, conflict detection, and long-term user profile builder.",
   "type": "module",

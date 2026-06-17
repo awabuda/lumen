@@ -1,6 +1,6 @@
 {
   "name": "@lumen/editor-bridge",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Bridge between the Lumen agent and editor extensions (VSCode, JetBrains).",
   "type": "module",
   "main": "./dist/index.js",

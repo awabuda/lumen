@@ -1,6 +1,6 @@
 {
   "name": "@lumen/desktop-bridge",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Bridge between the Lumen agent and Tauri-based desktop clients.",
   "type": "module",
   "main": "./dist/index.js",

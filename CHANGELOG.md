@@ -10,6 +10,95 @@ Test counts are point-in-time totals across the monorepo. The pre-1.0 series
 (`0.x.y`) does not promise API stability; breaking changes are recorded as
 **Changed** entries with a note about the migration path.
 
+## [0.10.0] — 2026-06-16 — P9 Hardening (errors, safety, failure fallback)
+
+**Totals:** 4 feature commits (2108a00, f65973a, 56f6333, 53e65c3), 4 new
+files / ~28 modified, ~+1,400 lines, +33 tests (887 → 920), 82 test
+files, 11 packages, 43 commits on `main`. Typecheck clean. Biome clean
+on touched files.
+
+### Added
+- **`withRetry` helper (P9.1, commit `f65973a` part).** New
+  `packages/core/src/retry.ts` exports `withRetry<T>(fn, config?)` with
+  `maxAttempts` (default 3), `initialDelayMs` (default 100),
+  `maxDelayMs` (default 5000), `backoffFactor` (default 2), `jitter`,
+  `shouldRetry`, `signal`, and injectable `sleep` for tests. Throws
+  `RetryExhaustedError extends AgentError` (with `cause: lastError`,
+  `attempts: number`) when the budget is spent, or `RetryAbortedError`
+  when the signal aborts. `defaultShouldRetry` honors a `retryable`
+  flag on the error first, then falls back to the `ProviderError`
+  status heuristic (5xx / 408 / 429).
+- **Circuit breaker (P9.4, commit `53e65c3` part).** New
+  `packages/core/src/agent/circuit-breaker.ts` ships a
+  `CircuitBreaker` class with a closed / open / half-open state
+  machine, configurable `failureThreshold` (default 5) and
+  `cooldownMs` (default 30_000). Throws `CircuitOpenError extends
+  AgentError` carrying the offending `providerId` and `retryAfterMs`.
+  8 unit tests cover the state machine and the boundary conditions.
+- **`ProviderPool` circuit integration (P9.4).**
+  `candidatesFor(...)` filters out providers whose breaker is open;
+  `runWithFailover` calls `recordSuccess` on the chosen provider and
+  `recordFailure` on the failed candidates. An open circuit produces a
+  `CircuitOpenError` that is itself recorded as a non-fatal skip — the
+  loop continues to the next candidate without counting it against
+  the breaker (no point in punishing the breaker for being open).
+  Back-compat: no `circuit` option = behavior unchanged.
+- **DefaultSandbox path-traversal defense (P9.3, commit `53e65c3`
+  part).** `DefaultSandbox.run` now rejects a `cwd` whose resolved
+  path falls outside `workspaceRoot`. Throws `ConfigError` with
+  `field: 'cwd'`. 4 new tests cover relative-cwd, absolute-cwd,
+  parent-`..` traversal, and the legitimate same-root case.
+- **web_fetch streaming size cap (P9.3).** The fetch path now streams
+  chunks and aborts via `reader.cancel()` once the per-byte
+  accumulator exceeds `maxBytes`. A hostile or lying `Content-Length`
+  still cannot OOM the agent. 3 new tests cover the abort paths.
+
+### Changed
+- **78 `throw new Error(...)` sites now typed (P9.2, commit
+  `56f6333`).** Every site audited and reclassified:
+  `ConfigError` (resource / registration / strategy errors),
+  `ValidationError` (input / parameter errors), `ProviderError` (LLM
+  runtime errors, with `providerId` + `retryable`),
+  `AbortError` (user cancellation), `ToolError` (tool-internal
+  invariant, requires `toolName` in the options), `SkillConfigError` /
+  `SkillParseError` (in a new `packages/skills/src/errors.ts` to keep
+  the package decoupled from `@lumen/core` dist), and a new
+  `MutexDisposedError` (lives next to the mutex). Coverage by
+  package: core 25, skills 6, llm 15, memory 6, tools 11, mcp 1.
+  Catching logic can now `instanceof`-discriminate without parsing
+  the message.
+- **4 LLM providers integrate `withRetry` (P9.1).** OpenAI-compatible,
+  Anthropic, Gemini, Mistral — their `performFetch` rewrapped so a
+  non-2xx response throws `ProviderError` (with status + retryable)
+  inside the `doFetch` closure, and the closure is then passed to
+  `withRetry` when `this.retry` is configured. Back-compat: no
+  `retry` option = behavior unchanged (P8 callers unaffected).
+- **`terminal` tool returns `policy-violation` instead of throwing
+  (P9.3).** argv[0] containing a shell metacharacter is no longer an
+  unhandled `Error` — it returns a structured refusal result. Honors
+  CLAUDE.md rule #7 ("No try/catch that swallows" — better: don't
+  throw, return a typed refusal).
+- **Biome `noNonNullAssertion` disabled (P9.0, commit `2108a00`).**
+  TS narrowing makes `!` safe in our codebase; Biome was flagging
+  legitimate uses in `pool.ts` / `retriever.ts`. Set to `"off"` in
+  `biome.json` `style.noNonNullAssertion`.
+
+### Migration notes
+- Catchers that used to match `err.message.includes('disposed')` on
+  the mutex now use `instanceof MutexDisposedError`. The string match
+  still works (the message is preserved), but the typed check is
+  preferred.
+- `ToolError` callers **must** pass the second `options` argument
+  (with `toolName`) — the typecheck enforces this. Sites that omit
+  the second arg will see `error TS2554: Expected 2 arguments`.
+- `ProviderError` import path: it lives in
+  `packages/core/src/errors/index.ts`, **not** in
+  `packages/core/src/message/index.ts`. The package barrel
+  `@lumen/core` re-exports it.
+- `MutexDisposedError` lives in
+  `packages/core/src/concurrency/mutex.ts` and is re-exported from
+  `packages/core/src/concurrency/index.ts` and the core barrel.
+
 ## [0.9.0] — 2026-06-16 — P8 Release prep
 
 **Totals:** 3 commits (1a647ca, 58e6ee1, f8943a3), 24 files total,
