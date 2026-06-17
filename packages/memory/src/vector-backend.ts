@@ -19,8 +19,8 @@
  * caller joins vector hits back onto the row store.
  */
 
-import type Database from 'better-sqlite3'
 import { ConfigError } from '@lumen/core'
+import type Database from 'better-sqlite3'
 
 /** The better-sqlite3 `Database` type, re-aliased for readability. */
 export type SqliteDatabase = Database.Database

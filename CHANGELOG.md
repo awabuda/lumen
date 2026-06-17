@@ -159,6 +159,56 @@ on touched files.
 - **No version bump** in this commit: the 0.10.0 series continues.
   Next non-breaking feature batch will bump to 0.11.0.
 
+## [0.10.0] — 2026-06-17 — P11 Tooling/test hygiene (biome cleanup, env-var footgun)
+
+**Totals:** 1 commit (TBD), 11 files modified, +98/-85 lines, no test
+count change (947 → 947), 11 packages, 47 commits on `main`. Typecheck
+clean. `pnpm exec biome check` clean across 242 files (was 235 errors at
+the start of the pass).
+
+### Fixed
+- **Biome cleanup pass.** 235 errors → 0. Bulk auto-fix
+  (`biome check --write --unsafe`) handled 228 of them. The remaining 7
+  were semantic and required judgement: `noAssignInExpressions` in
+  `apps/cli/test/default-command.test.ts:51-52` (refactored to
+  explicit `if`/block form), `noImplicitAnyLet` + `useYield` in
+  `packages/core/test/agent-stream.test.ts:108,189` (added explicit
+  `Extract<StreamEvent, { type: 'run:end' }>` and `biome-ignore` for the
+  throwing-stream generator), and 3 `noExplicitAny` abstract-class test
+  guards. After fixing those, biome surfaced 4 more identical guards in
+  the bridge test files (`editor-bridge`, `server`, `desktop-bridge`).
+- **`process.env.X = undefined` footgun re-triggered.** A late-2025
+  `biome --write` run had auto-converted `delete process.env.X` to
+  `process.env.X = undefined` in 9 sites across 5 test files (the audit
+  had flagged one but missed eight). The P9 audit's `pitfalls.md` entry
+  for this footgun fired again — exactly the documented symptoms
+  (`received: "undefined"` for the `logging.level` enum, expected env
+  vars becoming the string `"undefined"`). All 9 sites now use `delete`
+  with a per-site `biome-ignore lint/performance/noDelete` comment
+  explaining why.
+- **`ChatMessage` exported from `@lumen/skills`.** The `as any` casts in
+  `packages/skills/test/evolver.test.ts` and
+  `packages/skills/src/trajectory-hook.ts:73` were replaced with
+  `as ReadonlyArray<ChatMessage>` / `as ChatMessage[]`. Marked the
+  local `ChatMessage` interface as `export` so it can be imported from
+  tests and adjacent prod code.
+- **MCP `discover.ts:36` `noImplicitAnyLet`** — annotated the
+  `let transport` declaration with the abstract `McpTransport` type and
+  added the type-only import to the existing `import { ... }` group.
+- **Tools `text/chunker.ts:237,265`** — added `biome-ignore` for the
+  `RegExp.exec()` `while ((m = re.exec(text)) !== null)` iteration
+  idiom (splitting the assignment+test would only obscure intent).
+
+### Notes
+- **No version bump**: tooling/test hygiene, no public API change.
+  CHANGELOG 0.10.0 still covers everything in flight.
+- **Pitfalls.** The `process.env.X = undefined` footgun is already
+  documented in `~/.hermes/skills/lumen-agent-framework/references/pitfalls.md`.
+  This pass did not add a new entry — the existing one covers both the
+  failure mode and the correct fix.
+- **Push status:** same — remote unreachable, no retry. Local commits
+  are safe.
+
 ## [0.9.0] — 2026-06-16 — P8 Release prep
 
 **Totals:** 3 commits (1a647ca, 58e6ee1, f8943a3), 24 files total,

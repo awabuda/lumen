@@ -7,18 +7,18 @@
  * here; the protocol parsing is covered by `openai-compatible.test.ts`.
  */
 
-import { describe, expect, it, vi } from 'vitest'
-import {
-  createMistralProvider,
-  DEFAULT_MISTRAL_BASE_URL,
-  DEFAULT_MISTRAL_MODEL,
-  DEFAULT_MISTRAL_EMBED_MODEL,
-  MISTRAL_PROVIDER_ID,
-  MistralProvider,
-  HttpStatusError,
-} from '../src/index.js'
 import { ProviderError, type StreamEvent } from '@lumen/core'
 import type { ChatRequest, Message } from '@lumen/core'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  DEFAULT_MISTRAL_BASE_URL,
+  DEFAULT_MISTRAL_EMBED_MODEL,
+  DEFAULT_MISTRAL_MODEL,
+  HttpStatusError,
+  MISTRAL_PROVIDER_ID,
+  MistralProvider,
+  createMistralProvider,
+} from '../src/index.js'
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -402,7 +402,7 @@ describe('MistralProvider streaming', () => {
         v = headers.get('Authorization')
       } else if (headers && typeof headers === 'object') {
         const rec = headers as Record<string, string>
-        v = rec['Authorization'] ?? rec['authorization'] ?? null
+        v = rec.Authorization ?? rec.authorization ?? null
       }
       if (v) seenAuth.push(v)
       // Minimal SSE so the stream loop can drain cleanly.

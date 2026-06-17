@@ -16,7 +16,7 @@
  *   - Subclasses override `execute()` and inherit everything else.
  */
 
-import { z, type ZodIssue } from 'zod'
+import type { ZodIssue, z } from 'zod'
 import { ConfigError, ToolError, ToolValidationError } from '../errors/index.js'
 
 /**

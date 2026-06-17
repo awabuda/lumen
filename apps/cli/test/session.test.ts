@@ -3,8 +3,8 @@
 import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SqliteStore } from '@lumen/memory'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   sessionDeleteCommand,
   sessionListCommand,
@@ -43,7 +43,9 @@ afterEach(async () => {
  * the agent. We use the same SqliteStore class the agent uses,
  * then point the CLI at the same file.
  */
-const seedStore = async (sessions: ReadonlyArray<{ id: string; title?: string }>): Promise<void> => {
+const seedStore = async (
+  sessions: ReadonlyArray<{ id: string; title?: string }>,
+): Promise<void> => {
   const store = new SqliteStore({ path: memoryPath })
   await store.init()
   try {
@@ -148,7 +150,10 @@ describe('sessionPruneCommand', () => {
   })
 
   it('prunes old sessions with --force', async () => {
-    await seedStore([{ id: 'old', title: 'old' }, { id: 'new', title: 'new' }])
+    await seedStore([
+      { id: 'old', title: 'old' },
+      { id: 'new', title: 'new' },
+    ])
     const code = await sessionPruneCommand({ memoryPath, force: true, olderThanDays: 0 })
     expect(code).toBe(0)
     expect(stdout).toMatch(/Pruned \d+ session\/record row/)

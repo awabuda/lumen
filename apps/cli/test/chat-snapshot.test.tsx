@@ -10,9 +10,9 @@
  * These tests require `ink-testing-library` (dev dep).
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { render } from 'ink-testing-library'
 import React from 'react'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Chat } from '../src/components/Chat.js'
 
 // We render Chat with a no-op onSend so the component

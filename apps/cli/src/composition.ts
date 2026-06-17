@@ -16,18 +16,14 @@
  *   - {@link loadCliConfig}: load + merge config for the CLI.
  */
 
-import { loadConfig, type LumenConfig } from '@lumen/config'
-import { Agent, HookRegistry, type BaseProvider, ToolRegistry } from '@lumen/core'
-import { OpenAICompatibleProvider } from '@lumen/llm'
-import { createFilesystemTools } from '@lumen/tools'
-import { SqliteStore } from '@lumen/memory'
-import {
-  closeAllMcpServers,
-  connectAllMcpServers,
-  type DiscoveredMcpServer,
-} from '@lumen/mcp'
-import * as path from 'node:path'
 import * as os from 'node:os'
+import * as path from 'node:path'
+import { type LumenConfig, loadConfig } from '@lumen/config'
+import { Agent, type BaseProvider, HookRegistry, ToolRegistry } from '@lumen/core'
+import { OpenAICompatibleProvider } from '@lumen/llm'
+import { type DiscoveredMcpServer, closeAllMcpServers, connectAllMcpServers } from '@lumen/mcp'
+import { SqliteStore } from '@lumen/memory'
+import { createFilesystemTools } from '@lumen/tools'
 
 export interface CliAgentOptions {
   /** Path to a config file (overrides lookup). */
@@ -110,7 +106,11 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
 
   // Resolve provider config: CLI flag > env > first entry in config
   const apiKey =
-    options.apiKey ?? process.env.OPENAI_API_KEY ?? process.env.LUMEN_API_KEY ?? config.providers[0]?.apiKey ?? ''
+    options.apiKey ??
+    process.env.OPENAI_API_KEY ??
+    process.env.LUMEN_API_KEY ??
+    config.providers[0]?.apiKey ??
+    ''
   const baseUrl =
     options.baseUrl ??
     process.env.OPENAI_BASE_URL ??

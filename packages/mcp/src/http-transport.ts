@@ -26,10 +26,10 @@
  */
 
 import {
-  McpTransport,
-  McpTransportError,
   type JsonRpcNotification,
   type JsonRpcRequest,
+  McpTransport,
+  McpTransportError,
   type McpTransportOptions,
 } from './base.js'
 
@@ -282,7 +282,7 @@ export class HttpMcpTransport extends McpTransport {
   private baseHeaders(): Record<string, string> {
     const out: Record<string, string> = {}
     if (this.apiKey && !this.hasAuthHeader()) {
-      out['Authorization'] = `Bearer ${this.apiKey}`
+      out.Authorization = `Bearer ${this.apiKey}`
     }
     return { ...out, ...this.customHeaders }
   }

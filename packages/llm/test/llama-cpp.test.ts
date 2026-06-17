@@ -100,7 +100,7 @@ describe('LlamaCppProvider', () => {
     }) as unknown as typeof fetch
     const p = new LlamaCppProvider({ defaultModel: 'm', apiKey: 'secret', fetchImpl })
     await p.chat({ messages: [{ role: 'user', content: 'hi' }], model: 'm' })
-    expect(capturedHeaders['authorization']).toBe('Bearer secret')
+    expect(capturedHeaders.authorization).toBe('Bearer secret')
   })
 
   it('omits Authorization header when no apiKey (typical local-server case)', async () => {
@@ -126,7 +126,7 @@ describe('LlamaCppProvider', () => {
     }) as unknown as typeof fetch
     const p = new LlamaCppProvider({ defaultModel: 'm', fetchImpl })
     await p.chat({ messages: [{ role: 'user', content: 'hi' }], model: 'm' })
-    expect(capturedHeaders['authorization']).toBeUndefined()
+    expect(capturedHeaders.authorization).toBeUndefined()
   })
 
   it('createLlamaCppProvider returns a configured instance', () => {

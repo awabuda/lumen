@@ -24,9 +24,9 @@
  * there is no implicit "save" path.
  */
 
-import { SqliteStore, type SessionMessage, type SessionRecord } from '@lumen/memory'
 import * as os from 'node:os'
 import * as path from 'node:path'
+import { type SessionMessage, type SessionRecord, SqliteStore } from '@lumen/memory'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
@@ -101,13 +101,10 @@ const formatTs = (ms: number): string => {
 export const sessionListCommand = async (opts: SessionCommandOptions = {}): Promise<number> => {
   let sessions: ReadonlyArray<SessionRecord> = []
   let path = ''
-  await withStore(
-    async (store) => {
-      path = opts.memoryPath ?? defaultMemoryPath()
-      sessions = await store.listSessions()
-    },
-    opts,
-  )
+  await withStore(async (store) => {
+    path = opts.memoryPath ?? defaultMemoryPath()
+    sessions = await store.listSessions()
+  }, opts)
 
   process.stdout.write(`Lumen sessions (${path})\n\n`)
   if (sessions.length === 0) {
@@ -128,15 +125,12 @@ export const sessionShowCommand = async (
 ): Promise<number> => {
   let session: SessionRecord | undefined
   let messages: ReadonlyArray<SessionMessage> = []
-  await withStore(
-    async (store) => {
-      session = await store.getSession(id)
-      if (session) {
-        messages = await store.getSessionMessages(id, { limit: opts.limit ?? 100 })
-      }
-    },
-    opts,
-  )
+  await withStore(async (store) => {
+    session = await store.getSession(id)
+    if (session) {
+      messages = await store.getSessionMessages(id, { limit: opts.limit ?? 100 })
+    }
+  }, opts)
   if (!session) {
     process.stderr.write(`Session not found: ${id}\n`)
     return 1
@@ -172,12 +166,9 @@ export const sessionDeleteCommand = async (
     return 2
   }
   let removed = false
-  await withStore(
-    async (store) => {
-      removed = await store.deleteSession(id)
-    },
-    opts,
-  )
+  await withStore(async (store) => {
+    removed = await store.deleteSession(id)
+  }, opts)
   if (!removed) {
     process.stderr.write(`Session not found: ${id}\n`)
     return 1
@@ -200,12 +191,9 @@ export const sessionPruneCommand = async (opts: SessionCommandOptions = {}): Pro
     return 2
   }
   let removed = 0
-  await withStore(
-    async (store) => {
-      removed = await store.prune(days * MS_PER_DAY)
-    },
-    opts,
-  )
+  await withStore(async (store) => {
+    removed = await store.prune(days * MS_PER_DAY)
+  }, opts)
   process.stdout.write(`Pruned ${removed} session/record row(s) older than ${days} day(s).\n`)
   return 0
 }

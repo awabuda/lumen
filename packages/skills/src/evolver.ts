@@ -19,12 +19,12 @@
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import type { BaseSkill } from './base.js'
-import type { SkillRegistry } from './registry.js'
 import { MarkdownSkill } from './markdown-skill.js'
 import { parseSkillMarkdown } from './parser.js'
+import type { SkillRegistry } from './registry.js'
 
 /** Minimal message type — mirrors @lumen/core's ChatMessage. */
-interface ChatMessage {
+export interface ChatMessage {
   readonly role: string
   readonly content: string
   readonly toolName?: string
@@ -121,7 +121,7 @@ export class HeuristicEvolver extends BaseEvolver {
       '---',
       `id: ${skillId}`,
       `name: ${skillName}`,
-      `version: 1.0.0`,
+      'version: 1.0.0',
       'keywords:',
       `  - "${triggerWord}"`,
       '---',

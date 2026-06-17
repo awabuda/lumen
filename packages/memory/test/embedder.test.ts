@@ -9,10 +9,10 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import {
+  type EmbeddingSource,
   bytesToFloat32,
   createProviderEmbedder,
   float32ToBytes,
-  type EmbeddingSource,
 } from '../src/embedder.js'
 
 // ---------------------------------------------------------------------------
@@ -107,9 +107,7 @@ describe('createProviderEmbedder', () => {
     // P10 switched hand-rolled validation to Zod. The error
     // shape is now the schema's "model must not be empty"
     // (field path: model) wrapped by parseOrThrow.
-    expect(() => createProviderEmbedder(source, { model: '' })).toThrow(
-      /model must not be empty/,
-    )
+    expect(() => createProviderEmbedder(source, { model: '' })).toThrow(/model must not be empty/)
   })
 
   it('propagates provider errors (e.g. Anthropic has no embedding)', async () => {

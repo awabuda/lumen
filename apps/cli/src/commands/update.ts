@@ -58,7 +58,7 @@ export const updateCheckCommand = async (opts: UpdateCheckOptions = {}): Promise
     // No tags, no git, no .git/ — fine, the user gets `(unknown)`.
   }
 
-  process.stdout.write(`Lumen update check\n\n`)
+  process.stdout.write('Lumen update check\n\n')
   process.stdout.write(`  current:  ${resolvedCurrent}\n`)
   process.stdout.write(`  latest:   ${latest ?? '(unknown — no git tags in cwd)'}\n`)
 
@@ -70,9 +70,9 @@ export const updateCheckCommand = async (opts: UpdateCheckOptions = {}): Promise
     if (!opts.quiet) process.stdout.write('\n  You are on the latest version.\n')
     return 0
   }
-  process.stdout.write(`\n  A newer version is available. To upgrade:\n`)
-  process.stdout.write(`    pnpm update @lumen/cli\n`)
-  process.stdout.write(`  (or rebuild from source: pnpm --filter @lumen/cli build)\n`)
+  process.stdout.write('\n  A newer version is available. To upgrade:\n')
+  process.stdout.write('    pnpm update @lumen/cli\n')
+  process.stdout.write('  (or rebuild from source: pnpm --filter @lumen/cli build)\n')
   return 1
 }
 

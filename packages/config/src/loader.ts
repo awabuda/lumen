@@ -16,7 +16,7 @@ import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import type { ZodIssue } from 'zod'
 import { ConfigSourceNotFoundError, ConfigValidationError } from './errors.js'
-import { LumenConfigSchema, type LumenConfig } from './schema.js'
+import { type LumenConfig, LumenConfigSchema } from './schema.js'
 
 export interface LoadConfigOptions {
   /** Path to a project config file. Overrides the default lookup. */
@@ -56,7 +56,10 @@ export const deepMerge = (
       typeof baseVal === 'object' &&
       !Array.isArray(baseVal)
     ) {
-      result[key] = deepMerge(baseVal as Record<string, unknown>, overrideVal as Record<string, unknown>)
+      result[key] = deepMerge(
+        baseVal as Record<string, unknown>,
+        overrideVal as Record<string, unknown>,
+      )
     } else {
       result[key] = overrideVal
     }
@@ -77,13 +80,7 @@ const readYamlIfExists = async (path: string): Promise<Record<string, unknown> |
   return parsed as Record<string, unknown>
 }
 
-const RUNTIME_ENV_KEYS = new Set([
-  'API_KEY',
-  'BASE_URL',
-  'MODEL',
-  'MEMORY_PATH',
-  'SKILLS_PATH',
-])
+const RUNTIME_ENV_KEYS = new Set(['API_KEY', 'BASE_URL', 'MODEL', 'MEMORY_PATH', 'SKILLS_PATH'])
 
 const envSegmentToConfigKey = (segment: string): string => {
   const parts = segment
@@ -144,9 +141,18 @@ export const loadConfig = async (options: LoadConfigOptions = {}): Promise<Lumen
     : resolveProjectPath(cwd, options.projectPath)
 
   const layers: Array<{ name: string; value: Record<string, unknown> | undefined }> = [
-    { name: 'built-in defaults', value: LumenConfigSchema.parse({}) as unknown as Record<string, unknown> },
-    { name: `user config (${userPath ?? 'skipped'})`, value: userPath ? await readYamlIfExists(userPath) : undefined },
-    { name: `project config (${projectPath ?? 'skipped'})`, value: projectPath ? await readYamlIfExists(projectPath) : undefined },
+    {
+      name: 'built-in defaults',
+      value: LumenConfigSchema.parse({}) as unknown as Record<string, unknown>,
+    },
+    {
+      name: `user config (${userPath ?? 'skipped'})`,
+      value: userPath ? await readYamlIfExists(userPath) : undefined,
+    },
+    {
+      name: `project config (${projectPath ?? 'skipped'})`,
+      value: projectPath ? await readYamlIfExists(projectPath) : undefined,
+    },
     { name: `env (${envPrefix}*)`, value: readEnv(envPrefix) },
     { name: 'CLI overrides', value: options.cliOverrides },
   ]

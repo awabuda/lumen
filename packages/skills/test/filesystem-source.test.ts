@@ -4,7 +4,7 @@ import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { defaultSkillsPath, FilesystemSkillSource, findSkillFiles } from '../src/index.js'
+import { FilesystemSkillSource, defaultSkillsPath, findSkillFiles } from '../src/index.js'
 
 let tmpDir: string
 
@@ -14,6 +14,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await fs.rm(tmpDir, { recursive: true, force: true })
+  // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
   delete process.env.LUMEN_SKILLS_PATH
 })
 

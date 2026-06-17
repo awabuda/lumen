@@ -1,3 +1,5 @@
+import type { BaseTool, ToolContext, ToolRisk } from '@lumen/core'
+import { ToolError, ToolValidationError } from '@lumen/core'
 /**
  * Contract tests for {@link BaseTool}.
  *
@@ -28,8 +30,6 @@
  * per-tool test's job, not the contract's.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { BaseTool, ToolContext, ToolRisk } from '@lumen/core'
-import { ToolError, ToolValidationError } from '@lumen/core'
 
 const VALID_RISKS: ReadonlyArray<ToolRisk> = ['safe', 'approval-required', 'dangerous']
 

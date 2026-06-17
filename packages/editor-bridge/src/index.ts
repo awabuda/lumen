@@ -148,9 +148,7 @@ export abstract class BaseEditorAdapter {
 }
 
 /** A result type for dispatch. */
-export type DispatchResult =
-  | { ok: true; data?: unknown }
-  | { ok: false; error: string }
+export type DispatchResult = { ok: true; data?: unknown } | { ok: false; error: string }
 
 /** A simple editor event. */
 export interface EditorEvent {
@@ -231,7 +229,7 @@ export class VSCodeEditorAdapter extends BaseEditorAdapter {
           edits: [{ path: parsed.path, position: parsed.position, text: parsed.text }],
         })
         return { ok: true }
-      case 'get-selection':
+      case 'get-selection': {
         const doc = await this.api.workspace.openTextDocument({ fsPath: parsed.path })
         const text = doc.getText()
         return {
@@ -242,6 +240,7 @@ export class VSCodeEditorAdapter extends BaseEditorAdapter {
             range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
           } satisfies SelectionResult,
         }
+      }
     }
   }
 }
@@ -293,7 +292,7 @@ export class JetBrainsEditorAdapter extends BaseEditorAdapter {
       case 'show-info':
         await this.api.showNotification(parsed.message)
         return { ok: true }
-      case 'apply-edits':
+      case 'apply-edits': {
         // Group edits by path; one RPC call per file.
         const byPath = new Map<string, TextEdit[]>()
         for (const edit of parsed.edits) {
@@ -305,6 +304,7 @@ export class JetBrainsEditorAdapter extends BaseEditorAdapter {
           await this.api.applyEdits(path, edits)
         }
         return { ok: true }
+      }
       case 'insert-text':
         await this.api.applyEdits(parsed.path, [
           {
@@ -317,12 +317,13 @@ export class JetBrainsEditorAdapter extends BaseEditorAdapter {
           },
         ])
         return { ok: true }
-      case 'get-selection':
+      case 'get-selection': {
         const selection = await this.api.getSelection(parsed.path)
         if (!selection) {
           return { ok: false, error: 'no selection' }
         }
         return { ok: true, data: selection }
+      }
     }
   }
 }

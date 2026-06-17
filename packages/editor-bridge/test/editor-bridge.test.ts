@@ -44,21 +44,15 @@ describe('TextEditSchema', () => {
 
 describe('EditorCommandSchema (discriminated union)', () => {
   it('accepts open-file', () => {
-    expect(
-      EditorCommandSchema.safeParse({ kind: 'open-file', path: '/x' }).success,
-    ).toBe(true)
+    expect(EditorCommandSchema.safeParse({ kind: 'open-file', path: '/x' }).success).toBe(true)
   })
 
   it('accepts show-info', () => {
-    expect(
-      EditorCommandSchema.safeParse({ kind: 'show-info', message: 'hi' }).success,
-    ).toBe(true)
+    expect(EditorCommandSchema.safeParse({ kind: 'show-info', message: 'hi' }).success).toBe(true)
   })
 
   it('requires edits array for apply-edits', () => {
-    expect(
-      EditorCommandSchema.safeParse({ kind: 'apply-edits', edits: [] }).success,
-    ).toBe(false)
+    expect(EditorCommandSchema.safeParse({ kind: 'apply-edits', edits: [] }).success).toBe(false)
     expect(
       EditorCommandSchema.safeParse({
         kind: 'apply-edits',
@@ -85,9 +79,7 @@ describe('EditorCommandSchema (discriminated union)', () => {
   })
 
   it('rejects unknown kinds', () => {
-    expect(
-      EditorCommandSchema.safeParse({ kind: 'delete-everything' }).success,
-    ).toBe(false)
+    expect(EditorCommandSchema.safeParse({ kind: 'delete-everything' }).success).toBe(false)
   })
 })
 
@@ -99,8 +91,8 @@ describe('SelectionResultSchema', () => {
 
 describe('BaseEditorAdapter is abstract', () => {
   it('cannot be instantiated directly', () => {
-    // @ts-expect-error — abstract class
-    new (BaseEditorAdapter as any)()
+    // biome-ignore lint/suspicious/noExplicitAny: abstract class cannot be instantiated directly
+    ;new (BaseEditorAdapter as any)()
   })
 })
 
@@ -164,17 +156,21 @@ describe('MockEditorAdapter', () => {
 })
 
 describe('VSCodeEditorAdapter', () => {
-  const makeApi = (overrides: Partial<{
-    showInformationMessage: (m: string) => Promise<string | undefined>
-    openTextDocument: (u: { fsPath: string }) => Promise<unknown>
-    applyEdit: (e: unknown) => Promise<boolean>
-  }> = {}) => ({
+  const makeApi = (
+    overrides: Partial<{
+      showInformationMessage: (m: string) => Promise<string | undefined>
+      openTextDocument: (u: { fsPath: string }) => Promise<unknown>
+      applyEdit: (e: unknown) => Promise<boolean>
+    }> = {},
+  ) => ({
     window: {
       showInformationMessage: overrides.showInformationMessage ?? (async () => undefined),
     },
     workspace: {
       textDocuments: [],
-      openTextDocument: overrides.openTextDocument ?? (async () => ({ getText: () => '', lineAt: () => ({ text: '' }) })),
+      openTextDocument:
+        overrides.openTextDocument ??
+        (async () => ({ getText: () => '', lineAt: () => ({ text: '' }) })),
       applyEdit: overrides.applyEdit ?? (async () => true),
     },
   })
@@ -254,12 +250,14 @@ describe('VSCodeEditorAdapter', () => {
 })
 
 describe('JetBrainsEditorAdapter', () => {
-  const makeApi = (overrides: Partial<{
-    showNotification: (m: string) => Promise<void>
-    openFile: (p: string) => Promise<void>
-    applyEdits: (p: string, e: ReadonlyArray<unknown>) => Promise<void>
-    getSelection: (p: string) => Promise<unknown>
-  }> = {}) => ({
+  const makeApi = (
+    overrides: Partial<{
+      showNotification: (m: string) => Promise<void>
+      openFile: (p: string) => Promise<void>
+      applyEdits: (p: string, e: ReadonlyArray<unknown>) => Promise<void>
+      getSelection: (p: string) => Promise<unknown>
+    }> = {},
+  ) => ({
     showNotification: overrides.showNotification ?? (async () => {}),
     openFile: overrides.openFile ?? (async () => {}),
     applyEdits: overrides.applyEdits ?? (async () => {}),
@@ -285,9 +283,21 @@ describe('JetBrainsEditorAdapter', () => {
     await adapter.dispatch({
       kind: 'apply-edits',
       edits: [
-        { path: '/a', range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }, newText: '1' },
-        { path: '/a', range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }, newText: '2' },
-        { path: '/b', range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }, newText: '3' },
+        {
+          path: '/a',
+          range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+          newText: '1',
+        },
+        {
+          path: '/a',
+          range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+          newText: '2',
+        },
+        {
+          path: '/b',
+          range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+          newText: '3',
+        },
       ],
     })
     expect(calls).toEqual([

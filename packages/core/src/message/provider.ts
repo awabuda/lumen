@@ -15,10 +15,10 @@
  */
 
 import type { z } from 'zod'
+import { ProviderError } from '../errors/index.js'
+import type { ToolDescriptor } from '../tools/index.js'
 import type { Message } from './index.js'
 import type { AssistantMessage, StreamEvent, StreamOptions } from './index.js'
-import type { ToolDescriptor } from '../tools/index.js'
-import { ProviderError } from '../errors/index.js'
 
 export interface ProviderCapabilities {
   /** Provider can stream responses incrementally. */

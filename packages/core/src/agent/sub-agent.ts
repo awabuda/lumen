@@ -19,8 +19,8 @@
 import { z } from 'zod'
 
 import { Agent } from '../index.js'
-import type { AgentConfig, AgentRunOptions, AgentRunResult, RunEvent } from './index.js'
 import { ToolRegistry } from '../tools/index.js'
+import type { AgentConfig, AgentRunOptions, AgentRunResult, RunEvent } from './index.js'
 
 /** Zod schema for {@link SubAgentOptions}. */
 export const SubAgentOptionsSchema = z.object({

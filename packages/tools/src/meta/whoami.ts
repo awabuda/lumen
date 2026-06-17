@@ -1,3 +1,5 @@
+import { arch, hostname, platform, userInfo } from 'node:os'
+import { BaseTool, type ToolContext, type ToolRisk } from '@lumen/core'
 /**
  * `whoami` — current OS user, hostname, platform, and Node version.
  *
@@ -6,8 +8,6 @@
  * risk: 'safe'.
  */
 import { z } from 'zod'
-import { BaseTool, type ToolContext, type ToolRisk } from '@lumen/core'
-import { hostname, userInfo, platform, arch } from 'node:os'
 
 export const WhoamiInputSchema = z.object({})
 export type WhoamiInput = z.infer<typeof WhoamiInputSchema>

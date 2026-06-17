@@ -1,3 +1,4 @@
+import type { ToolContext } from '@lumen/core'
 /**
  * Tests for the meta tools (date, env, whoami).
  */
@@ -5,7 +6,6 @@ import { describe, expect, it } from 'vitest'
 import { DateTool } from '../src/meta/date.js'
 import { EnvTool } from '../src/meta/env.js'
 import { WhoamiTool } from '../src/meta/whoami.js'
-import type { ToolContext } from '@lumen/core'
 
 const ctx: ToolContext = {
   cwd: '/tmp',
@@ -61,6 +61,7 @@ describe('EnvTool', () => {
       expect(output.value).toBe('hello')
       expect(output.redacted).toBe(false)
     } finally {
+      // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
       delete process.env.LUMEN_TEST_VAR
     }
   })
@@ -77,6 +78,7 @@ describe('EnvTool', () => {
       expect(output.value).toBe('[REDACTED]')
       expect(output.redacted).toBe(true)
     } finally {
+      // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
       delete process.env.LUMEN_API_KEY
     }
   })

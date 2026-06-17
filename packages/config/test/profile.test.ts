@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 /**
  * Tests for profile switching.
  *
@@ -5,16 +8,13 @@
  * or project config, or as sibling files next to the base config.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import {
-  loadConfigWithProfile,
-  listProfiles,
-  resolveProfile,
-  DEFAULT_PROFILE,
-} from '../src/index.js'
 import { ConfigValidationError } from '../src/errors.js'
+import {
+  DEFAULT_PROFILE,
+  listProfiles,
+  loadConfigWithProfile,
+  resolveProfile,
+} from '../src/index.js'
 
 describe('resolveProfile', () => {
   it('returns DEFAULT_PROFILE when no hint is given', () => {
@@ -30,31 +30,28 @@ describe('resolveProfile', () => {
   })
 
   it('reads LUMEN_PROFILE from the environment when no explicit hint is given', () => {
-    const original = process.env['LUMEN_PROFILE']
-    process.env['LUMEN_PROFILE'] = 'envprof'
+    const original = process.env.LUMEN_PROFILE
+    process.env.LUMEN_PROFILE = 'envprof'
     try {
       expect(resolveProfile({})).toBe('envprof')
     } finally {
-      if (original === undefined) delete process.env['LUMEN_PROFILE']
-      else process.env['LUMEN_PROFILE'] = original
+      // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
+      if (original === undefined) delete process.env.LUMEN_PROFILE
+      else process.env.LUMEN_PROFILE = original
     }
   })
 
   it('reads defaultProfile from the user config root', () => {
-    expect(
-      resolveProfile({ userConfigRoot: { defaultProfile: 'userprof' } }),
-    ).toBe('userprof')
+    expect(resolveProfile({ userConfigRoot: { defaultProfile: 'userprof' } })).toBe('userprof')
   })
 
   it('falls back to the project config root', () => {
-    expect(
-      resolveProfile({ projectConfigRoot: { defaultProfile: 'projprof' } }),
-    ).toBe('projprof')
+    expect(resolveProfile({ projectConfigRoot: { defaultProfile: 'projprof' } })).toBe('projprof')
   })
 
   it('explicit profile wins over env and defaultProfile', () => {
-    const original = process.env['LUMEN_PROFILE']
-    process.env['LUMEN_PROFILE'] = 'envprof'
+    const original = process.env.LUMEN_PROFILE
+    process.env.LUMEN_PROFILE = 'envprof'
     try {
       expect(
         resolveProfile({
@@ -63,8 +60,9 @@ describe('resolveProfile', () => {
         }),
       ).toBe('explicit')
     } finally {
-      if (original === undefined) delete process.env['LUMEN_PROFILE']
-      else process.env['LUMEN_PROFILE'] = original
+      // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
+      if (original === undefined) delete process.env.LUMEN_PROFILE
+      else process.env.LUMEN_PROFILE = original
     }
   })
 })
@@ -84,13 +82,9 @@ describe('loadConfigWithProfile', () => {
     const projectPath = join(dir, 'config.yaml')
     writeFileSync(
       projectPath,
-      [
-        'defaultModel: base-model',
-        'profiles:',
-        '  work:',
-        '    defaultModel: work-model',
-        '',
-      ].join('\n'),
+      ['defaultModel: base-model', 'profiles:', '  work:', '    defaultModel: work-model', ''].join(
+        '\n',
+      ),
       'utf8',
     )
     const cfg = await loadConfigWithProfile({
@@ -130,11 +124,7 @@ describe('loadConfigWithProfile', () => {
   it('reads a sibling <base>.<profile>.yaml file', async () => {
     const projectPath = join(dir, 'config.yaml')
     writeFileSync(projectPath, 'defaultModel: base-model\n', 'utf8')
-    writeFileSync(
-      join(dir, 'config.staging.yaml'),
-      'defaultModel: staging-model\n',
-      'utf8',
-    )
+    writeFileSync(join(dir, 'config.staging.yaml'), 'defaultModel: staging-model\n', 'utf8')
     const cfg = await loadConfigWithProfile({
       projectPath,
       skipUserConfig: true,
@@ -162,11 +152,7 @@ describe('loadConfigWithProfile', () => {
     const projectPath = join(dir, 'config.yaml')
     writeFileSync(projectPath, 'defaultModel: base-model\n', 'utf8')
     // `logging.level: bogus` is invalid against the enum.
-    writeFileSync(
-      join(dir, 'config.bad.yaml'),
-      'logging:\n  level: bogus\n',
-      'utf8',
-    )
+    writeFileSync(join(dir, 'config.bad.yaml'), 'logging:\n  level: bogus\n', 'utf8')
     await expect(
       loadConfigWithProfile({
         projectPath,
@@ -201,11 +187,7 @@ describe('listProfiles', () => {
 
   it('lists profiles declared in `profiles:`', () => {
     const projectPath = join(dir, 'config.yaml')
-    writeFileSync(
-      projectPath,
-      ['profiles:', '  work: {}', '  personal: {}', ''].join('\n'),
-      'utf8',
-    )
+    writeFileSync(projectPath, ['profiles:', '  work: {}', '  personal: {}', ''].join('\n'), 'utf8')
     const out = listProfiles({
       projectPath,
       skipUserConfig: true,

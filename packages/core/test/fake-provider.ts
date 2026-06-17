@@ -1,10 +1,10 @@
+import type { AssistantMessage, StreamEvent, StreamOptions } from '../src/message/index.js'
 /**
  * A fake provider for testing the agent loop. Records calls and returns
  * pre-canned responses. Lives in test/ so it doesn't ship.
  */
 import type { ChatRequest, ChatResponse, ProviderCapabilities } from '../src/message/provider.js'
 import { BaseProvider } from '../src/message/provider.js'
-import type { AssistantMessage, StreamEvent, StreamOptions } from '../src/message/index.js'
 
 export interface ScriptedStep {
   /** What the assistant should return at this step. */

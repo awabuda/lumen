@@ -7,9 +7,9 @@
  * with the correct name / risk / version.
  */
 
+import type { ToolContext } from '@lumen/core'
 import { describe, expect, it } from 'vitest'
 import { ChunkTextTool } from '../src/text/chunk-text.js'
-import type { ToolContext } from '@lumen/core'
 
 const ctx: ToolContext = {
   cwd: '/tmp',

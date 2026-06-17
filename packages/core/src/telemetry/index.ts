@@ -68,7 +68,7 @@ export class ConsoleTelemetryBackend extends BaseTelemetryBackend {
   public readonly id = 'console'
 
   public emit(event: TelemetryEvent): void {
-    process.stderr.write(JSON.stringify(event) + '\n')
+    process.stderr.write(`${JSON.stringify(event)}\n`)
   }
 
   public async flush(): Promise<void> {

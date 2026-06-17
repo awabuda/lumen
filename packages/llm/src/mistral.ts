@@ -30,16 +30,16 @@
  * {@link MistralProvider} directly.
  */
 
-import { z } from 'zod'
-import { OpenAICompatibleProvider, type OpenAICompatibleOptions } from './openai-compatible.js'
-import { parseResponseJson } from './errors.js'
 import {
-  ProviderError,
   type EmbedRequest,
   type EmbedResponse,
+  ProviderError,
   type StreamOptions,
   ValidationError,
 } from '@lumen/core'
+import { z } from 'zod'
+import { parseResponseJson } from './errors.js'
+import { type OpenAICompatibleOptions, OpenAICompatibleProvider } from './openai-compatible.js'
 
 // ---------------------------------------------------------------------------
 // Defaults

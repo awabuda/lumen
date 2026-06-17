@@ -1,8 +1,8 @@
 /** Tests for skill triggers. */
 
 import { describe, expect, it } from 'vitest'
-import { KeywordTrigger, EmbeddingTrigger } from '../src/trigger.js'
 import type { BaseSkill, SkillTrigger } from '../src/base.js'
+import { EmbeddingTrigger, KeywordTrigger } from '../src/trigger.js'
 
 const toTriggers = (words: string[]): SkillTrigger[] =>
   words.map((w) => ({ kind: 'keyword' as const, value: w, weight: 0.7 }))

@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 /**
  * Tests for the config hot-reload watcher.
  *
@@ -6,11 +9,8 @@
  * `kind:'config'` events with the new values.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync, utimesSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { watchConfig, type ConfigWatchEvent } from '../src/index.js'
 import { ConfigValidationError } from '../src/errors.js'
+import { type ConfigWatchEvent, watchConfig } from '../src/index.js'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 

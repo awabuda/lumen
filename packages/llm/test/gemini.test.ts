@@ -1,7 +1,7 @@
 /** Tests for the Gemini provider. */
 
 import { describe, expect, it } from 'vitest'
-import { GeminiProvider, GeminiOptionsSchema } from '../src/gemini.js'
+import { GeminiOptionsSchema, GeminiProvider } from '../src/gemini.js'
 
 const fakeFetch = (responses: Record<string, { ok: boolean; status: number; body: string }>) =>
   (async (url: string) => {

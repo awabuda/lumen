@@ -11,13 +11,7 @@
 
 import { z } from 'zod'
 
-const ProviderIdSchema = z.enum([
-  'openai',
-  'anthropic',
-  'google',
-  'ollama',
-  'custom',
-])
+const ProviderIdSchema = z.enum(['openai', 'anthropic', 'google', 'ollama', 'custom'])
 
 const ProviderConfigSchema = z
   .object({
@@ -91,10 +85,9 @@ const McpServerConfigSchema = z
     enabled: z.boolean().default(true),
   })
   .strict()
-  .refine(
-    (s) => (s.transport === 'stdio' ? Boolean(s.command) : Boolean(s.url)),
-    { message: 'stdio transport requires `command`; http transport requires `url`' },
-  )
+  .refine((s) => (s.transport === 'stdio' ? Boolean(s.command) : Boolean(s.url)), {
+    message: 'stdio transport requires `command`; http transport requires `url`',
+  })
 
 const McpConfigSchema = z
   .object({
@@ -144,6 +137,4 @@ export type LumenConfig = z.infer<typeof LumenConfigSchema>
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>
 export type ModelConfig = z.infer<typeof ModelConfigSchema>
 export type McpServerConfig = z.infer<typeof McpServerConfigSchema>
-export {
-  McpServerConfigSchema,
-}
+export { McpServerConfigSchema }

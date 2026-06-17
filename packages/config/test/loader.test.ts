@@ -20,6 +20,7 @@ describe('loadConfig', () => {
       })
       expect(cfg.logging.level).toBe('warn')
     } finally {
+      // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
       delete process.env.LUMEN_LOGGING__LEVEL
     }
   })
@@ -30,6 +31,7 @@ describe('loadConfig', () => {
       const cfg = await loadConfig({ skipUserConfig: true, skipProjectConfig: true, cwd: '/' })
       expect(cfg.defaultModel).toBe('gpt-4o-mini')
     } finally {
+      // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
       delete process.env.LUMEN_DEFAULT_MODEL
     }
   })
@@ -44,10 +46,15 @@ describe('loadConfig', () => {
       const cfg = await loadConfig({ skipUserConfig: true, skipProjectConfig: true, cwd: '/' })
       expect(cfg.agent.maxIterations).toBe(50)
     } finally {
+      // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
       delete process.env.LUMEN_API_KEY
+      // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
       delete process.env.LUMEN_BASE_URL
+      // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
       delete process.env.LUMEN_MODEL
+      // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
       delete process.env.LUMEN_MEMORY_PATH
+      // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
       delete process.env.LUMEN_SKILLS_PATH
     }
   })

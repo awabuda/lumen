@@ -171,7 +171,9 @@ export const doctorCommand = async (opts: DoctorOptions = {}): Promise<number> =
   // 7. Skills registry discovery (read-only).
   //    Missing ~/.lumen/skills is OK: discovery returns an empty list.
   try {
-    const { FilesystemSkillSource, defaultSkillsPath, SkillRegistry } = await import('@lumen/skills')
+    const { FilesystemSkillSource, defaultSkillsPath, SkillRegistry } = await import(
+      '@lumen/skills'
+    )
     const source = new FilesystemSkillSource({ rootDir: defaultSkillsPath() })
     const skills = await source.discover({ cwd: process.cwd() })
     const registry = new SkillRegistry()

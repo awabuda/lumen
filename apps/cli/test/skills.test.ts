@@ -34,7 +34,7 @@ const writeSkill = async (): Promise<void> => {
   await fs.mkdir(dir, { recursive: true })
   await fs.writeFile(
     path.join(dir, 'SKILL.md'),
-    `---\nname: TypeScript Expert\ndescription: Strict TS guidance\nversion: 2.0.0\nkeywords: [typescript]\n---\n# TypeScript Expert\n\nAvoid any.\n`,
+    '---\nname: TypeScript Expert\ndescription: Strict TS guidance\nversion: 2.0.0\nkeywords: [typescript]\n---\n# TypeScript Expert\n\nAvoid any.\n',
     'utf8',
   )
 }

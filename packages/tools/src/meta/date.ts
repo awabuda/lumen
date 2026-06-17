@@ -1,3 +1,4 @@
+import { BaseTool, type ToolContext, type ToolRisk } from '@lumen/core'
 /**
  * `date` — current date/time in ISO 8601 format.
  *
@@ -6,7 +7,6 @@
  * risk: 'safe'.
  */
 import { z } from 'zod'
-import { BaseTool, type ToolContext, type ToolRisk } from '@lumen/core'
 
 export const DateInputSchema = z.object({})
 export type DateInput = z.infer<typeof DateInputSchema>

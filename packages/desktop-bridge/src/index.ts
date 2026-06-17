@@ -263,9 +263,8 @@ export class MockDesktopAdapter extends BaseDesktopAdapter {
         durationMs: Date.now() - startedAt,
       }
     }
-    const output = parsed.name in this.toolResponses
-      ? this.toolResponses[parsed.name]
-      : { echo: parsed.input }
+    const output =
+      parsed.name in this.toolResponses ? this.toolResponses[parsed.name] : { echo: parsed.input }
     return {
       success: true,
       output,

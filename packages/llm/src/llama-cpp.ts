@@ -61,7 +61,7 @@
  * and the provider will attach `Authorization: Bearer ***.
  */
 
-import { OpenAICompatibleProvider, type OpenAICompatibleOptions } from './openai-compatible.js'
+import { type OpenAICompatibleOptions, OpenAICompatibleProvider } from './openai-compatible.js'
 
 /** Default llama.cpp server base URL. */
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8080/v1'

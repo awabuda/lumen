@@ -36,10 +36,15 @@
  * of distinct documents; the vector backend owns the locking.
  */
 
-import { type TextEmbedder, float32ToBytes } from './embedder.js'
-import { BaseVectorBackend, type VectorHit } from './vector-backend.js'
 import { ConfigError, ToolError } from '@lumen/core'
-import { IngestInputSchema, RagPipelineOptionsSchema, RetrieveInputSchema, parseOrThrow } from './schemas.js'
+import { type TextEmbedder, float32ToBytes } from './embedder.js'
+import {
+  IngestInputSchema,
+  RagPipelineOptionsSchema,
+  RetrieveInputSchema,
+  parseOrThrow,
+} from './schemas.js'
+import type { BaseVectorBackend, VectorHit } from './vector-backend.js'
 
 /** Structural chunker type — accepts `chunkText` from @lumen/tools. */
 export type ChunkerFunction = (text: string) => ReadonlyArray<{

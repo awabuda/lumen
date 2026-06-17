@@ -5,7 +5,7 @@
  * the configured root, lists descriptors, and can print a single skill body.
  */
 
-import { defaultSkillsPath, FilesystemSkillSource, SkillRegistry } from '@lumen/skills'
+import { FilesystemSkillSource, SkillRegistry, defaultSkillsPath } from '@lumen/skills'
 
 /** Options for `lumen skills list`. */
 export interface SkillsListOptions {
@@ -47,7 +47,12 @@ export const skillsListCommand = async (opts: SkillsListOptions = {}): Promise<n
   let activations = new Map<string, string>()
   if (opts.prompt) {
     const active = await registry.activate({ cwd: process.cwd(), prompt: opts.prompt })
-    activations = new Map(active.map((item) => [item.skill.id, `${item.activation.score.toFixed(2)} ${item.activation.reason}`]))
+    activations = new Map(
+      active.map((item) => [
+        item.skill.id,
+        `${item.activation.score.toFixed(2)} ${item.activation.reason}`,
+      ]),
+    )
   }
 
   for (const desc of descriptors) {

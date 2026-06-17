@@ -12,9 +12,9 @@
  */
 
 import { spawn } from 'node:child_process'
-import { describe, expect, it } from 'vitest'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { describe, expect, it } from 'vitest'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -42,18 +42,18 @@ interface RunResult {
 
 const runCli = (args: readonly string[], env: Record<string, string> = {}): Promise<RunResult> => {
   return new Promise((resolve, reject) => {
-    const child = spawn(
-      'node',
-      [cliEntry, ...args],
-      {
-        env: { ...process.env, ...env, NO_COLOR: '1' },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    )
+    const child = spawn('node', [cliEntry, ...args], {
+      env: { ...process.env, ...env, NO_COLOR: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
     let stdout = ''
     let stderr = ''
-    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()))
-    child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()))
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString()
+    })
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString()
+    })
     // Chat pre-flight error prints to stderr and exits 2; the TUI
     // would never get a chance to mount. We can also stop the
     // process after a small budget in case Ink's render doesn't

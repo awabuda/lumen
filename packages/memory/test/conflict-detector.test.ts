@@ -1,8 +1,8 @@
 /** Tests for the conflict detector. */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { InMemoryStore } from '../src/in-memory-store.js'
 import { KeywordConflictDetector } from '../src/conflict-detector.js'
+import { InMemoryStore } from '../src/in-memory-store.js'
 
 let store: InMemoryStore
 

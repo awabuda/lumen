@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { Agent } from '../src/agent/index.js'
+import { AbortError, MaxIterationsExceededError } from '../src/errors/index.js'
 import { ToolRegistry } from '../src/tools/index.js'
+import { FakeMemoryStore } from './fake-memory.js'
 import { FakeProvider } from './fake-provider.js'
 import { EchoTool } from './fake-tools.js'
-import { FakeMemoryStore } from './fake-memory.js'
-import { AbortError, MaxIterationsExceededError } from '../src/errors/index.js'
 
 describe('Agent.run', () => {
   it('returns the final assistant message when no tools are called', async () => {

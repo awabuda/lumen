@@ -28,8 +28,8 @@
  *     can drop them straight into a system prompt.
  */
 
-import type { MemoryRecord } from './index.js'
 import { ValidationError } from '../errors/index.js'
+import type { MemoryRecord } from './index.js'
 
 /**
  * One entry in working memory: a record plus a score and

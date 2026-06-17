@@ -6,8 +6,8 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { NoneSandbox } from '../src/shell/none-sandbox.js'
 import { defaultShellSandboxConfig } from '../src/shell/factories.js'
+import { NoneSandbox } from '../src/shell/none-sandbox.js'
 import type { ShellSandboxRequest } from '../src/shell/sandbox.js'
 
 describe('NoneSandbox', () => {

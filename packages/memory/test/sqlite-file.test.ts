@@ -1,3 +1,6 @@
+import * as fs from 'node:fs/promises'
+import * as os from 'node:os'
+import * as path from 'node:path'
 /**
  * File-backed SqliteStore tests.
  *
@@ -11,9 +14,6 @@
  *     file twice does not throw "table already exists".
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import * as fs from 'node:fs/promises'
-import * as os from 'node:os'
-import * as path from 'node:path'
 import { SqliteStore } from '../src/sqlite-store.js'
 
 let tmpDir: string

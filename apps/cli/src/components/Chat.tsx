@@ -23,11 +23,11 @@
  *     the TUI cleanly.
  */
 
+import type { AssistantMessage, ToolCall, ToolResult } from '@lumen/core'
 import { Box, Text, useApp, useInput } from 'ink'
 import Spinner from 'ink-spinner'
 import TextInput from 'ink-text-input'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AssistantMessage, ToolCall, ToolResult } from '@lumen/core'
 import type { BuiltAgent } from '../composition.js'
 
 /** A single turn (user + assistant) in the conversation log. */
@@ -248,7 +248,10 @@ export function Chat({ built }: ChatProps): JSX.Element {
         <Text bold color="cyan">
           lumen
         </Text>
-        <Text dimColor> · {built.model} · {built.tools.size} tools · session </Text>
+        <Text dimColor>
+          {' '}
+          · {built.model} · {built.tools.size} tools · session{' '}
+        </Text>
         <Text dimColor>{activeSessionId.slice(0, 8) || '(new)'}</Text>
       </Box>
 
@@ -263,7 +266,9 @@ export function Chat({ built }: ChatProps): JSX.Element {
               key={turn.key}
               turn={turn}
               streamingText={streamingText}
-              isActive={status === 'thinking' && turn.error === undefined && turn.assistant === undefined}
+              isActive={
+                status === 'thinking' && turn.error === undefined && turn.assistant === undefined
+              }
             />
           ))
         )}
@@ -308,14 +313,20 @@ function TurnView({ turn, streamingText, isActive }: TurnViewProps): JSX.Element
         <Text color="green" bold>
           you
         </Text>
-        <Text>{': '}{turn.user}</Text>
+        <Text>
+          {': '}
+          {turn.user}
+        </Text>
       </Box>
       {turn.error !== undefined ? (
         <Box>
           <Text color="red" bold>
             lumen
           </Text>
-          <Text color="red">{': '}{turn.error}</Text>
+          <Text color="red">
+            {': '}
+            {turn.error}
+          </Text>
         </Box>
       ) : turn.assistant === undefined && isActive ? (
         <Box>
@@ -326,7 +337,7 @@ function TurnView({ turn, streamingText, isActive }: TurnViewProps): JSX.Element
           <Text color="cyan">
             <Spinner type="dots" />
           </Text>
-          {streamingText.length > 0 ? <Text>{' '}{streamingText}</Text> : null}
+          {streamingText.length > 0 ? <Text> {streamingText}</Text> : null}
         </Box>
       ) : turn.assistant !== undefined ? (
         <>
@@ -338,9 +349,7 @@ function TurnView({ turn, streamingText, isActive }: TurnViewProps): JSX.Element
               <Text>{': '}</Text>
             </Box>
             <Box marginLeft={2} flexDirection="column">
-              {turn.assistant.content ? (
-                <Text>{turn.assistant.content}</Text>
-              ) : null}
+              {turn.assistant.content ? <Text>{turn.assistant.content}</Text> : null}
               {turn.assistant.toolCalls.length > 0 ? (
                 <Box flexDirection="column" marginTop={1}>
                   {turn.assistant.toolCalls.map((tc: ToolCall) => (
@@ -380,11 +389,9 @@ function ToolCallChip({ call, result }: ToolCallChipProps): JSX.Element {
       <Text color="yellow" bold>
         {call.name}
       </Text>
-      <Text dimColor>{' '}{argPreview}</Text>
+      <Text dimColor> {argPreview}</Text>
       {result ? (
-        <Text color={result.isError ? 'red' : 'green'}>
-          {' '}→ {result.isError ? 'error' : 'ok'}
-        </Text>
+        <Text color={result.isError ? 'red' : 'green'}> → {result.isError ? 'error' : 'ok'}</Text>
       ) : null}
     </Box>
   )

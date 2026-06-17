@@ -18,7 +18,12 @@
 
 export { loadConfig, deepMerge, type LoadConfigOptions } from './loader.js'
 export { defineConfig, type ConfigDefinition } from './define.js'
-export { LumenConfigSchema, McpServerConfigSchema, type LumenConfig, type McpServerConfig } from './schema.js'
+export {
+  LumenConfigSchema,
+  McpServerConfigSchema,
+  type LumenConfig,
+  type McpServerConfig,
+} from './schema.js'
 export { ConfigError } from './errors.js'
 export {
   watchConfig,

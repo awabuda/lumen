@@ -1,10 +1,7 @@
 /** Tests for `lumen update` command handlers. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  updateCheckCommand,
-  updatePrintVersionCommand,
-} from '../src/commands/update.js'
+import { updateCheckCommand, updatePrintVersionCommand } from '../src/commands/update.js'
 
 let stdout = ''
 

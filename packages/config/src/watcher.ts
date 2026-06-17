@@ -29,10 +29,10 @@
  *     `dispose()`.
  */
 
-import { existsSync, watch, type FSWatcher } from 'node:fs'
+import { type FSWatcher, existsSync, watch } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { loadConfig, type LoadConfigOptions } from './loader.js'
 import { ConfigError } from './errors.js'
+import { type LoadConfigOptions, loadConfig } from './loader.js'
 import type { LumenConfig } from './schema.js'
 
 /** A single emission from {@link ConfigWatcher.events}. */
@@ -77,10 +77,10 @@ const resolveWatchedPaths = (
   const cwd = options.cwd ?? process.cwd()
   const userPath = options.skipUserConfig
     ? undefined
-    : options.userPath ?? join(resolve(homedir()), '.lumen', 'config.yaml')
+    : (options.userPath ?? join(resolve(homedir()), '.lumen', 'config.yaml'))
   const projectPath = options.skipProjectConfig
     ? undefined
-    : options.projectPath ?? resolveProjectPathOrUndefined(cwd)
+    : (options.projectPath ?? resolveProjectPathOrUndefined(cwd))
   return { project: projectPath, user: userPath }
 }
 

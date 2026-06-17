@@ -16,8 +16,8 @@
  * the response (e.g. fail with 500) by mutating `serverState`.
  */
 
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { once } from 'node:events'
+import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
 export type ResponseMode = 'json' | 'sse'

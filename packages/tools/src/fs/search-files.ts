@@ -13,10 +13,9 @@
  * documents and is correct for the common case.
  */
 
-import { spawn, type ChildProcess } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 import * as fs from 'node:fs/promises'
 import path from 'node:path'
-import { z } from 'zod'
 import {
   AbortError,
   BaseTool,
@@ -24,6 +23,7 @@ import {
   type ToolDescriptor,
   ValidationError,
 } from '@lumen/core'
+import { z } from 'zod'
 
 /** Zod schema for the tool's input. */
 export const SearchFilesInputSchema = z.object({
@@ -302,16 +302,14 @@ function makeGlobMatcher(glob: string): (name: string) => boolean {
   if (glob === '*') return () => true
   // Escape regex metacharacters except * and ?, then convert those.
   const re = new RegExp(
-    '^' +
-      glob
-        .split('')
-        .map((c) => {
-          if (c === '*') return '.*'
-          if (c === '?') return '.'
-          return c.replace(/[.+^${}()|[\]\\]/g, '\\$&')
-        })
-        .join('') +
-      '$',
+    `^${glob
+      .split('')
+      .map((c) => {
+        if (c === '*') return '.*'
+        if (c === '?') return '.'
+        return c.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      })
+      .join('')}$`,
   )
   return (name: string) => re.test(name)
 }

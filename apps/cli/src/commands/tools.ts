@@ -84,7 +84,7 @@ export const toolsShowCommand = async (opts: ToolsShowOptions): Promise<number> 
   process.stdout.write(`${desc.name}  v${desc.version}\n`)
   process.stdout.write(`  risk:        ${desc.risk}\n`)
   if (desc.description) process.stdout.write(`  description: ${desc.description}\n`)
-  process.stdout.write(`  inputSchema:\n`)
+  process.stdout.write('  inputSchema:\n')
   process.stdout.write(`${JSON.stringify(desc.inputJsonSchema, null, 2)}\n`)
   return 0
 }
@@ -99,7 +99,7 @@ export const toolsCheckCommand = async (): Promise<number> => {
   const tools = createDefaultTools()
   const dangerous = tools.filter((t) => t.describe().risk === 'approval-required')
 
-  process.stdout.write(`Lumen tools — approval audit\n\n`)
+  process.stdout.write('Lumen tools — approval audit\n\n')
   if (dangerous.length === 0) {
     process.stdout.write('  No approval-required tools in the default palette.\n')
     return 0

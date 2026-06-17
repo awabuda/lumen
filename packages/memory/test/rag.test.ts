@@ -6,14 +6,14 @@
  * {@link BruteForceVectorBackend}.
  */
 
-import { describe, expect, it, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
   BruteForceVectorBackend,
-  RagPipeline,
-  bytesToFloat32,
-  type TextEmbedder,
   type RagChunk,
+  RagPipeline,
+  type TextEmbedder,
+  bytesToFloat32,
 } from '../src/index.js'
 
 const DIM = 8

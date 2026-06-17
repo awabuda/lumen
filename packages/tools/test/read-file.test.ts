@@ -7,14 +7,14 @@
  * missing-file error, and the line-number gutter format.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { ToolValidationError } from '@lumen/core'
-import { ReadFileTool } from '../src/fs/read-file.js'
 import type { ToolContext } from '@lumen/core'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { FileNotFoundError } from '../src/errors.js'
+import { ReadFileTool } from '../src/fs/read-file.js'
 
 let tmpDir: string
 let ctx: ToolContext
@@ -50,7 +50,7 @@ describe('ReadFileTool', () => {
 
   it('supports offset+limit pagination', async () => {
     const file = path.join(tmpDir, 'lines.txt')
-    const body = Array.from({ length: 10 }, (_, i) => `line-${i + 1}`).join('\n') + '\n'
+    const body = `${Array.from({ length: 10 }, (_, i) => `line-${i + 1}`).join('\n')}\n`
     await fs.writeFile(file, body, 'utf8')
     const tool = new ReadFileTool()
     const result = (await tool.call({ path: 'lines.txt', offset: 4, limit: 3 }, ctx)) as {
@@ -73,7 +73,7 @@ describe('ReadFileTool', () => {
 
   it('formats the line-number gutter as a fixed-width column', async () => {
     const file = path.join(tmpDir, 'numbered.ts')
-    const body = ['x', 'y', 'z'].join('\n') + '\n'
+    const body = `${['x', 'y', 'z'].join('\n')}\n`
     await fs.writeFile(file, body, 'utf8')
     const tool = new ReadFileTool()
     const result = (await tool.call({ path: 'numbered.ts' }, ctx)) as { content: string }

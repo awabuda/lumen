@@ -6,11 +6,11 @@
  * registered in a Lumen {@link ToolRegistry}.
  */
 
-import { type ToolRegistry } from '@lumen/core'
 import type { McpServerConfig } from '@lumen/config'
-import { McpClient, McpToolProxy, McpTransportError } from './base.js'
-import { StdioMcpTransport } from './stdio-transport.js'
+import type { ToolRegistry } from '@lumen/core'
+import { McpClient, McpToolProxy, type McpTransport, McpTransportError } from './base.js'
 import { HttpMcpTransport } from './http-transport.js'
+import { StdioMcpTransport } from './stdio-transport.js'
 
 export interface DiscoveredMcpServer {
   name: string
@@ -33,7 +33,7 @@ export const connectMcpServer = async (
     throw new McpTransportError(`MCP server "${name}" is disabled in config`)
   }
 
-  let transport
+  let transport: McpTransport
   if (config.transport === 'stdio') {
     if (!config.command) {
       throw new McpTransportError(`MCP server "${name}" uses stdio transport but has no command`)

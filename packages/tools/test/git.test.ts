@@ -12,13 +12,13 @@
  * fixed values, and we use a per-test worktree.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { execSync } from 'node:child_process'
 import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { GitTool } from '../src/git/git.js'
 import type { ToolContext } from '@lumen/core'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { GitTool } from '../src/git/git.js'
 
 let workdir: string
 let ctx: ToolContext

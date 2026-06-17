@@ -18,7 +18,7 @@
 import { once } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { HttpMcpTransport, McpClient, parseSseEvent } from '../src/index.js'
-import { startFakeMcpHttp, type FakeMcpHttp } from './fake-http-server.js'
+import { type FakeMcpHttp, startFakeMcpHttp } from './fake-http-server.js'
 
 let server: FakeMcpHttp | undefined
 
@@ -111,7 +111,7 @@ describe('HttpMcpTransport — JSON response mode', () => {
     await client.initialize()
 
     for (const req of server.requests) {
-      expect(req.headers['authorization']).toBe('Bearer secret-123')
+      expect(req.headers.authorization).toBe('Bearer secret-123')
     }
   })
 
@@ -127,7 +127,7 @@ describe('HttpMcpTransport — JSON response mode', () => {
     await client.initialize()
 
     for (const req of server.requests) {
-      expect(req.headers['authorization']).toBe('Custom scheme-xyz')
+      expect(req.headers.authorization).toBe('Custom scheme-xyz')
       expect(req.headers['x-tenant-id']).toBe('acme')
     }
   })
@@ -210,7 +210,7 @@ describe('HttpMcpTransport — lifecycle', () => {
     const originalFetch = (globalThis as { fetch?: typeof fetch }).fetch
     try {
       // @ts-expect-error — temporarily strip global fetch
-      delete globalThis.fetch
+      globalThis.fetch = undefined
       expect(() => new HttpMcpTransport({ url: 'http://x' })).toThrow(/global fetch/)
     } finally {
       ;(globalThis as { fetch?: typeof fetch }).fetch = originalFetch
@@ -235,7 +235,7 @@ describe('HttpMcpTransport — discover integration', () => {
     expect(discovered.tools).toHaveLength(1)
     expect(discovered.tools[0]?.name).toBe('mcp_remote_echo')
     // And the auth header reached the server:
-    expect(server.requests[0]?.headers['authorization']).toBe('Bearer sk-test')
+    expect(server.requests[0]?.headers.authorization).toBe('Bearer sk-test')
     await closeAllMcpServers([discovered])
   })
 })

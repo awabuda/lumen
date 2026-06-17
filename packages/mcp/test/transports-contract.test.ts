@@ -18,8 +18,8 @@
  * idempotent close) is correct.
  */
 
-import { StdioMcpTransport } from '../src/stdio-transport.js'
 import { HttpMcpTransport } from '../src/http-transport.js'
+import { StdioMcpTransport } from '../src/stdio-transport.js'
 import { runMcpTransportContractTests } from './contract-suite.js'
 
 runMcpTransportContractTests(

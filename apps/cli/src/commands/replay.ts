@@ -9,8 +9,8 @@
  *   lumen replay <session-id> [--model <model>] [--max-turns <n>]
  */
 
-import { buildAgent } from '../composition.js'
 import type { AgentConfig } from '@lumen/core'
+import { buildAgent } from '../composition.js'
 
 export interface ReplayOptions {
   readonly sessionId: string
@@ -27,7 +27,7 @@ export const replayCommand = async (opts: ReplayOptions): Promise<number> => {
   const sessionId = opts.sessionId
 
   // Read session messages from the memory store.
-  const store = agent['memory']
+  const store = agent.memory
   if (!store || typeof store.getSessionMessages !== 'function') {
     process.stderr.write('lumen replay: no memory store configured\n')
     return 1
@@ -39,7 +39,9 @@ export const replayCommand = async (opts: ReplayOptions): Promise<number> => {
     return 1
   }
 
-  process.stdout.write(`Replaying session ${sessionId} (${messages.length} messages, max ${maxTurns} turns)\n\n`)
+  process.stdout.write(
+    `Replaying session ${sessionId} (${messages.length} messages, max ${maxTurns} turns)\n\n`,
+  )
 
   // Filter to user messages and replay them one by one.
   const userMessages = messages.filter((m) => m.role === 'user')
@@ -57,7 +59,9 @@ export const replayCommand = async (opts: ReplayOptions): Promise<number> => {
       const result = await agent.agent.run({ userMessage: msg.content })
       process.stdout.write(`[turn ${turn}] assistant: ${result.finalMessage.content}\n\n`)
     } catch (err) {
-      process.stderr.write(`[turn ${turn}] error: ${err instanceof Error ? err.message : String(err)}\n`)
+      process.stderr.write(
+        `[turn ${turn}] error: ${err instanceof Error ? err.message : String(err)}\n`,
+      )
     }
   }
 

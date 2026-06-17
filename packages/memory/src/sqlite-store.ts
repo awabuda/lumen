@@ -54,13 +54,13 @@ import BetterSqlite3, {
   type Statement,
 } from 'better-sqlite3'
 import {
-  BaseVectorBackend,
+  type BaseVectorBackend,
   BruteForceVectorBackend,
   SqliteVecBackend,
   type VectorHit,
 } from './vector-backend.js'
 
-import { SqliteStoreConfigSchema, MemoryQuerySchema, parseOrThrow } from './schemas.js'
+import { MemoryQuerySchema, SqliteStoreConfigSchema, parseOrThrow } from './schemas.js'
 
 /** Bumped when the schema shape changes incompatibly. */
 const SCHEMA_VERSION = 1
@@ -215,9 +215,7 @@ export class SqliteStore extends BaseVectorMemoryStore {
     // We do a single parameterised IN-clause round-trip.
     const ids = hits.map((h) => h.id)
     const placeholders = ids.map(() => '?').join(', ')
-    const sql =
-      'SELECT id, kind, content, trust, created_at, updated_at, tags, metadata ' +
-      `FROM records WHERE id IN (${placeholders})`
+    const sql = `SELECT id, kind, content, trust, created_at, updated_at, tags, metadata FROM records WHERE id IN (${placeholders})`
     const rows = this.db.prepare(sql).all(...ids) as Array<{
       id: string
       kind: string

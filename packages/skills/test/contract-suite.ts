@@ -30,12 +30,7 @@
  *     with a tempdir in their own suite.
  */
 import { beforeEach, describe, expect, it } from 'vitest'
-import {
-  BaseSkill,
-  type SkillActivation,
-  type SkillContext,
-  type SkillTrigger,
-} from '../src/base.js'
+import type { BaseSkill, SkillActivation, SkillContext, SkillTrigger } from '../src/base.js'
 
 const baseContext: SkillContext = {
   cwd: '/tmp',

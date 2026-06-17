@@ -4,11 +4,11 @@ import { describe, expect, it } from 'vitest'
 import {
   BasePlanner,
   LLMPlanner,
+  ModeSchema,
   PlanSchema,
   PlanStepSchema,
   PlanStore,
   StaticPlanner,
-  ModeSchema,
 } from '../src/plan/index.js'
 
 describe('PlanStepSchema', () => {
@@ -200,8 +200,7 @@ describe('PlanStore', () => {
 
 describe('BasePlanner is abstract', () => {
   it('cannot be instantiated directly', () => {
-    // @ts-expect-error — abstract class cannot be instantiated
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    // biome-ignore lint/suspicious/noExplicitAny: abstract class cannot be instantiated directly
     ;new (BasePlanner as any)()
   })
 })

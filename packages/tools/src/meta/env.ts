@@ -1,3 +1,4 @@
+import { BaseTool, type ToolContext, type ToolRisk } from '@lumen/core'
 /**
  * `env` — read a single environment variable.
  *
@@ -9,7 +10,6 @@
  * Risk: 'safe' (read-only, no side effects).
  */
 import { z } from 'zod'
-import { BaseTool, type ToolContext, type ToolRisk } from '@lumen/core'
 
 export const EnvInputSchema = z.object({
   name: z.string().min(1).max(256),

@@ -203,11 +203,11 @@ export class LLMReflector extends BaseReflector {
           (item): item is Record<string, unknown> => typeof item === 'object' && item !== null,
         )
         .map((item) => ({
-          id: hashId(String(item['content'] ?? '')),
-          kind: String(item['kind'] ?? 'fact'),
-          content: String(item['content'] ?? ''),
-          trust: Math.min(1, Math.max(0, Number(item['trust'] ?? 0.5))),
-          tags: Array.isArray(item['tags']) ? item['tags'].map(String) : [],
+          id: hashId(String(item.content ?? '')),
+          kind: String(item.kind ?? 'fact'),
+          content: String(item.content ?? ''),
+          trust: Math.min(1, Math.max(0, Number(item.trust ?? 0.5))),
+          tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
         }))
         .filter((f) => f.content.length > 0)
     } catch {

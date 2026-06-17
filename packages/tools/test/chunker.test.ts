@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { chunkText, DEFAULT_CHUNK_MAX_SIZE, DEFAULT_CHUNK_OVERLAP } from '../src/text/chunker.js'
+import { DEFAULT_CHUNK_MAX_SIZE, DEFAULT_CHUNK_OVERLAP, chunkText } from '../src/text/chunker.js'
 
 // ---------------------------------------------------------------------------
 // Empty / degenerate inputs

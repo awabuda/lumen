@@ -5,8 +5,6 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { Agent } from '../src/agent/index.js'
-import { ToolRegistry } from '../src/tools/index.js'
-import { BaseProvider } from '../src/message/provider.js'
 import type {
   AssistantMessage,
   ChatRequest,
@@ -14,6 +12,8 @@ import type {
   StreamEvent,
   StreamOptions,
 } from '../src/message/index.js'
+import { BaseProvider } from '../src/message/provider.js'
+import { ToolRegistry } from '../src/tools/index.js'
 import { EchoTool } from './fake-tools.js'
 
 /**
@@ -105,7 +105,7 @@ describe('Agent.streamRun', () => {
     const provider = new ScriptedStreamProvider([textOnly('hello back')])
     const agent = new Agent({ provider, tools: new ToolRegistry() })
     const events: string[] = []
-    let result
+    let result: Extract<StreamEvent, { type: 'run:end' }> | undefined
     for await (const ev of agent.streamRun({ userMessage: 'hi' })) {
       events.push(ev.type)
       if (ev.type === 'run:end') result = ev
@@ -186,6 +186,7 @@ describe('Agent.streamRun', () => {
       capabilities: provider.capabilities,
       calls: [] as ChatRequest[],
       chat: vi.fn(),
+      // biome-ignore lint/correctness/useYield: throwing stream — must not yield
       stream: vi.fn(async function* () {
         throw new Error('boom')
       }),
@@ -214,15 +215,13 @@ describe('Agent.streamRun', () => {
       createSession: vi.fn().mockResolvedValue({ id: 's', createdAt: 0, updatedAt: 0 }),
       getSession: vi.fn(),
       listSessions: vi.fn(),
-      appendMessage: vi
-        .fn()
-        .mockResolvedValue({
-          id: 1,
-          sessionId: 's',
-          role: 'assistant',
-          content: 'saved',
-          createdAt: 0,
-        }),
+      appendMessage: vi.fn().mockResolvedValue({
+        id: 1,
+        sessionId: 's',
+        role: 'assistant',
+        content: 'saved',
+        createdAt: 0,
+      }),
       getSessionMessages: vi.fn(),
       prune: vi.fn(),
     }

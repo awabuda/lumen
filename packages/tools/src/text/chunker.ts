@@ -234,6 +234,7 @@ const splitParagraphs = (text: string): Unit[] => {
   const re = /\n\s*\n/g
   let last = 0
   let m: RegExpExecArray | null
+  // biome-ignore lint/suspicious/noAssignInExpressions: standard RegExp.exec() iteration idiom
   while ((m = re.exec(text)) !== null) {
     const end = re.lastIndex
     units.push({ text: text.slice(last, end), start: last, end })
@@ -262,6 +263,7 @@ const splitSentences = (text: string): Unit[] => {
   const re = /([.!?。！？]+)(?=[^.!?。！？]|$)/g
   let last = 0
   let m: RegExpExecArray | null
+  // biome-ignore lint/suspicious/noAssignInExpressions: standard RegExp.exec() iteration idiom
   while ((m = re.exec(text)) !== null) {
     const end = re.lastIndex
     units.push({ text: text.slice(last, end), start: last, end })

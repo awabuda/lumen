@@ -417,3 +417,38 @@ Output types (`MemoryRecord`, `RagHit`, `VectorHit`, …) are constructed intern
 **P10 totals:** 1 commit, 2 new files (`schemas.ts`, `schemas.test.ts`), 8 modified. Memory package: 98 → 125 tests (+27). Monorepo: 920 → 947 tests (+27). Typecheck clean. Biome clean. 44 commits ahead of origin/main.
 
 **Push status (2026-06-17):** Same — remote unreachable, no retry. Local commits are safe.
+
+---
+
+## P11 — Pre-existing biome errors + test-cleanup footgun (2026-06-17, all done; committed)
+
+Goal: close the third of three P2 items deferred from the P9 audit (the other two: memory Zod schemas in P10, and still-pending mistral `!` + SqliteStore init-order). This pass drives biome to zero errors and replaces a JS-to-TS auto-conversion footgun that the audit had missed.
+
+### Why this scope
+
+The 13 P2 biome errors noted in the P9.5 deferred list were the tip of an iceberg. A full `pnpm exec biome check` actually surfaced **235 errors** across 242 files. The bulk were stylistic (53 `useLiteralKeys`, 26 `useImportType`/`useNodejsImportProtocol`, 17 `no-…`, 15 perf, 9 style, 4 correctness, 1 warning). Most were auto-fixable.
+
+Auto-fix (`biome check --write --unsafe`) collapsed 235 → 7. The remaining 7 were semantic and required judgement: 2 `noAssignInExpressions` in `default-command.test.ts`, 1 `noImplicitAnyLet` + 1 `useYield` in `agent-stream.test.ts`, 3 `noExplicitAny` in abstract-class test guards. After fixing those, biome surfaced 4 more identical `noExplicitAny` guards in three bridge tests (`editor-bridge`, `server`, `desktop-bridge`).
+
+While fixing the original 7, `biome --write` also rewrote several `delete process.env.X` statements to `process.env.X = undefined` — a JS→TS auto-coercion. The audit's `process.env.X = undefined` footgun (already in `pitfalls.md`) was triggered again, but this time across **5 test files / 9 sites**: `skills/filesystem-source.test.ts`, `config/loader.test.ts`, `config/profile.test.ts`, `tools/meta.test.ts`, `apps/cli/test/run.test.ts`. The resulting 7 config + 1 skills test failures were exactly the symptoms listed in pitfalls.md (`received: 'undefined'` for `logging.level` enum, `expected 'undefined' to be '/Users/.../.lumen/skills'`).
+
+Replacing those with `delete` unblocked the tests, but biome's `performance/noDelete` rule then flagged them. The only correct way to unset a process env var in TS is `delete`; the fix is `biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset` per site.
+
+### Decisions
+
+- **`biome-ignore` per env-var `delete`** — global `noDelete` opt-out is too broad; per-site comments are honest about intent.
+- **Export `ChatMessage` from `skills/evolver.ts`** — clean replacement for `as any` casts in 4 test sites and 1 prod site (`trajectory-hook.ts`).
+- **`McpTransport` type-only import** in `mcp/discover.ts` — auto-fixable (`useImportType`), but I wrote it explicitly to be safe.
+- **`RegExp.exec()` idiom**: kept as-is with `biome-ignore lint/suspicious/noAssignInExpressions` — splitting the assignment+test in two would only obscure intent.
+- **Did NOT bump version**: P11 is tooling/test hygiene, no public API change. CHANGELOG 0.10.0 already covers everything in flight.
+
+### Commits
+- [x] **P11.0** — `chore: P11 — biome cleanup, env-var footgun, exported ChatMessage` *(commit TBD)*
+
+### Tests
+- 947 → 947 (no test count change). All 11 packages pass.
+- typecheck clean. `pnpm exec biome check` clean across 242 files.
+
+**P11 totals:** 235 biome errors → 0. 9 `process.env.X = undefined` sites → `delete` + `biome-ignore`. 3 `as any` casts in `evolver.test.ts` removed via exported `ChatMessage` interface. `trajectory-hook.ts:73` now uses `as ReadonlyArray<ChatMessage>`. No new tests; no API changes. 47 commits ahead of origin/main.
+
+**Push status (2026-06-17):** Same — remote unreachable, no retry.

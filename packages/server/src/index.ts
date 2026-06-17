@@ -261,9 +261,7 @@ export class NodeHttpAdapter extends BaseServerAdapter {
       return
     }
 
-    const agentMatch = url.pathname.match(
-      new RegExp(`^${prefix}/agent/([^/]+)(/cancel)?$`),
-    )
+    const agentMatch = url.pathname.match(new RegExp(`^${prefix}/agent/([^/]+)(/cancel)?$`))
     if (agentMatch) {
       const id = agentMatch[1]
       if (!id) {
@@ -324,15 +322,12 @@ const readBody = (req: import('node:http').IncomingMessage): Promise<string> =>
   })
 
 /** Coerce any thrown value to a human-readable message. */
-const errMessage = (err: unknown): string =>
-  err instanceof Error ? err.message : String(err)
+const errMessage = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
 /** Zod schema for {@link CreateServerOptions}. */
 export const CreateServerOptionsSchema = z.object({
   /** Factory that creates an Agent per run. */
-  agentFactory: z.custom<(req: RunRequest) => Agent>(
-    (v) => typeof v === 'function',
-  ),
+  agentFactory: z.custom<(req: RunRequest) => Agent>((v) => typeof v === 'function'),
   port: z.number().int().nonnegative().default(0),
   host: z.string().default('127.0.0.1'),
   pathPrefix: z.string().default('/v1'),
@@ -373,9 +368,7 @@ export const createNodeServer = (
       const wss = new WebSocketServer({ noServer: true })
       server.on('upgrade', (req, socket, head) => {
         const url = new URL(req.url ?? '/', 'http://localhost')
-        const match = url.pathname.match(
-          new RegExp(`^${parsed.pathPrefix}/agent/([^/]+)/stream$`),
-        )
+        const match = url.pathname.match(new RegExp(`^${parsed.pathPrefix}/agent/([^/]+)/stream$`))
         if (!match) {
           socket.destroy()
           return
@@ -469,9 +462,7 @@ export const createNodeServer = (
         return
       }
 
-      const agentMatch = url.pathname.match(
-        new RegExp(`^${prefix}/agent/([^/]+)(/cancel)?$`),
-      )
+      const agentMatch = url.pathname.match(new RegExp(`^${prefix}/agent/([^/]+)(/cancel)?$`))
       if (agentMatch) {
         const id = agentMatch[1]
         if (!id) {
@@ -515,6 +506,6 @@ export const streamToJsonLines = async function* (
   events: AsyncIterable<RunEvent>,
 ): AsyncGenerator<string> {
   for await (const ev of events) {
-    yield JSON.stringify(ev) + '\n'
+    yield `${JSON.stringify(ev)}\n`
   }
 }

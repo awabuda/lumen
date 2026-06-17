@@ -15,7 +15,7 @@
  * the JSX in a separate file so this file can stay pure TypeScript.
  */
 
-import { buildAgent, type BuiltAgent } from '../composition.js'
+import { type BuiltAgent, buildAgent } from '../composition.js'
 
 export interface ChatCommandOptions {
   model?: string
@@ -48,11 +48,10 @@ export const chatCommand = async (options: ChatCommandOptions): Promise<number> 
   const { render } = await import('ink')
   const { Chat } = await import('../components/Chat.js')
 
-  const app = render(
-    React.createElement(Chat, { built }),
-  )
+  const app = render(React.createElement(Chat, { built }))
   return new Promise<number>((resolve) => {
-    app.waitUntilExit()
+    app
+      .waitUntilExit()
       .then(() => resolve(0))
       .catch((err: unknown) => {
         process.stderr.write(`lumen chat: ${err instanceof Error ? err.message : String(err)}\n`)

@@ -19,18 +19,18 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
   Agent,
-  BaseTool,
-  HookRegistry,
-  ToolRegistry,
   type AssistantMessage,
+  BaseTool,
   type HookEvent,
+  HookRegistry,
   type RunEvent,
   type ToolContext,
   type ToolDescriptor,
+  ToolRegistry,
   type ToolRisk,
 } from '../src/index.js'
-import { FakeProvider, type ScriptedStep } from './fake-provider.js'
 import { FakeMemoryStore } from './fake-memory.js'
+import { FakeProvider, type ScriptedStep } from './fake-provider.js'
 import { EchoTool } from './fake-tools.js'
 
 // ---------------------------------------------------------------------------

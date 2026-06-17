@@ -25,18 +25,6 @@
  */
 
 import type { LumenConfig } from '@lumen/config'
-import type {
-  AssistantMessage,
-  Message,
-  StreamEvent,
-  ToolCall,
-  ToolResult,
-} from '../message/index.js'
-import { BaseProvider } from '../message/provider.js'
-import { ToolRegistry } from '../tools/index.js'
-import { BaseMemoryStore } from '../memory/index.js'
-import { BaseLogger, ConsoleLogger } from '../logging/index.js'
-import { HookRegistry } from '../hooks/index.js'
 import { Budget } from '../budget/index.js'
 import {
   AbortError,
@@ -44,6 +32,18 @@ import {
   ProviderError,
   ToolError,
 } from '../errors/index.js'
+import { HookRegistry } from '../hooks/index.js'
+import { type BaseLogger, ConsoleLogger } from '../logging/index.js'
+import type { BaseMemoryStore } from '../memory/index.js'
+import type {
+  AssistantMessage,
+  Message,
+  StreamEvent,
+  ToolCall,
+  ToolResult,
+} from '../message/index.js'
+import type { BaseProvider } from '../message/provider.js'
+import type { ToolRegistry } from '../tools/index.js'
 
 export interface AgentConfig {
   /** The LLM provider to call. Required. */

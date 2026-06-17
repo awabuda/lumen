@@ -18,13 +18,13 @@
  * the original `text` so callers can join chunks back into the source.
  */
 
-import { z } from 'zod'
 import { BaseTool, type ToolContext, type ToolRisk } from '@lumen/core'
+import { z } from 'zod'
 import {
-  chunkText,
   DEFAULT_CHUNK_MAX_SIZE,
   DEFAULT_CHUNK_OVERLAP,
   type TextChunk,
+  chunkText,
 } from './chunker.js'
 
 export const ChunkTextInputSchema = z.object({

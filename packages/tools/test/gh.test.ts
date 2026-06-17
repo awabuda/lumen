@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events'
+import type { ToolContext } from '@lumen/core'
 /**
  * Tests for the `gh` GitHub CLI tool.
  *
@@ -5,10 +7,8 @@
  * so the GhTool's dynamic `await import('node:child_process')`
  * inside `execute()` returns our fake child process.
  */
-import { describe, expect, it, vi, afterEach } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { GhTool } from '../src/github/gh.js'
-import type { ToolContext } from '@lumen/core'
-import { EventEmitter } from 'node:events'
 
 const ctx: ToolContext = {
   cwd: '/tmp',

@@ -9,23 +9,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  PoolExhaustedError,
+  type PooledProviderConfig,
+  ProviderPool,
+  type RoutingStrategy,
+} from '../../src/agent/pool.js'
+import { AgentError } from '../../src/errors/index.js'
+import {
   BaseProvider,
-  ProviderError,
   type ChatRequest,
   type ChatResponse,
   type EmbedRequest,
   type EmbedResponse,
   type ProviderCapabilities,
+  ProviderError,
   type StreamEvent,
   type StreamOptions,
 } from '../../src/index.js'
-import { AgentError } from '../../src/errors/index.js'
-import {
-  PoolExhaustedError,
-  ProviderPool,
-  type PooledProviderConfig,
-  type RoutingStrategy,
-} from '../../src/agent/pool.js'
 
 // ---------------------------------------------------------------------------
 // Stubs

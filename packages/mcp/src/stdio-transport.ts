@@ -6,13 +6,13 @@
  * via `npx`, `uvx`, or a custom executable.
  */
 
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { createInterface, type Interface } from 'node:readline'
+import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
+import { type Interface, createInterface } from 'node:readline'
 import {
-  McpTransport,
-  McpTransportError,
   type JsonRpcNotification,
   type JsonRpcRequest,
+  McpTransport,
+  McpTransportError,
   type McpTransportOptions,
 } from './base.js'
 

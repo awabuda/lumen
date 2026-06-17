@@ -5,12 +5,12 @@
  * classification of files vs directories in the entries.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { ListDirTool } from '../src/fs/list-dir.js'
 import type { ToolContext } from '@lumen/core'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { ListDirTool } from '../src/fs/list-dir.js'
 
 let tmpDir: string
 let ctx: ToolContext

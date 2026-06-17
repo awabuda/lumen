@@ -57,11 +57,11 @@ describe('configShowCommand', () => {
 
   it('redacts apiKey values in the dump', async () => {
     const file = await writeJsonConfig({
-      providers: [{ id: 'openai', apiKey: 'sk-' + 'a'.repeat(40) }],
+      providers: [{ id: 'openai', apiKey: `sk-${'a'.repeat(40)}` }],
     })
     const code = await configShowCommand({ configPath: file })
     expect(code).toBe(0)
-    expect(stdout).not.toContain('sk-' + 'a'.repeat(40))
+    expect(stdout).not.toContain(`sk-${'a'.repeat(40)}`)
     expect(stdout).toContain('[REDACTED]')
   })
 
@@ -70,7 +70,7 @@ describe('configShowCommand', () => {
       providers: [
         {
           id: 'openai',
-          headers: { Authorization: 'Bearer ' + 'b'.repeat(60), 'X-Trace': 'safe-value' },
+          headers: { Authorization: `Bearer ${'b'.repeat(60)}`, 'X-Trace': 'safe-value' },
         },
       ],
     })

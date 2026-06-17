@@ -9,7 +9,7 @@
 import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { BaseSkillSource, type BaseSkill, type SkillContext } from './base.js'
+import { type BaseSkill, BaseSkillSource, type SkillContext } from './base.js'
 import { MarkdownSkill } from './markdown-skill.js'
 import { parseSkillMarkdown } from './parser.js'
 

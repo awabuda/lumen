@@ -14,7 +14,6 @@
 
 import * as fs from 'node:fs/promises'
 import path from 'node:path'
-import { z } from 'zod'
 import {
   BaseTool,
   type ToolContext,
@@ -22,6 +21,7 @@ import {
   ToolError,
   ValidationError,
 } from '@lumen/core'
+import { z } from 'zod'
 import { atomicWriteFile } from './write-file.js'
 
 /** Zod schema for the tool's input. */
@@ -154,8 +154,7 @@ export class PatchTool extends BaseTool {
     if (exactCount > 0) {
       if (exactCount > 1 && !replaceAll) {
         throw new ValidationError(
-          `patch: oldString matched ${exactCount} times in ${absPath} but replaceAll=false. ` +
-            'Refine oldString with more surrounding context, or pass replaceAll=true.',
+          `patch: oldString matched ${exactCount} times in ${absPath} but replaceAll=false. Refine oldString with more surrounding context, or pass replaceAll=true.`,
           { field: 'oldString' },
         )
       }
@@ -175,8 +174,7 @@ export class PatchTool extends BaseTool {
     }
     if (normCount > 1 && !replaceAll) {
       throw new ValidationError(
-        `patch: oldString matched ${normCount} times under fuzzy whitespace normalization in ${absPath} ` +
-          'but replaceAll=false. Refine oldString or pass replaceAll=true.',
+        `patch: oldString matched ${normCount} times under fuzzy whitespace normalization in ${absPath} but replaceAll=false. Refine oldString or pass replaceAll=true.`,
         { field: 'oldString' },
       )
     }

@@ -7,12 +7,12 @@
  * left behind).
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { PatchTool } from '../src/fs/patch.js'
 import type { ToolContext } from '@lumen/core'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { PatchTool } from '../src/fs/patch.js'
 
 let tmpDir: string
 let ctx: ToolContext

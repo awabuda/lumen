@@ -3,9 +3,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   HybridRetriever,
+  type RetrievalResult,
   SqliteStore,
   TextOnlyRetriever,
-  type RetrievalResult,
 } from '../src/index.js'
 import { floatsToBytes } from './helpers.js'
 

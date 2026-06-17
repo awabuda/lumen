@@ -44,13 +44,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
-import {
-  deepMerge,
-  loadConfig,
-  type LoadConfigOptions,
-} from './loader.js'
 import { ConfigSourceNotFoundError, ConfigValidationError } from './errors.js'
-import { LumenConfigSchema, type LumenConfig } from './schema.js'
+import { type LoadConfigOptions, deepMerge, loadConfig } from './loader.js'
+import { type LumenConfig, LumenConfigSchema } from './schema.js'
 
 /** Built-in default profile name. */
 export const DEFAULT_PROFILE = 'default'
@@ -79,7 +75,9 @@ const readYamlIfExistsSync = (path: string): Record<string, unknown> | undefined
 }
 
 /** Pull a `profiles:` map out of a parsed config object. */
-const extractProfiles = (root: Record<string, unknown> | undefined): Record<string, Record<string, unknown>> => {
+const extractProfiles = (
+  root: Record<string, unknown> | undefined,
+): Record<string, Record<string, unknown>> => {
   if (!root) return {}
   const raw = root.profiles
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
@@ -110,10 +108,10 @@ export const listProfiles = (options: LoadConfigOptions = {}): string[] => {
   const cwd = options.cwd ?? process.cwd()
   const userPath = options.skipUserConfig
     ? undefined
-    : options.userPath ?? join(homedir(), '.lumen', 'config.yaml')
+    : (options.userPath ?? join(homedir(), '.lumen', 'config.yaml'))
   const projectPath = options.skipProjectConfig
     ? undefined
-    : options.projectPath ?? resolveProjectPathOrUndefined(cwd)
+    : (options.projectPath ?? resolveProjectPathOrUndefined(cwd))
 
   const names = new Set<string>([DEFAULT_PROFILE])
   for (const path of [userPath, projectPath]) {
@@ -124,7 +122,11 @@ export const listProfiles = (options: LoadConfigOptions = {}): string[] => {
     // Sibling files: <base>.<profile>.yaml
     const dir = path.endsWith('.yaml') || path.endsWith('.yml') ? dirnameOf(path) : undefined
     if (!dir) continue
-    const base = path.endsWith('.yaml') ? 'config.yaml' : path.endsWith('.yml') ? 'config.yml' : undefined
+    const base = path.endsWith('.yaml')
+      ? 'config.yaml'
+      : path.endsWith('.yml')
+        ? 'config.yml'
+        : undefined
     if (!base) continue
     for (const ext of ['.yaml', '.yml']) {
       try {
@@ -173,7 +175,11 @@ const resolveProjectPathOrUndefined = (cwd: string): string | undefined => {
  * surface as a ConfigValidationError after the merge).
  */
 export const resolveProfile = (
-  options: { readonly profile?: string | null; readonly userConfigRoot?: Record<string, unknown>; readonly projectConfigRoot?: Record<string, unknown> } = {},
+  options: {
+    readonly profile?: string | null
+    readonly userConfigRoot?: Record<string, unknown>
+    readonly projectConfigRoot?: Record<string, unknown>
+  } = {},
 ): string => {
   if (options.profile !== undefined && options.profile !== null) {
     return options.profile.length > 0 ? options.profile : DEFAULT_PROFILE
@@ -181,7 +187,7 @@ export const resolveProfile = (
   if (options.profile === null) {
     return DEFAULT_PROFILE
   }
-  const env = process.env['LUMEN_PROFILE']
+  const env = process.env.LUMEN_PROFILE
   if (env && env.length > 0) return env
   const fromUser = extractDefaultProfile(options.userConfigRoot)
   if (fromUser) return fromUser
@@ -205,10 +211,10 @@ const resolveProfileSlice = (
   const cwd = options.cwd ?? process.cwd()
   const userPath = options.skipUserConfig
     ? undefined
-    : options.userPath ?? join(homedir(), '.lumen', 'config.yaml')
+    : (options.userPath ?? join(homedir(), '.lumen', 'config.yaml'))
   const projectPath = options.skipProjectConfig
     ? undefined
-    : options.projectPath ?? resolveProjectPathOrUndefined(cwd)
+    : (options.projectPath ?? resolveProjectPathOrUndefined(cwd))
 
   // 1. Look in the user + project `profiles:` maps.
   for (const path of [userPath, projectPath]) {
@@ -225,7 +231,7 @@ const resolveProfileSlice = (
     if (!path) continue
     for (const ext of ['.yaml', '.yml']) {
       if (!path.endsWith(ext)) continue
-      const sibling = path.slice(0, -ext.length) + `.${profile}${ext}`
+      const sibling = `${path.slice(0, -ext.length)}.${profile}${ext}`
       const slice = readYamlIfExistsSync(sibling)
       if (slice) return slice
     }
@@ -248,7 +254,9 @@ export const loadConfigWithProfile = async (
   const projectConfigRoot = options.skipProjectConfig
     ? undefined
     : readYamlIfExistsSync(
-        options.projectPath ?? resolveProjectPathOrUndefined(options.cwd ?? process.cwd()) ?? '.lumen/config.yaml',
+        options.projectPath ??
+          resolveProjectPathOrUndefined(options.cwd ?? process.cwd()) ??
+          '.lumen/config.yaml',
       )
   const profile = resolveProfile({
     ...(options.profile !== undefined ? { profile: options.profile } : {}),

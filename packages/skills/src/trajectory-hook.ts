@@ -11,7 +11,7 @@
  * be loaded independently. The hook interface is inlined.
  */
 
-import type { BaseEvolver } from './evolver.js'
+import type { BaseEvolver, ChatMessage } from './evolver.js'
 import type { SkillRegistry } from './registry.js'
 
 /** Minimal hook interface — mirrors @lumen/core's Hook. */
@@ -70,7 +70,11 @@ export class TrajectoryHook implements SkillHook {
     if (!event.messages || event.messages.length < this.minMessages) return
 
     try {
-      const result = await this.evolver.evolve(event.messages as any, this.registry, this.skillsDir)
+      const result = await this.evolver.evolve(
+        event.messages as ReadonlyArray<ChatMessage>,
+        this.registry,
+        this.skillsDir,
+      )
       if (result.created) {
         ctx.log?.info('TrajectoryHook: created skill', {
           skillId: result.skill?.id,

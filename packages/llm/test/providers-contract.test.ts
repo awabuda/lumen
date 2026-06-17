@@ -10,11 +10,11 @@
 
 import {
   AnthropicProvider,
+  OllamaProvider,
+  OpenAICompatibleProvider,
   createAnthropicProvider,
   createOllamaProvider,
   createOpenAIProvider,
-  OllamaProvider,
-  OpenAICompatibleProvider,
 } from '../src/index.js'
 import { runProviderContractTests } from './contract-suite.js'
 

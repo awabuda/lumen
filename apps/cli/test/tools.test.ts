@@ -1,11 +1,7 @@
 /** Tests for `lumen tools` command handlers. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  toolsCheckCommand,
-  toolsListCommand,
-  toolsShowCommand,
-} from '../src/commands/tools.js'
+import { toolsCheckCommand, toolsListCommand, toolsShowCommand } from '../src/commands/tools.js'
 
 let stdout = ''
 let stderr = ''
@@ -49,7 +45,7 @@ describe('toolsListCommand', () => {
     expect(stdout).toContain('git')
     expect(stdout).toContain('gh')
     // safe tools like `date` should NOT appear in the filtered listing
-    expect(stdout).not.toMatch(/^  date /m)
+    expect(stdout).not.toMatch(/^ {2}date /m)
   })
 
   it('--toolset lists built-in toolsets', async () => {

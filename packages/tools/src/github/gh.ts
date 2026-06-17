@@ -1,3 +1,4 @@
+import { BaseTool, type ToolContext, type ToolRisk } from '@lumen/core'
 /**
  * `gh` — curated GitHub CLI bridge.
  *
@@ -19,7 +20,6 @@
  * etc. are deliberately absent.
  */
 import { z } from 'zod'
-import { BaseTool, type ToolContext, type ToolRisk } from '@lumen/core'
 
 const GhOpSchema = z.enum([
   'pr_create',
@@ -135,7 +135,7 @@ export class GhTool extends BaseTool {
       child.on('exit', (code) => {
         const stdout = Buffer.concat(out).toString('utf8')
         const stderr = Buffer.concat(err).toString('utf8')
-        const raw = (stdout + (stderr ? '\n' + stderr : '')).trim()
+        const raw = (stdout + (stderr ? `\n${stderr}` : '')).trim()
         resolve({
           op: parsed.op,
           data: { truncated, ...this.parseOutput(parsed.op, stdout) },

@@ -1,3 +1,12 @@
+import { ProviderError } from '@lumen/core'
+import type {
+  AssistantMessage,
+  ChatRequest,
+  Message,
+  StreamEvent,
+  ToolCall,
+  UserMessage,
+} from '@lumen/core'
 /**
  * Tests for the Anthropic Messages API provider.
  *
@@ -33,15 +42,6 @@ import {
   createAnthropicProvider,
   isRetryableStatus,
 } from '../src/index.js'
-import { ProviderError } from '@lumen/core'
-import type {
-  AssistantMessage,
-  ChatRequest,
-  Message,
-  StreamEvent,
-  ToolCall,
-  UserMessage,
-} from '@lumen/core'
 
 // -----------------------------------------------------------------------------
 // Helpers

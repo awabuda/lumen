@@ -1,3 +1,4 @@
+import { BaseTool, type ToolContext, type ToolDescriptor, type ToolRisk } from '@lumen/core'
 /**
  * `git` — read-only and write-light git operations.
  *
@@ -41,7 +42,6 @@
  * absent. Add them via a subclass if you need them.
  */
 import { z } from 'zod'
-import { BaseTool, type ToolContext, type ToolDescriptor, type ToolRisk } from '@lumen/core'
 
 /**
  * Per-operation risk classification. The tool's `risk` field on
@@ -187,7 +187,7 @@ export class GitTool extends BaseTool {
         resolve({
           op: parsed.op,
           data: { ...data, truncated },
-          raw: (stdout + (stderr ? '\n' + stderr : '')).trim(),
+          raw: (stdout + (stderr ? `\n${stderr}` : '')).trim(),
           exitCode: code,
         })
       })

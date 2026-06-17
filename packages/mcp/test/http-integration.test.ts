@@ -11,9 +11,9 @@
  * to verify the user's HTTP transport wiring works.
  */
 
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
+import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { HttpMcpTransport, McpClient } from '../src/index.js'
 

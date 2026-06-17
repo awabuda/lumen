@@ -1,3 +1,4 @@
+import type { BaseProvider } from '@lumen/core'
 /**
  * Contract tests for {@link BaseProvider}.
  *
@@ -31,7 +32,6 @@
  *     translation is the per-provider test's job.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { BaseProvider } from '@lumen/core'
 
 export function runProviderContractTests(
   label: string,

@@ -1,17 +1,3 @@
-/**
- * Tests for the OpenAI-compatible provider.
- *
- * Strategy: inject a fake `fetch` that returns canned responses, so we
- * can exercise the full chat + tool-use code path without hitting the
- * network.
- */
-import { describe, expect, it, vi } from 'vitest'
-import {
-  OpenAICompatibleProvider,
-  HttpStatusError,
-  ResponseShapeError,
-  isRetryableStatus,
-} from '../src/index.js'
 import type {
   AssistantMessage,
   ChatRequest,
@@ -21,6 +7,20 @@ import type {
   ToolMessage,
   UserMessage,
 } from '@lumen/core'
+/**
+ * Tests for the OpenAI-compatible provider.
+ *
+ * Strategy: inject a fake `fetch` that returns canned responses, so we
+ * can exercise the full chat + tool-use code path without hitting the
+ * network.
+ */
+import { describe, expect, it, vi } from 'vitest'
+import {
+  HttpStatusError,
+  OpenAICompatibleProvider,
+  ResponseShapeError,
+  isRetryableStatus,
+} from '../src/index.js'
 
 // -----------------------------------------------------------------------------
 // Helpers

@@ -30,21 +30,15 @@ describe('RunRequestSchema', () => {
   })
 
   it('rejects non-positive maxIterations', () => {
-    expect(
-      RunRequestSchema.safeParse({ userMessage: 'x', maxIterations: 0 }).success,
-    ).toBe(false)
+    expect(RunRequestSchema.safeParse({ userMessage: 'x', maxIterations: 0 }).success).toBe(false)
   })
 })
 
 describe('CreateServerOptionsSchema', () => {
   it('requires agentFactory function', () => {
     expect(CreateServerOptionsSchema.safeParse({}).success).toBe(false)
-    expect(
-      CreateServerOptionsSchema.safeParse({ agentFactory: 'not fn' }).success,
-    ).toBe(false)
-    expect(
-      CreateServerOptionsSchema.safeParse({ agentFactory: () => ({}) }).success,
-    ).toBe(true)
+    expect(CreateServerOptionsSchema.safeParse({ agentFactory: 'not fn' }).success).toBe(false)
+    expect(CreateServerOptionsSchema.safeParse({ agentFactory: () => ({}) }).success).toBe(true)
   })
 
   it('defaults port to 0', () => {
@@ -95,8 +89,8 @@ describe('RunRegistry', () => {
 
 describe('BaseServerAdapter is abstract', () => {
   it('cannot be instantiated directly', () => {
-    // @ts-expect-error — abstract class
-    new (BaseServerAdapter as any)()
+    // biome-ignore lint/suspicious/noExplicitAny: abstract class cannot be instantiated directly
+    ;new (BaseServerAdapter as any)()
   })
 })
 
@@ -159,10 +153,9 @@ describe('NodeHttpAdapter', () => {
   it('cancel returns 404 for unknown run id', async () => {
     adapter = new NodeHttpAdapter()
     await adapter.start()
-    const res = await fetch(
-      `http://127.0.0.1:${adapter.port}/v1/agent/run-fake/cancel`,
-      { method: 'POST' },
-    )
+    const res = await fetch(`http://127.0.0.1:${adapter.port}/v1/agent/run-fake/cancel`, {
+      method: 'POST',
+    })
     expect(res.status).toBe(404)
   })
 })
@@ -203,13 +196,10 @@ describe('createNodeServer', () => {
     }
     server = createNodeServer({ agentFactory: () => fakeAgent as never })
     await server.start()
-    const res = await fetch(
-      `http://127.0.0.1:${server.adapter.port}/v1/agent/run`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ userMessage: 'hello' }),
-      },
-    )
+    const res = await fetch(`http://127.0.0.1:${server.adapter.port}/v1/agent/run`, {
+      method: 'POST',
+      body: JSON.stringify({ userMessage: 'hello' }),
+    })
     expect(res.status).toBe(200)
     const body = (await res.json()) as { finalMessage: { content: string } }
     expect(body.finalMessage.content).toBe('echo: hello')
@@ -218,32 +208,27 @@ describe('createNodeServer', () => {
   it('returns 400 on invalid request body', async () => {
     server = createNodeServer({ agentFactory: () => ({}) as never })
     await server.start()
-    const res = await fetch(
-      `http://127.0.0.1:${server.adapter.port}/v1/agent/run`,
-      {
-        method: 'POST',
-        body: JSON.stringify({}),
-      },
-    )
+    const res = await fetch(`http://127.0.0.1:${server.adapter.port}/v1/agent/run`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
     expect(res.status).toBe(400)
   })
 
   it('returns 500 when the agent throws', async () => {
     server = createNodeServer({
-      agentFactory: () => ({
-        async run() {
-          throw new Error('agent-boom')
-        },
-      }) as never,
+      agentFactory: () =>
+        ({
+          async run() {
+            throw new Error('agent-boom')
+          },
+        }) as never,
     })
     await server.start()
-    const res = await fetch(
-      `http://127.0.0.1:${server.adapter.port}/v1/agent/run`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ userMessage: 'fail' }),
-      },
-    )
+    const res = await fetch(`http://127.0.0.1:${server.adapter.port}/v1/agent/run`, {
+      method: 'POST',
+      body: JSON.stringify({ userMessage: 'fail' }),
+    })
     expect(res.status).toBe(500)
     const body = (await res.json()) as { error: string }
     expect(body.error).toContain('agent-boom')

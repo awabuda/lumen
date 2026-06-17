@@ -11,12 +11,12 @@
  * validation.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { SearchFilesTool } from '../src/fs/search-files.js'
 import type { ToolContext } from '@lumen/core'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { SearchFilesTool } from '../src/fs/search-files.js'
 
 let tmpDir: string
 let ctx: ToolContext
@@ -63,7 +63,7 @@ describe('SearchFilesTool', () => {
   })
 
   it('respects maxResults', async () => {
-    const body = Array.from({ length: 20 }, () => 'match').join('\n') + '\n'
+    const body = `${Array.from({ length: 20 }, () => 'match').join('\n')}\n`
     await fs.writeFile(path.join(tmpDir, 'a.txt'), body, 'utf8')
     const tool = new SearchFilesTool()
     const result = (await tool.call({ pattern: 'match', path: '.', maxResults: 5 }, ctx)) as {

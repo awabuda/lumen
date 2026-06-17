@@ -147,7 +147,7 @@ describe('ApprovalRequiredPolicy', () => {
 
 describe('BasePermissionPolicy is abstract', () => {
   it('cannot be instantiated directly', () => {
-    // @ts-expect-error — abstract class
+    // biome-ignore lint/suspicious/noExplicitAny: abstract class cannot be instantiated directly
     ;new (BasePermissionPolicy as any)()
   })
 })
@@ -215,7 +215,7 @@ describe('InMemoryUserStore', () => {
 
 describe('BaseUserStore is abstract', () => {
   it('cannot be instantiated directly', () => {
-    // @ts-expect-error — abstract class
+    // biome-ignore lint/suspicious/noExplicitAny: abstract class cannot be instantiated directly
     ;new (BaseUserStore as any)()
   })
 })

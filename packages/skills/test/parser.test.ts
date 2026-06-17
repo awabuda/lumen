@@ -2,8 +2,8 @@
 
 import { describe, expect, it } from 'vitest'
 import {
-  buildTriggers,
   MarkdownSkill,
+  buildTriggers,
   parseFrontmatter,
   parseSkillMarkdown,
   slugify,

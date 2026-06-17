@@ -11,8 +11,8 @@ import {
   type SkillActivation,
   type SkillApplication,
   type SkillContext,
-  type SkillTrigger,
   SkillContextSchema,
+  type SkillTrigger,
   globLikeMatch,
 } from '../src/index.js'
 import { SkillRegistry } from '../src/registry.js'

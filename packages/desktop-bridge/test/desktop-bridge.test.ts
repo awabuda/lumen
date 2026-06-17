@@ -5,30 +5,25 @@ import {
   BaseDesktopAdapter,
   MockDesktopAdapter,
   NotificationRequestSchema,
+  type SystemStatus,
   SystemStatusSchema,
   TauriDesktopAdapter,
   ToolInvokeRequestSchema,
   ToolInvokeResponseSchema,
-  type SystemStatus,
 } from '../src/index.js'
 
 describe('SystemStatusSchema', () => {
   it('accepts a valid status', () => {
-    expect(
-      SystemStatusSchema.safeParse({ os: 'macos', online: true }).success,
-    ).toBe(true)
+    expect(SystemStatusSchema.safeParse({ os: 'macos', online: true }).success).toBe(true)
   })
 
   it('rejects unknown OS values', () => {
-    expect(
-      SystemStatusSchema.safeParse({ os: 'plan9', online: true }).success,
-    ).toBe(false)
+    expect(SystemStatusSchema.safeParse({ os: 'plan9', online: true }).success).toBe(false)
   })
 
   it('rejects negative disk space', () => {
     expect(
-      SystemStatusSchema.safeParse({ os: 'linux', online: true, diskFreeMb: -1 })
-        .success,
+      SystemStatusSchema.safeParse({ os: 'linux', online: true, diskFreeMb: -1 }).success,
     ).toBe(false)
   })
 })
@@ -42,31 +37,29 @@ describe('ToolInvokeRequestSchema', () => {
 
 describe('ToolInvokeResponseSchema', () => {
   it('requires success and durationMs', () => {
-    expect(
-      ToolInvokeResponseSchema.safeParse({ success: true, durationMs: 100 }).success,
-    ).toBe(true)
+    expect(ToolInvokeResponseSchema.safeParse({ success: true, durationMs: 100 }).success).toBe(
+      true,
+    )
   })
 
   it('rejects negative duration', () => {
-    expect(
-      ToolInvokeResponseSchema.safeParse({ success: true, durationMs: -1 }).success,
-    ).toBe(false)
+    expect(ToolInvokeResponseSchema.safeParse({ success: true, durationMs: -1 }).success).toBe(
+      false,
+    )
   })
 })
 
 describe('NotificationRequestSchema', () => {
   it('requires title and body', () => {
     expect(NotificationRequestSchema.safeParse({}).success).toBe(false)
-    expect(
-      NotificationRequestSchema.safeParse({ title: 't', body: 'b' }).success,
-    ).toBe(true)
+    expect(NotificationRequestSchema.safeParse({ title: 't', body: 'b' }).success).toBe(true)
   })
 })
 
 describe('BaseDesktopAdapter is abstract', () => {
   it('cannot be instantiated directly', () => {
-    // @ts-expect-error — abstract class
-    new (BaseDesktopAdapter as any)()
+    // biome-ignore lint/suspicious/noExplicitAny: abstract class cannot be instantiated directly
+    ;new (BaseDesktopAdapter as any)()
   })
 })
 

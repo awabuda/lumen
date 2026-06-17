@@ -14,7 +14,7 @@
  * fragile to a misbehaving observer).
  */
 
-import type { Message, ToolCall, ToolResult, AssistantMessage } from '../message/index.js'
+import type { AssistantMessage, Message, ToolCall, ToolResult } from '../message/index.js'
 
 /** Lifecycle events the agent emits. */
 export type HookEvent =

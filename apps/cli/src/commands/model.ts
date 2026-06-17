@@ -49,7 +49,9 @@ export const modelListCommand = async (opts: ModelListOptions = {}): Promise<num
   const config = await loadCliConfig(opts.configPath)
   const models = config.models
 
-  process.stdout.write(`Lumen models (${models.length} configured, default=${config.defaultModel ?? '(none)'})\n\n`)
+  process.stdout.write(
+    `Lumen models (${models.length} configured, default=${config.defaultModel ?? '(none)'})\n\n`,
+  )
   if (models.length === 0) {
     process.stdout.write('  No models configured. Add entries under `models:` in your config.\n')
     return 0
@@ -91,7 +93,9 @@ export const modelProvidersCommand = async (opts: ModelProvidersOptions = {}): P
 
   process.stdout.write(`Lumen providers (${providers.length} configured)\n\n`)
   if (providers.length === 0) {
-    process.stdout.write('  No providers configured. Add entries under `providers:` in your config.\n')
+    process.stdout.write(
+      '  No providers configured. Add entries under `providers:` in your config.\n',
+    )
     return 0
   }
 

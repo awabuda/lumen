@@ -36,7 +36,9 @@ describe('runCommand', () => {
   beforeEach(() => {
     capture = captureProcess()
     originalKey = process.env.OPENAI_API_KEY
+    // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
     delete process.env.OPENAI_API_KEY
+    // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
     delete process.env.LUMEN_API_KEY
   })
 

@@ -90,7 +90,7 @@ export class BudgetExceededError extends AgentError {
 
 /** Caller aborted the run (e.g. Ctrl+C, timeout, explicit cancel). */
 export class AbortError extends AgentError {
-  constructor(reason: string = 'aborted') {
+  constructor(reason = 'aborted') {
     super(`Agent run aborted: ${reason}`)
     this.name = 'AbortError'
   }

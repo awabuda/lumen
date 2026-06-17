@@ -2,9 +2,9 @@
  * Contract tests for {@link BaseToolset} + {@link ToolRegistry.registerToolset}.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { BaseTool, StaticToolset, ToolRegistry } from '@lumen/core'
 import type { ToolContext, ToolDescriptor } from '@lumen/core'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 // A minimal tool for testing toolset registration.
 class EchoTool extends BaseTool {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { BaseTool, type ToolContext, type ToolDescriptor } from '../src/tools/index.js'
 import { ToolValidationError } from '../src/errors/index.js'
+import { BaseTool, type ToolContext, type ToolDescriptor } from '../src/tools/index.js'
 import { EchoTool, FailingTool } from './fake-tools.js'
 
 describe('BaseTool', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ToolRegistry, type ToolDescriptor } from '../src/tools/index.js'
+import { type ToolDescriptor, ToolRegistry } from '../src/tools/index.js'
 import { EchoTool, FailingTool } from './fake-tools.js'
 
 describe('ToolRegistry', () => {

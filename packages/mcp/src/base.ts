@@ -292,8 +292,8 @@ export class McpClient {
 // Tool proxy — wraps an MCP tool as a Lumen BaseTool
 // ---------------------------------------------------------------------------
 
-import { z } from 'zod'
 import { BaseTool, type ToolContext, type ToolRisk } from '@lumen/core'
+import { z } from 'zod'
 
 /**
  * Wrap a remote MCP tool as a local BaseTool so it can be registered

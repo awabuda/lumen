@@ -33,15 +33,15 @@ program
     const { runCommand } = await import('./commands/run.js')
     const code = await runCommand({
       prompt,
-      model: opts['model'] as string | undefined,
-      configPath: opts['config'] as string | undefined,
-      cwd: opts['cwd'] as string | undefined,
-      apiKey: opts['apiKey'] as string | undefined,
-      baseUrl: opts['baseUrl'] as string | undefined,
-      noTools: opts['tools'] === false,
-      memoryPath: opts['memoryPath'] as string | undefined,
-      noMemory: opts['memory'] === false,
-      noMcp: opts['mcp'] === false,
+      model: opts.model as string | undefined,
+      configPath: opts.config as string | undefined,
+      cwd: opts.cwd as string | undefined,
+      apiKey: opts.apiKey as string | undefined,
+      baseUrl: opts.baseUrl as string | undefined,
+      noTools: opts.tools === false,
+      memoryPath: opts.memoryPath as string | undefined,
+      noMemory: opts.memory === false,
+      noMcp: opts.mcp === false,
     })
     process.exit(code)
   })
@@ -56,9 +56,9 @@ program
     // Lazy-load Ink only when actually entering the TUI.
     const { chatCommand } = await import('./commands/chat.js')
     const code = await chatCommand({
-      model: opts['model'] as string | undefined,
-      configPath: opts['config'] as string | undefined,
-      cwd: opts['cwd'] as string | undefined,
+      model: opts.model as string | undefined,
+      configPath: opts.config as string | undefined,
+      cwd: opts.cwd as string | undefined,
     })
     process.exit(code)
   })
@@ -69,7 +69,7 @@ program
   .option('-v, --verbose', 'Print extra detail for each check')
   .action(async (opts: Record<string, unknown>) => {
     const { doctorCommand } = await import('./commands/doctor.js')
-    const code = await doctorCommand({ verbose: opts['verbose'] === true })
+    const code = await doctorCommand({ verbose: opts.verbose === true })
     process.exit(code)
   })
 
@@ -82,46 +82,40 @@ program
   .option('--force', 'Confirm destructive operations (delete, prune)')
   .option('--older-than <days>', 'prune: cut-off age in days (default 30)', '30')
   .option('--limit <n>', 'show: limit messages returned (default 100)', '100')
-  .action(
-    async (subcommand: string, id: string | undefined, opts: Record<string, unknown>) => {
-      const {
-        sessionListCommand,
-        sessionShowCommand,
-        sessionDeleteCommand,
-        sessionPruneCommand,
-      } = await import('./commands/session.js')
-      const memoryPath = opts['memoryPath'] as string | undefined
-      const force = opts['force'] === true
-      let code = 0
-      if (subcommand === 'list') {
-        code = await sessionListCommand({ memoryPath })
-      } else if (subcommand === 'show') {
-        if (!id) {
-          process.stderr.write('lumen session: missing <id> for "show"\n')
-          code = 1
-        } else {
-          const limitRaw = opts['limit']
-          const limit = typeof limitRaw === 'string' ? Number.parseInt(limitRaw, 10) : undefined
-          code = await sessionShowCommand(id, { memoryPath, limit })
-        }
-      } else if (subcommand === 'delete') {
-        if (!id) {
-          process.stderr.write('lumen session: missing <id> for "delete"\n')
-          code = 1
-        } else {
-          code = await sessionDeleteCommand(id, { memoryPath, force })
-        }
-      } else if (subcommand === 'prune') {
-        const daysRaw = opts['olderThan']
-        const days = typeof daysRaw === 'string' ? Number.parseInt(daysRaw, 10) : 30
-        code = await sessionPruneCommand({ memoryPath, force, olderThanDays: days })
-      } else {
-        process.stderr.write(`lumen session: unknown subcommand: ${subcommand}\n`)
+  .action(async (subcommand: string, id: string | undefined, opts: Record<string, unknown>) => {
+    const { sessionListCommand, sessionShowCommand, sessionDeleteCommand, sessionPruneCommand } =
+      await import('./commands/session.js')
+    const memoryPath = opts.memoryPath as string | undefined
+    const force = opts.force === true
+    let code = 0
+    if (subcommand === 'list') {
+      code = await sessionListCommand({ memoryPath })
+    } else if (subcommand === 'show') {
+      if (!id) {
+        process.stderr.write('lumen session: missing <id> for "show"\n')
         code = 1
+      } else {
+        const limitRaw = opts.limit
+        const limit = typeof limitRaw === 'string' ? Number.parseInt(limitRaw, 10) : undefined
+        code = await sessionShowCommand(id, { memoryPath, limit })
       }
-      process.exit(code)
-    },
-  )
+    } else if (subcommand === 'delete') {
+      if (!id) {
+        process.stderr.write('lumen session: missing <id> for "delete"\n')
+        code = 1
+      } else {
+        code = await sessionDeleteCommand(id, { memoryPath, force })
+      }
+    } else if (subcommand === 'prune') {
+      const daysRaw = opts.olderThan
+      const days = typeof daysRaw === 'string' ? Number.parseInt(daysRaw, 10) : 30
+      code = await sessionPruneCommand({ memoryPath, force, olderThanDays: days })
+    } else {
+      process.stderr.write(`lumen session: unknown subcommand: ${subcommand}\n`)
+      code = 1
+    }
+    process.exit(code)
+  })
 
 program
   .command('update')
@@ -134,7 +128,7 @@ program
     if (subcommand === 'print-version') {
       code = await updatePrintVersionCommand()
     } else if (subcommand === 'check') {
-      code = await updateCheckCommand({ quiet: opts['quiet'] === true })
+      code = await updateCheckCommand({ quiet: opts.quiet === true })
     } else {
       process.stderr.write(`lumen update: unknown subcommand: ${subcommand}\n`)
       code = 1
@@ -152,7 +146,7 @@ program
     const { modelListCommand, modelShowCommand, modelProvidersCommand } = await import(
       './commands/model.js'
     )
-    const configPath = opts['config'] as string | undefined
+    const configPath = opts.config as string | undefined
     let code = 0
     if (subcommand === 'show') {
       if (!name) {
@@ -181,7 +175,7 @@ program
     const { configShowCommand, configPathCommand, configValidateCommand } = await import(
       './commands/config.js'
     )
-    const configPath = opts['config'] as string | undefined
+    const configPath = opts.config as string | undefined
     let code = 0
     if (subcommand === 'path') {
       code = await configPathCommand({ configPath })
@@ -219,8 +213,8 @@ program
       code = await toolsCheckCommand()
     } else if (subcommand === 'list') {
       code = await toolsListCommand({
-        approvalRequiredOnly: opts['approvalRequired'] === true,
-        toolset: opts['toolset'] === true,
+        approvalRequiredOnly: opts.approvalRequired === true,
+        toolset: opts.toolset === true,
       })
     } else {
       process.stderr.write(`lumen tools: unknown subcommand: ${subcommand}\n`)
@@ -239,13 +233,13 @@ program
   .action(async (cmd: string, id: string | undefined, opts: Record<string, unknown>) => {
     if (cmd === 'cat' && id) {
       const { skillsCatCommand } = await import('./commands/skills.js')
-      const code = await skillsCatCommand({ id, path: opts['path'] as string | undefined })
+      const code = await skillsCatCommand({ id, path: opts.path as string | undefined })
       process.exit(code)
     }
     const { skillsListCommand } = await import('./commands/skills.js')
     const code = await skillsListCommand({
-      path: opts['path'] as string | undefined,
-      prompt: opts['prompt'] as string | undefined,
+      path: opts.path as string | undefined,
+      prompt: opts.prompt as string | undefined,
     })
     process.exit(code)
   })
@@ -263,9 +257,9 @@ program.action(async (opts: Record<string, unknown>) => {
   // trying to chat, not read docs.
   const { chatCommand } = await import('./commands/chat.js')
   const code = await chatCommand({
-    model: opts['model'] as string | undefined,
-    configPath: opts['config'] as string | undefined,
-    cwd: opts['cwd'] as string | undefined,
+    model: opts.model as string | undefined,
+    configPath: opts.config as string | undefined,
+    cwd: opts.cwd as string | undefined,
   })
   process.exit(code)
 })

@@ -185,7 +185,7 @@ export class PinoLogger extends BaseLogger {
     // re-import. The child's bindings are passed to
     // pino.child() when the parent is ready.
     if (this.pinoInstance) {
-      const childFn = this.pinoInstance['child'] as
+      const childFn = this.pinoInstance.child as
         | ((b: Record<string, unknown>) => Record<string, unknown>)
         | undefined
       child.pinoInstance = childFn ? childFn(bindings) : this.pinoInstance

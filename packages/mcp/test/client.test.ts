@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  type JsonRpcNotification,
+  type JsonRpcRequest,
   McpClient,
   McpToolProxy,
   McpTransport,
-  type JsonRpcNotification,
-  type JsonRpcRequest,
 } from '../src/index.js'
 
 class FakeTransport extends McpTransport {

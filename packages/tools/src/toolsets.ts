@@ -8,8 +8,8 @@
  * `lumen.tools.enabled` in their config.
  */
 
-import { BaseToolset, StaticToolset, type ToolsetFactory } from '@lumen/core'
-import { createDefaultTools, createMetaTools, createGithubTools } from './index.js'
+import { type BaseToolset, StaticToolset, type ToolsetFactory } from '@lumen/core'
+import { createDefaultTools, createGithubTools, createMetaTools } from './index.js'
 
 /** The filesystem + terminal palette. */
 export const FS_TOOLSET: BaseToolset = new StaticToolset({

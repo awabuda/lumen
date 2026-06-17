@@ -4,11 +4,7 @@ import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  modelListCommand,
-  modelProvidersCommand,
-  modelShowCommand,
-} from '../src/commands/model.js'
+import { modelListCommand, modelProvidersCommand, modelShowCommand } from '../src/commands/model.js'
 
 let tmpDir: string
 let stdout = ''
@@ -99,14 +95,18 @@ describe('modelShowCommand', () => {
 
 describe('modelProvidersCommand', () => {
   it('prints empty state when no providers are configured', async () => {
-    const code = await modelProvidersCommand({ configPath: path.join(tmpDir, '.lumen', 'config.yaml') })
+    const code = await modelProvidersCommand({
+      configPath: path.join(tmpDir, '.lumen', 'config.yaml'),
+    })
     expect(code).toBe(0)
     expect(stdout).toContain('No providers configured')
   })
 
   it('redacts apiKey to a length-only form', async () => {
     const file = await writeConfig({
-      providers: [{ id: 'openai', apiKey: 'sk-proj-' + 'x'.repeat(48), defaultModel: 'gpt-4o-mini' }],
+      providers: [
+        { id: 'openai', apiKey: `sk-proj-${'x'.repeat(48)}`, defaultModel: 'gpt-4o-mini' },
+      ],
     })
     const code = await modelProvidersCommand({ configPath: file })
     expect(code).toBe(0)
