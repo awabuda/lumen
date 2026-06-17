@@ -258,6 +258,45 @@ Typecheck clean. Biome clean.
   need to re-open construct a new `SqliteStore`.
 - **Push status:** same — remote unreachable, no retry.
 
+## [0.10.0] — 2026-06-17 — P15 better-sqlite3 native rebuild automation
+
+**Totals:** 1 commit (`0a75e2b`), 2 files modified, +13/-2 lines,
+no test count change (961 → 961), 12 packages, 56 commits on `main`.
+Typecheck clean. Biome clean.
+
+### Added
+- **`pnpm.onlyBuiltDependencies: ["better-sqlite3"]`** in the
+  root `package.json`. pnpm blocks install scripts by default
+  (supply-chain hardening). Whitelisting *just* `better-sqlite3`
+  lets the package's own `install` hook run on every
+  `pnpm install`, which re-downloads the prebuild that matches
+  the current Node ABI. The whitelist is minimal and audited —
+  no other package's install script runs.
+- **`pnpm rebuild:native`** script at the root, which wraps
+  `pnpm rebuild better-sqlite3 --filter @lumen/memory`. This
+  is the fallback when the prebuild doesn't match (rebuilds
+  from source via node-gyp; ~30s on M-series Macs).
+- **`docs/L1-AUDIT.md`** updated to reference the new script
+  with a one-liner copy-paste for the "I just upgraded Node
+  and tests are broken" case.
+
+### Decisions
+- **Whitelist, not blanket allow.** Single-element allowlist
+  keeps pnpm's supply-chain protection; we trust *this one*
+  package's install script.
+- **No `postinstall` in `@lumen/memory` itself.** The package's
+  own `install` script (whitelisted to run) already handles
+  prebuild download. Adding a redundant `postinstall` would
+  force a slow from-source rebuild on every install.
+- **Root-level `rebuild:native`, not package-level.** Future
+  native deps (e.g. `sqlite-vec`'s Rust binding) can be added
+  to the same `onlyBuiltDependencies` list and the same
+  `rebuild` script without changing the package-level scripts.
+
+### Notes
+- **No version bump**: tooling only, no public API change.
+- **Push status:** same — remote unreachable, no retry.
+
 ## [0.10.0] — 2026-06-17 — P14 Sweep redundant `!` outside @lumen/llm
 
 **Totals:** 1 commit (`cb06032`), 5 files modified, +48/-17 lines,
