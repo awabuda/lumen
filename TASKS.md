@@ -443,7 +443,7 @@ Replacing those with `delete` unblocked the tests, but biome's `performance/noDe
 - **Did NOT bump version**: P11 is tooling/test hygiene, no public API change. CHANGELOG 0.10.0 already covers everything in flight.
 
 ### Commits
-- [x] **P11.0** — `chore: P11 — biome cleanup, env-var footgun, exported ChatMessage` *(commit TBD)*
+- [x] **P11.0** — `chore: P11 — biome cleanup, env-var footgun, exported ChatMessage` *(commit `2444b72`)*
 
 ### Tests
 - 947 → 947 (no test count change). All 11 packages pass.

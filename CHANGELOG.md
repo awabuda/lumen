@@ -161,7 +161,7 @@ on touched files.
 
 ## [0.10.0] — 2026-06-17 — P11 Tooling/test hygiene (biome cleanup, env-var footgun)
 
-**Totals:** 1 commit (TBD), 11 files modified, +98/-85 lines, no test
+**Totals:** 1 commit (`2444b72`), 132 files modified, +692/-629 lines, no test
 count change (947 → 947), 11 packages, 47 commits on `main`. Typecheck
 clean. `pnpm exec biome check` clean across 242 files (was 235 errors at
 the start of the pass).
