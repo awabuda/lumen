@@ -537,17 +537,17 @@ export class SqliteStore extends BaseVectorMemoryStore {
       })
 
       // Re-rank by cosine if the query asked for an embedding.
-      if (query.embedding) {
-        results = results
-          .map((r) => {
-            if (!r.record.embedding) return { ...r, score: r.score * 0.5 }
-            return {
-              ...r,
-              score: Math.max(r.score, cosineSimilarity(r.record.embedding, query.embedding!)),
-            }
-          })
-          .sort((a, b) => b.score - a.score)
+      const r = query.embedding
+      if (r) {
+        results = results.map((rec) => {
+          if (!rec.record.embedding) return { ...rec, score: rec.score * 0.5 }
+          return {
+            ...rec,
+            score: Math.max(rec.score, cosineSimilarity(rec.record.embedding, r)),
+          }
+        })
       }
+      results.sort((a, b) => b.score - a.score)
       return results.slice(0, limit)
     }
 

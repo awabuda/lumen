@@ -107,7 +107,8 @@ const readEnv = (prefix: string): Record<string, unknown> => {
     // CLI composition root, not by the strict config schema.
     let cursor: Record<string, unknown> = out
     for (let i = 0; i < path.length - 1; i++) {
-      const seg = path[i]!
+      const seg = path[i]
+      if (seg === undefined) continue
       const next = cursor[seg]
       if (next === null || typeof next !== 'object' || Array.isArray(next)) {
         const fresh: Record<string, unknown> = {}
@@ -117,7 +118,14 @@ const readEnv = (prefix: string): Record<string, unknown> => {
         cursor = next as Record<string, unknown>
       }
     }
-    cursor[path[path.length - 1]!] = value
+    // `path` is guaranteed non-empty by the `path.length === 0`
+    // check above, so the trailing segment is always defined.
+    // We narrow it to a local binding so the assignment below
+    // doesn't need a `!` assertion (and noUncheckedIndexedAccess
+    // can't push the type to `string | undefined` here).
+    const last = path.at(-1)
+    if (last === undefined) continue
+    cursor[last] = value
   }
   return out
 }

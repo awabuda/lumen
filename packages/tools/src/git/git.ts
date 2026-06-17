@@ -1,4 +1,4 @@
-import { BaseTool, type ToolContext, type ToolDescriptor, type ToolRisk } from '@lumen/core'
+import { BaseTool, ConfigError, type ToolContext, type ToolDescriptor, type ToolRisk } from '@lumen/core'
 /**
  * `git` — read-only and write-light git operations.
  *
@@ -231,7 +231,20 @@ export class GitTool extends BaseTool {
       case 'commit': {
         const argv = ['commit', '--no-verify']
         if (input.stageAll) argv.push('-a')
-        argv.push('-m', input.message!)
+        // The Zod schema's `.refine()` at line 94 guarantees
+        // `message !== undefined` whenever `op === 'commit'`
+        // (and `message === undefined` otherwise), so the
+        // local binding is type-safe without a `!` assertion.
+        const message = input.message
+        if (message === undefined) {
+          // Defense in depth: this branch is unreachable per
+          // the schema, but the typed error gives a clear
+          // pointer if the schema is ever loosened.
+          throw new ConfigError(
+            'git commit requires a `message` (unreachable: Zod schema enforces this).',
+          )
+        }
+        argv.push('-m', message)
         return argv
       }
     }

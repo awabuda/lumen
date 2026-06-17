@@ -52,7 +52,11 @@ import { SqliteStore } from '@lumen/memory'
 import { StaticToolset } from '@lumen/tools'
 
 const provider: BaseProvider = createOpenAIProvider({
-  apiKey: process.env.OPENAI_API_KEY!,
+  apiKey: (() => {
+    const k = process.env.OPENAI_API_KEY
+    if (!k) throw new Error('OPENAI_API_KEY is required')
+    return k
+  })(),
   defaultModel: 'gpt-4o-mini',
 })
 

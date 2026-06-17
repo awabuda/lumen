@@ -24,8 +24,11 @@ modern LLM backends ship a thin OpenAI-compatible gateway.
 ```ts
 import { createOpenAIProvider } from '@lumen/llm'
 
+const apiKey = process.env.OPENAI_API_KEY
+if (!apiKey) throw new Error('OPENAI_API_KEY is required')
+
 const provider = createOpenAIProvider({
-  apiKey: process.env.OPENAI_API_KEY!,
+  apiKey,
   defaultModel: 'gpt-4o-mini',
 })
 
@@ -37,8 +40,11 @@ const response = await provider.chat({
 ```ts
 import { createAnthropicProvider } from '@lumen/llm'
 
+const apiKey = process.env.ANTHROPIC_API_KEY
+if (!apiKey) throw new Error('ANTHROPIC_API_KEY is required')
+
 const provider = createAnthropicProvider({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
+  apiKey,
   defaultModel: 'claude-sonnet-4-5',
 })
 ```
