@@ -103,8 +103,26 @@ describe('GitTool', () => {
 
   it('refuses to commit without a message', async () => {
     const tool = new GitTool()
-    // The Zod refine rejects this before we even spawn git.
+    // The discriminated union rejects this at the boundary
+    // (P16) — `op: 'commit'` requires `message`.
     await expect(tool.call({ op: 'commit' }, ctx)).rejects.toThrow()
+  })
+
+  it('rejects field set that does not match the chosen op (discriminated union)', async () => {
+    const tool = new GitTool()
+    // `op: 'log'` does not accept `message`; the union requires
+    // the `log` variant's exact shape (ref / maxCount / maxBytes).
+    await expect(
+      tool.call({ op: 'log', message: 'should not be allowed' }, ctx),
+    ).rejects.toThrow()
+    // `op: 'commit'` does not accept `ref`.
+    await expect(
+      tool.call({ op: 'commit', message: 'msg', ref: 'HEAD~1' }, ctx),
+    ).rejects.toThrow()
+    // `op: 'status'` accepts no payload.
+    await expect(
+      tool.call({ op: 'status', ref: 'HEAD' }, ctx),
+    ).rejects.toThrow()
   })
 
   it('exposes `approval-required` risk classification', () => {

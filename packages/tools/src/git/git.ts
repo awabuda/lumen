@@ -1,4 +1,4 @@
-import { BaseTool, ConfigError, type ToolContext, type ToolDescriptor, type ToolRisk } from '@lumen/core'
+import { BaseTool, type ToolContext, type ToolDescriptor, type ToolRisk } from '@lumen/core'
 /**
  * `git` — read-only and write-light git operations.
  *
@@ -55,45 +55,65 @@ type GitOpRisk = 'safe' | 'approval-required'
 const GitOpSchema = z.enum(['status', 'diff', 'log', 'branch', 'commit'])
 export type GitOp = z.infer<typeof GitOpSchema>
 
-/** Zod schema for the tool's input. */
-export const GitInputSchema = z
+/**
+ * Zod schema for the tool's input.
+ *
+ * Modelled as a `discriminatedUnion` on `op` so the per-op
+ * payload is type-checked at the boundary: `op: 'commit'`
+ * requires `message`, `op: 'diff'` accepts `ref`/`ref2`/
+ * `maxBytes`, `op: 'log'` accepts `ref`/`maxCount`/`maxBytes`,
+ * and the no-payload ops (`status`, `branch`) get exactly the
+ * field set they're supposed to have. The old design (one
+ * flat object + `.refine()`) let the schema type all fields
+ * as `optional()` on every op, papering over a real contract
+ * mismatch that the type system is now able to enforce.
+ */
+const GitOpStatus = z.object({ op: z.literal('status') }).strict()
+const GitOpDiff = z
   .object({
-    /** Which git operation to run. */
-    op: GitOpSchema,
-    /** Optional revision / ref (e.g. `HEAD~1`, `main`, `feature/x`). */
+    op: z.literal('diff'),
     ref: z.string().min(1).max(256).optional(),
-    /** Optional second ref for `diff` (e.g. `main..feature`). */
     ref2: z.string().min(1).max(256).optional(),
-    /**
-     * For `log` only: cap the number of commits returned.
-     * Defaults to 20. Hard-capped at 500 so a malicious
-     * "show me everything" prompt doesn't OOM the agent.
-     */
+    maxBytes: z.number().int().min(1024).max(5 * 1024 * 1024).optional(),
+  })
+  .strict()
+const GitOpLog = z
+  .object({
+    op: z.literal('log'),
+    ref: z.string().min(1).max(256).optional(),
     maxCount: z.number().int().min(1).max(500).optional(),
-    /** For `log` and `diff` only: cap bytes of output. Defaults to 256 KiB. */
-    maxBytes: z
-      .number()
-      .int()
-      .min(1024)
-      .max(5 * 1024 * 1024)
-      .optional(),
+    maxBytes: z.number().int().min(1024).max(5 * 1024 * 1024).optional(),
+  })
+  .strict()
+const GitOpBranch = z
+  .object({
+    op: z.literal('branch'),
+    ref: z.string().min(1).max(256).optional(),
+  })
+  .strict()
+const GitOpCommit = z
+  .object({
+    op: z.literal('commit'),
     /**
-     * For `commit` only: the commit message. Conventional-commits
-     * subject line max 72 chars; we don't enforce a style, we
-     * just reject empties.
+     * Conventional-commits subject line max 72 chars; we don't
+     * enforce a style, we just reject empties.
      */
-    message: z.string().min(1).max(4096).optional(),
+    message: z.string().min(1).max(4096),
     /**
-     * For `commit` only: also stage modified-tracked files
-     * before committing. Defaults to false — we do not want
-     * to surprise the user with a commit that includes
-     * half-finished edits.
+     * Also stage modified-tracked files before committing.
+     * Defaults to false — we do not want to surprise the user
+     * with a commit that includes half-finished edits.
      */
     stageAll: z.boolean().optional(),
   })
-  .refine((v) => (v.op === 'commit') === (v.message !== undefined), {
-    message: '`message` is required for `commit` and forbidden otherwise',
-  })
+  .strict()
+export const GitInputSchema = z.discriminatedUnion('op', [
+  GitOpStatus,
+  GitOpDiff,
+  GitOpLog,
+  GitOpBranch,
+  GitOpCommit,
+])
 
 export type GitInput = z.infer<typeof GitInputSchema>
 
@@ -229,22 +249,12 @@ export class GitTool extends BaseTool {
       case 'branch':
         return ['branch', '--list', '--no-color']
       case 'commit': {
+        // `message` is non-optional in `GitOpCommit` (enforced
+        // by the discriminated union), so the type is `string`
+        // here with no `!` and no defense-in-depth check.
         const argv = ['commit', '--no-verify']
         if (input.stageAll) argv.push('-a')
-        // The Zod schema's `.refine()` at line 94 guarantees
-        // `message !== undefined` whenever `op === 'commit'`
-        // (and `message === undefined` otherwise), so the
-        // local binding is type-safe without a `!` assertion.
-        const message = input.message
-        if (message === undefined) {
-          // Defense in depth: this branch is unreachable per
-          // the schema, but the typed error gives a clear
-          // pointer if the schema is ever loosened.
-          throw new ConfigError(
-            'git commit requires a `message` (unreachable: Zod schema enforces this).',
-          )
-        }
-        argv.push('-m', message)
+        argv.push('-m', input.message)
         return argv
       }
     }
