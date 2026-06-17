@@ -209,6 +209,55 @@ the start of the pass).
 - **Push status:** same — remote unreachable, no retry. Local commits
   are safe.
 
+## [0.10.0] — 2026-06-17 — P13 SqliteStore lifecycle state machine
+
+**Totals:** 1 commit (`2803c5e`), 2 files (1 new), +292/-46 lines,
++14 tests (947 → 961), 12 packages, 51 commits on `main`.
+Typecheck clean. Biome clean.
+
+### Added
+- **Three-state lifecycle machine** in `SqliteStore`:
+  `'uninit' | 'ready' | 'closed'`. Replaces the single
+  `initialized: boolean` flag. Every public method dispatches
+  on the state and throws a typed `ConfigError` on a
+  lifecycle violation; `dispose()` is idempotent.
+
+### Fixed
+- **3 silent footguns in the previous `init()` flow:**
+  1. `init()` no-op'd on a second call (`if (initialized) return`)
+  2. `init()` after `dispose()` would crash on a closed DB
+  3. `init()` that threw partway left the instance in a
+     half-baked state where a retry would re-run DDL against a
+     corrupted file
+- **5 public methods that escaped sync throws.** `get`, `search`,
+  `listSessions`, `getSession`, and `getSessionMessages` used
+  `Promise.resolve(syncWork())` which escaped a sync throw from
+  the `s` accessor. A lifecycle error would surface as a
+  synchronous throw, not a rejected promise — `await store.get('x')
+  .catch(...)` would miss it. All five now use the
+  `try { ... } catch { reject }` wrapper pattern that `put`,
+  `createSession`, `appendMessage`, and `prune` already used.
+
+### Tests
+- new file: `packages/memory/test/init-order.test.ts` — 14 cases
+  covering every state-machine transition: rejects every public
+  method before init(), rejects `init()` called twice
+  ("already ready"), rejects `init()` called after dispose
+  ("create a new"), rejects methods after dispose, `dispose()`
+  is idempotent, `dispose()` before `init()` is a no-op, init
+  failure on a corrupted file leaves the instance in `'closed'`,
+  validates config at the constructor boundary, and pins a
+  happy-path read-after-write round-trip.
+
+### Notes
+- **No version bump**: internal hardening, no public API change.
+  The new error messages are added but the *types* of the existing
+  `ConfigError` rejects are unchanged.
+- **No `reset()` or `reinit()` method** by design. Single-use
+  instances keep the lifecycle simple; long-lived daemons that
+  need to re-open construct a new `SqliteStore`.
+- **Push status:** same — remote unreachable, no retry.
+
 ## [0.10.0] — 2026-06-17 — P12 Redundant `!` cleanup in @lumen/llm
 
 **Totals:** 1 commit (`ade82fd`), 5 files modified, +23/-18 lines, no

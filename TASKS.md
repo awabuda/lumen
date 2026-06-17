@@ -483,6 +483,52 @@ A fresh `pnpm grep` for `![ ,)]` inside `packages/llm/src` returned 10 matches:
 
 **P12 totals:** 10 `!` sites removed (3 JSDoc + 7 real code), 3 redundant double-calls eliminated, 1 JSDoc footgun fixed. 49 commits ahead of origin/main. **Push status:** same — remote unreachable, no retry.
 
-**Remaining P2 deferred from P9.5:** SqliteStore init-order enforcement (P13 candidate).
+---
+
+## P13 — SqliteStore lifecycle state machine (2026-06-17, all done; committed)
+
+Goal: close the third P2 item from the P9 audit — "SqliteStore init-order enforcement". The original concern was that `init()` could be called in the wrong order, on a disposed instance, or twice; the previous design silently no-op'd or crashed with an opaque better-sqlite3 error. This pass replaces the single `initialized: boolean` with an explicit three-state machine.
+
+### State machine
+
+```
+uninit  --init()-->  ready  --dispose()-->  closed
+```
+
+- `'uninit'` — fresh from the constructor. DB connection open but no DDL. Only `init()` and `dispose()` are valid.
+- `'ready'`  — `init()` fully completed. All CRUD methods valid.
+- `'closed'` — `dispose()` has run, OR `init()` failed partway. Instance is single-use; caller must construct a new one. `dispose()` is idempotent here.
+
+### Three footguns the old design had
+
+1. `init()` no-op'd on the second call (`if (this.initialized) return`)
+2. `init()` after `dispose()` would crash on a closed `better-sqlite3` handle
+3. `init()` that threw partway left the instance in a half-baked state where a retry would re-run DDL against a corrupted file
+
+The new state machine surfaces all three as typed `ConfigError` and treats a failed init as terminal (state transitions to `'closed'` on throw).
+
+### Bonus: normalize public surface to be uniformly async-throwing
+
+While writing the tests, found that `get`, `search`, `listSessions`, `getSession`, and `getSessionMessages` used `Promise.resolve(syncWork())` — which escapes a sync throw from the `s` accessor. A lifecycle error would surface as a synchronous throw, not a rejected promise, and `await store.get('x').catch(...)` would miss it. All five methods now use the `new Promise((resolve, reject) => { try { ... } catch { reject } })` pattern that `put`, `createSession`, `appendMessage`, and `prune` already used.
+
+### Decisions
+
+- **State enum, not boolean.** Three states are easier to extend (e.g. a future `'migrating'` state would slot in between `'uninit'` and `'ready'`) than adding more booleans.
+- **Idempotent `dispose()`.** Tests rely on `afterEach` calling `dispose()` on a fresh per-test instance; a second `dispose()` (e.g. in the contract suite's "dispose + init round-trip" test) must be safe.
+- **Set state to `'closed'` before closing the DB.** A failed `close()` (rare but possible if the file was unlinked mid-run) still leaves the instance in a terminal state.
+- **No version bump.** Internal hardening, no public API change. The error messages are new but the *types* of the existing ConfigErrors are unchanged.
+- **Did NOT add a `reset()` or `reinit()` method.** Single-use instances keep the lifecycle simple. If a long-lived daemon needs to re-open after a reconnect, it constructs a new SqliteStore (matching the contract-suite.ts pattern).
+
+### Commits
+- [x] **P13.0** — `feat(memory): P13 — SqliteStore lifecycle state machine` *(commit `2803c5e`)* — 2 files changed (1 new), +292/-46.
+
+### Tests
+- 947 → 961 (+14). All 12 packages pass.
+- new file: `packages/memory/test/init-order.test.ts` — 14 cases covering every state-machine transition
+- typecheck clean. `pnpm exec biome check` clean.
+
+**P13 totals:** 1 boolean → 3-state enum, 5 public methods normalized to async-throwing, 14 new tests. 51 commits ahead of origin/main.
+
+**P9.5 deferred list status:** P10 ✓ P11 ✓ P12 ✓ P13 ✓. **All P2 items closed.** **Push status:** same — remote unreachable, no retry.
 
 **Push status (2026-06-17):** Same — remote unreachable, no retry.
