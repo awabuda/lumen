@@ -38,19 +38,20 @@
  */
 
 import { z } from 'zod'
+import { Mutex } from '../concurrency/index.js'
+import { AgentError, ConfigError } from '../errors/index.js'
 import {
   BaseProvider,
-  ProviderError,
   type ChatRequest,
   type ChatResponse,
   type EmbedRequest,
   type EmbedResponse,
   type ProviderCapabilities,
+  ProviderError,
   type StreamEvent,
   type StreamOptions,
 } from '../index.js'
-import { AgentError, ConfigError } from '../errors/index.js'
-import { Mutex } from '../concurrency/index.js'
+import { type CircuitBreaker, CircuitOpenError } from './circuit-breaker.js'
 
 /** Routing strategy for the pool. */
 export type RoutingStrategy = 'capability' | 'name' | 'round-robin' | 'weighted'
@@ -101,6 +102,14 @@ export interface ProviderPoolOptions {
    * tests can inject a deterministic source.
    */
   readonly random?: () => number
+  /**
+   * Optional circuit breaker. When present, providers that are
+   * in the `open` state are filtered out of the candidate list
+   * (fail-fast) and a failed call increments the failure counter
+   * for the provider it was attributed to. Defaults to no
+   * breaker (back-compat with P8 callers).
+   */
+  readonly circuit?: CircuitBreaker
 }
 
 // ---------------------------------------------------------------------------
@@ -150,8 +159,7 @@ export class PoolExhaustedError extends AgentError {
     attempts: ReadonlyArray<{ readonly providerId: string; readonly error: unknown }>,
   ) {
     super(
-      `Provider pool exhausted after ${attempts.length} attempt(s): ` +
-        attempts.map((a) => a.providerId).join(', '),
+      `Provider pool exhausted after ${attempts.length} attempt(s): ${attempts.map((a) => a.providerId).join(', ')}`,
     )
     this.name = 'PoolExhaustedError'
     this.attempts = attempts
@@ -206,6 +214,8 @@ export class ProviderPool extends BaseProviderPool {
   private readonly capability: CapabilityKey
   private readonly targetId?: string
   private readonly random: () => number
+  /** Optional per-provider circuit breaker (P9.4). */
+  private readonly circuit?: CircuitBreaker
   /**
    * FIFO mutex that serializes cursor advancement and
    * registration mutations. Contended only by callers that hit
@@ -223,6 +233,7 @@ export class ProviderPool extends BaseProviderPool {
     this.capability = options.capability ?? 'toolUse'
     this.targetId = options.targetId
     this.random = options.random ?? Math.random
+    this.circuit = options.circuit
     this.registered = options.providers ? [...options.providers] : []
     this.capabilities = this.recomputeCapabilities()
     this.mutex = new Mutex({ name: 'provider-pool' })
@@ -514,14 +525,33 @@ export class ProviderPool extends BaseProviderPool {
     }
     const attempts: Array<{ providerId: string; error: unknown }> = []
     for (const provider of candidates) {
+      // Check the circuit *before* calling. A `CircuitOpenError`
+      // is itself a transient failure we record — but we don't
+      // count it against the breaker (no point in punishing the
+      // breaker for being open). We treat it as a non-fatal
+      // skip and continue to the next candidate.
+      if (this.circuit) {
+        try {
+          this.circuit.allow(provider.id)
+        } catch (err) {
+          if (err instanceof CircuitOpenError) {
+            attempts.push({ providerId: provider.id, error: err })
+            continue
+          }
+          throw err
+        }
+      }
       try {
-        return await fn(provider)
+        const result = await fn(provider)
+        this.circuit?.recordSuccess(provider.id)
+        return result
       } catch (err) {
         if (!(err instanceof ProviderError)) {
           // Non-provider error: programming bug or invalid request.
           // Do not failover — surface the original error to help debugging.
           throw err
         }
+        this.circuit?.recordFailure(provider.id)
         attempts.push({ providerId: provider.id, error: err })
       }
     }

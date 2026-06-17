@@ -259,3 +259,57 @@ describe('createWebTools', () => {
     expect((fetch as unknown as { provider: unknown }).provider).toBe(provider)
   })
 })
+
+describe('DuckDuckGoSearchProvider size cap (P9.3)', () => {
+  function makeStreamingFetch(
+    chunks: ReadonlyArray<Uint8Array>,
+    declaredLength?: number,
+  ): import('../src/web/index.js').default extends never ? never : typeof fetch {
+    return (async () => ({
+      ok: true,
+      status: 200,
+      headers: declaredLength
+        ? {
+            get: (n: string) =>
+              n.toLowerCase() === 'content-length' ? String(declaredLength) : null,
+          }
+        : undefined,
+      text: async () => {
+        const decoder = new TextDecoder()
+        return chunks.map((c) => decoder.decode(c, { stream: true })).join('') + decoder.decode()
+      },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const c of chunks) controller.enqueue(c)
+          controller.close()
+        },
+      }),
+    })) as unknown as typeof fetch
+  }
+
+  it('throws when streaming body exceeds the cap', async () => {
+    const big = new Uint8Array(2_000).fill(65) // 2 KiB of 'A'
+    const provider = new DuckDuckGoSearchProvider({
+      fetch: makeStreamingFetch([big], undefined),
+    })
+    await expect(provider.fetch('https://example.test', 1_000)).rejects.toThrow(
+      /exceeded 1000 bytes/,
+    )
+  })
+
+  it('returns the body when streaming body is under the cap', async () => {
+    const small = new Uint8Array(100).fill(66) // 100 B of 'B'
+    const provider = new DuckDuckGoSearchProvider({
+      fetch: makeStreamingFetch([small], undefined),
+    })
+    const text = await provider.fetch('https://example.test', 10_000)
+    expect(text).toBe('B'.repeat(100))
+  })
+
+  it('throws when Content-Length exceeds the cap', async () => {
+    const provider = new DuckDuckGoSearchProvider({
+      fetch: makeStreamingFetch([new Uint8Array(10)], 5_000_000),
+    })
+    await expect(provider.fetch('https://example.test', 1_000)).rejects.toThrow(/Content-Length/)
+  })
+})

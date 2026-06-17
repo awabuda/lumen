@@ -23,11 +23,6 @@ import type {
 } from './sandbox.js'
 
 export class NoneSandbox implements ShellSandbox {
-  // Config is accepted to satisfy the contract; this sandbox
-  // ignores it because it has no parameters at all.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  constructor(_config: ShellSandboxConfig) {}
-
   public run(_request: ShellSandboxRequest): Promise<ShellSandboxOutcome> {
     return Promise.resolve({
       kind: 'refused' as const,

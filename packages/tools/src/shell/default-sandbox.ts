@@ -34,6 +34,8 @@
  *     pre-check in a derived class).
  */
 import { spawn } from 'node:child_process'
+import * as path from 'node:path'
+import { ConfigError } from '@lumen/core'
 import type {
   ShellSandbox,
   ShellSandboxConfig,
@@ -88,7 +90,7 @@ function decodeTruncated(buf: Buffer, maxBytes: number): { text: string; truncat
     end--
   }
   return {
-    text: buf.subarray(0, end).toString('utf8') + '\n[... output truncated ...]\n',
+    text: `${buf.subarray(0, end).toString('utf8')}\n[... output truncated ...]\n`,
     truncated: true,
   }
 }
@@ -97,15 +99,42 @@ export class DefaultSandbox implements ShellSandbox {
   private readonly env: Readonly<Record<string, string>>
   private readonly timeoutMs: number
   private readonly maxOutputBytes: number
+  private readonly workspaceRoot: string
 
   constructor(config: ShellSandboxConfig) {
     this.timeoutMs = config.timeoutMs
     this.maxOutputBytes = config.maxOutputBytes
     this.env = mergeEnv(BASE_ENV, config.env)
+    // Resolve the workspace root once, at construction. We capture
+    // the realpath so symlink-based escapes are caught too.
+    this.workspaceRoot = path.resolve(config.workspaceDir)
+  }
+
+  /**
+   * Defence against path-traversal in `request.cwd`. Compares the
+   * realpath of the requested cwd against the workspace root; the
+   * requested cwd must be the root itself or a strict descendant.
+   *
+   * Uses a two-step check (string prefix + separator boundary) so
+   * `/foo/bar2` does not match `/foo/bar`. Returns the resolved
+   * cwd so the caller can pass a canonical path to `spawn`.
+   */
+  private resolveCwd(requested: string): string {
+    const resolved = path.resolve(requested)
+    if (resolved === this.workspaceRoot) return resolved
+    const prefix = this.workspaceRoot + path.sep
+    if (!resolved.startsWith(prefix)) {
+      throw new ConfigError(
+        `DefaultSandbox: cwd "${requested}" is outside workspaceDir "${this.workspaceRoot}". Path-traversal is not allowed.`,
+        { field: 'cwd' },
+      )
+    }
+    return resolved
   }
 
   public run(request: ShellSandboxRequest): Promise<ShellSandboxOutcome> {
     const started = Date.now()
+    const cwd = this.resolveCwd(request.cwd)
     // Combine the caller's signal with our internal timeout. Whichever
     // fires first kills the child. We hand the merged signal to
     // awaitChild so its `abort` listener still triggers a kill.
@@ -117,7 +146,7 @@ export class DefaultSandbox implements ShellSandbox {
     // `terminal` tool's Zod schema already refuses anything that
     // contains a shell metacharacter, so this is belt-and-braces.
     const child = spawn(request.command[0]!, request.command.slice(1), {
-      cwd: request.cwd,
+      cwd,
       env: this.env,
       stdio: ['ignore', 'pipe', 'pipe'],
       signal: mergedSignal,

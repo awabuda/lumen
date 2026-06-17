@@ -166,9 +166,20 @@ export interface ShellSandboxConfig {
    */
   readonly maxOutputBytes: number
   /**
+   * Filesystem root the sandbox may operate inside. The default
+   * sandbox rejects any `request.cwd` that resolves outside this
+   * directory (symlinks and `..` are both caught). Path-traversal
+   * defence — without it, the agent can `cd /etc && cat shadow`.
+   *
+   * Defaults to `process.cwd()` in {@link defaultShellSandboxConfig}.
+   * Multi-tenant deployments should set this to a per-tenant
+   * scratch directory before constructing the agent.
+   */
+  readonly workspaceDir: string
+  /**
    * Map of strategy-name → factory. The CLI composition root
    * registers `default` and `none`; downstream packages
-   * (e.g. a `lumen-tools-docker` plugin) can register `docker`.
+   * (e.g. a `lumen-tools-docker` plugin) can register `docker`).
    */
   readonly factories: Readonly<Record<string, ShellSandboxFactory>>
 }

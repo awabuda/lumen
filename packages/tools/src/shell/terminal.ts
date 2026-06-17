@@ -29,10 +29,10 @@
  * no opinion on how that's done.
  */
 import path from 'node:path'
+import { BaseTool, ConfigError, type ToolContext, type ToolRisk } from '@lumen/core'
 import { z } from 'zod'
-import { BaseTool, type ToolContext, type ToolDescriptor, type ToolRisk } from '@lumen/core'
-import { resolveSandbox, type ShellSandbox, type ShellSandboxConfig } from './sandbox.js'
 import { defaultShellSandboxConfig } from './factories.js'
+import { type ShellSandbox, type ShellSandboxConfig, resolveSandbox } from './sandbox.js'
 
 /**
  * Characters that would trigger shell metacharacter interpretation
@@ -76,6 +76,22 @@ export const TerminalInputSchema = z.object({
 })
 
 export type TerminalInput = z.infer<typeof TerminalInputSchema>
+
+/**
+ * Options accepted by the convenience constructor overload of
+ * {@link TerminalTool}. Pass a pre-built {@link ShellSandboxConfig}
+ * for full control; pass this bundle to use the default strategy
+ * with a custom workspace boundary.
+ */
+export interface TerminalToolOptions {
+  /**
+   * Workspace root for path-traversal defence. See
+   * {@link ShellSandboxConfig.workspaceDir}. When omitted, the
+   * sandbox falls back to `process.cwd()` (the agent's host
+   * working directory) at construction time.
+   */
+  readonly workspaceDir?: string
+}
 
 /** Zod schema for the tool's output. */
 export const TerminalOutputSchema = z.object({
@@ -122,9 +138,24 @@ export class TerminalTool extends BaseTool {
    *   the config — it stores the resolved sandbox for the lifetime
    *   of the tool.
    */
-  constructor(sandboxConfig?: ShellSandboxConfig) {
+  /**
+   * Construct with either a pre-built `ShellSandboxConfig` or a
+   * {@link TerminalToolOptions} bundle. The `workspaceDir` field
+   * on the options sets the path-traversal boundary for the
+   * default sandbox (it cannot be looser than the tool's host
+   * process cwd, but it can be tighter — pass a project
+   * subdirectory to keep the agent inside it).
+   */
+  constructor(options: ShellSandboxConfig | TerminalToolOptions | undefined = {}) {
     super()
-    this.sandbox = resolveSandbox(sandboxConfig ?? defaultShellSandboxConfig())
+    const opts = options as ShellSandboxConfig | TerminalToolOptions
+    const sandboxConfig: ShellSandboxConfig =
+      'strategy' in opts
+        ? opts
+        : defaultShellSandboxConfig({
+            workspaceDir: opts.workspaceDir,
+          })
+    this.sandbox = resolveSandbox(sandboxConfig)
   }
 
   protected async execute(input: unknown, ctx: ToolContext): Promise<TerminalOutput> {
@@ -146,22 +177,41 @@ export class TerminalTool extends BaseTool {
         truncated: false,
         refusal: {
           reason: 'policy-violation',
-          message:
-            `Refused: argv[0] "${parsed.command[0]}" contains a shell metacharacter. ` +
-            'Pass commands as a flat array of arguments; do not use the terminal tool to invoke a shell.',
+          message: `Refused: argv[0] "${parsed.command[0]}" contains a shell metacharacter. Pass commands as a flat array of arguments; do not use the terminal tool to invoke a shell.`,
         },
       }
     }
 
     const cwd = parsed.cwd ? require('node:path').resolve(ctx.cwd, parsed.cwd) : ctx.cwd
 
-    const outcome = await this.sandbox.run({
-      command: parsed.command,
-      cwd,
-      env: parsed.env ?? {},
-      timeoutMs: parsed.timeoutMs ?? this.sandboxTimeoutMs(),
-      signal: ctx.signal,
-    })
+    let outcome: import('./sandbox.js').ShellSandboxOutcome
+    try {
+      outcome = await this.sandbox.run({
+        command: parsed.command,
+        cwd,
+        env: parsed.env ?? {},
+        timeoutMs: parsed.timeoutMs ?? this.sandboxTimeoutMs(),
+        signal: ctx.signal,
+      })
+    } catch (err) {
+      // A sandbox throwing a `ConfigError` (e.g. cwd outside the
+      // workspace boundary) is a **policy violation** in our domain
+      // model — the agent asked for something the operator forbids.
+      // Surface it as a `refusal` rather than letting it escape the
+      // tool as an unhandled exception.
+      if (err instanceof ConfigError) {
+        return {
+          exitCode: null,
+          signal: null,
+          stdout: '',
+          stderr: '',
+          durationMs: 0,
+          truncated: false,
+          refusal: { reason: 'policy-violation', message: err.message },
+        }
+      }
+      throw err
+    }
 
     if (outcome.kind === 'refused') {
       return {

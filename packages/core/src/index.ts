@@ -159,6 +159,15 @@ export {
   type ProviderPoolOptions,
 } from './agent/pool.js'
 
+// Per-provider circuit breaker (failure-rate gate, P9.4)
+export {
+  CircuitBreaker,
+  CircuitBreakerOptionsSchema,
+  CircuitOpenError,
+  type CircuitBreakerOptions,
+  type CircuitState,
+} from './agent/circuit-breaker.js'
+
 // Cron scheduler
 export {
   BaseCron,

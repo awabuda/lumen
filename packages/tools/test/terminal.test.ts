@@ -15,12 +15,12 @@
  * wiring through `DefaultSandbox` works.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { TerminalTool } from '../src/shell/terminal.js'
-import type { ShellSandbox, ShellSandboxOutcome } from '../src/shell/sandbox.js'
 import type { ToolContext } from '@lumen/core'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ShellSandbox, ShellSandboxOutcome } from '../src/shell/sandbox.js'
+import { TerminalTool } from '../src/shell/terminal.js'
 
 /** A minimal in-memory sandbox. Records every request. */
 function makeFakeSandbox(respondWith: (cmd: readonly string[]) => ShellSandboxOutcome): {
@@ -165,8 +165,10 @@ describe('TerminalTool', () => {
   })
 
   it('runs a real command end-to-end through DefaultSandbox', async () => {
-    // No injection — use the shipped default strategy.
-    const tool = new TerminalTool()
+    // No injection — use the shipped default strategy. Set the
+    // workspace boundary to the test tmpdir so the path-traversal
+    // check (P9.3) allows the call's `ctx.cwd`.
+    const tool = new TerminalTool({ workspaceDir: tmpCwd })
     const out = (await tool.call({ command: ['echo', 'lumen'] }, ctx)) as {
       exitCode: number | null
       stdout: string
@@ -180,5 +182,52 @@ describe('TerminalTool', () => {
   it('exposes a `dangerous` risk classification so the approval gate can hook it', () => {
     const tool = new TerminalTool()
     expect(tool.risk).toBe('dangerous')
+  })
+})
+
+describe('DefaultSandbox path-traversal defence (P9.3)', () => {
+  it('refuses request.cwd that escapes workspaceDir', async () => {
+    const tool = new TerminalTool({ workspaceDir: tmpCwd })
+    const out = (await tool.call({ command: ['pwd'], cwd: '/etc' }, ctx)) as {
+      refusal: { reason: string; message: string } | null
+    }
+    expect(out.refusal).not.toBeNull()
+    expect(out.refusal?.message).toMatch(/outside workspaceDir/)
+  })
+
+  it('refuses request.cwd that uses .. to escape workspaceDir', async () => {
+    const tool = new TerminalTool({ workspaceDir: tmpCwd })
+    const out = (await tool.call({ command: ['pwd'], cwd: `${tmpCwd}/../../../etc` }, ctx)) as {
+      refusal: { reason: string; message: string } | null
+    }
+    expect(out.refusal).not.toBeNull()
+    expect(out.refusal?.message).toMatch(/outside workspaceDir/)
+  })
+
+  it('allows request.cwd equal to workspaceDir', async () => {
+    const tool = new TerminalTool({ workspaceDir: tmpCwd })
+    const out = (await tool.call({ command: ['pwd'] }, ctx)) as {
+      refusal: unknown
+      stdout: string
+    }
+    expect(out.refusal).toBeNull()
+    // `pwd` returns the canonical (symlink-resolved) path. On macOS
+    // `/tmp` resolves to `/private/tmp`; we compare via realpath
+    // to avoid coupling the test to the OS.
+    expect(require('node:fs').realpathSync(out.stdout.trim())).toBe(
+      require('node:fs').realpathSync(tmpCwd),
+    )
+  })
+
+  it('allows request.cwd a strict descendant of workspaceDir', async () => {
+    const subdir = path.resolve(tmpCwd, 'subdir')
+    require('node:fs').mkdirSync(subdir, { recursive: true })
+    const tool = new TerminalTool({ workspaceDir: tmpCwd })
+    const out = (await tool.call({ command: ['pwd'], cwd: subdir }, ctx)) as {
+      refusal: unknown
+      stdout: string
+    }
+    expect(out.refusal).toBeNull()
+    expect(out.stdout.trim()).toBe(require('node:fs').realpathSync(subdir))
   })
 })

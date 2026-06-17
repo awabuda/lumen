@@ -1,3 +1,6 @@
+import { DefaultSandbox } from './default-sandbox.js'
+import { dockerSandboxFactory } from './docker-sandbox.js'
+import { NoneSandbox } from './none-sandbox.js'
 /**
  * Default factory registry for {@link ShellSandbox} strategies.
  *
@@ -11,14 +14,11 @@
  * the configuration safe to share across concurrent tool instances.
  */
 import type { ShellSandboxConfig, ShellSandboxFactory } from './sandbox.js'
-import { DefaultSandbox } from './default-sandbox.js'
-import { NoneSandbox } from './none-sandbox.js'
-import { dockerSandboxFactory } from './docker-sandbox.js'
 
 /** All built-in sandbox factories, keyed by strategy name. */
 export const DEFAULT_SANDBOX_FACTORIES: Readonly<Record<string, ShellSandboxFactory>> = {
   default: (config) => new DefaultSandbox(config),
-  none: (config) => new NoneSandbox(config),
+  none: () => new NoneSandbox(),
   docker: dockerSandboxFactory,
 }
 
@@ -50,6 +50,7 @@ export function defaultShellSandboxConfig(
     env: partial.env ?? {},
     timeoutMs: partial.timeoutMs ?? 30_000,
     maxOutputBytes: partial.maxOutputBytes ?? 1024 * 1024, // 1 MiB
+    workspaceDir: partial.workspaceDir ?? process.cwd(),
     factories: partial.factories ?? DEFAULT_SANDBOX_FACTORIES,
   }
 }

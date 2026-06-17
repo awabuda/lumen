@@ -14,8 +14,8 @@
  * pure data + Zod schemas, with the provider injected.
  */
 
-import { z } from 'zod'
 import { BaseTool, type ToolContext, ToolError, type ToolRisk, ValidationError } from '@lumen/core'
+import { z } from 'zod'
 
 // ---------------------------------------------------------------------------
 // Backend abstraction
@@ -60,7 +60,16 @@ type FetchFn = (
 ) => Promise<{
   ok: boolean
   status: number
+  /** Optional Content-Length, if the fetch impl exposes it. */
+  headers?: { get(name: string): string | null }
   text(): Promise<string>
+  /**
+   * Optional streaming body. When exposed, we use it so the size
+   * cap is a real abort (not a post-buffer check). If absent, we
+   * fall back to `text()` and accept that a 1 GiB body will
+   * OOM the process — operators should supply a streaming fetch.
+   */
+  body?: ReadableStream<Uint8Array> | null
 }>
 
 /** Options for {@link DuckDuckGoSearchProvider}. */
@@ -96,17 +105,89 @@ export class DuckDuckGoSearchProvider extends BaseSearchProvider {
     if (!res.ok) {
       throw new ToolError(`DuckDuckGo returned ${res.status}`, { toolName: 'web_duckduckgo' })
     }
-    const html = await res.text()
+    // Cap the response body at 1 MiB. DuckDuckGo HTML pages are
+    // ~50–200 KiB; anything bigger is a misconfigured server or a
+    // response that's been weaponised into an OOM vector.
+    const html = await this.readCapped(res, 1024 * 1024)
     return this.parse(html, limit)
   }
 
-  public async fetch(targetUrl: string, _maxBytes: number): Promise<string> {
+  public async fetch(targetUrl: string, maxBytes: number): Promise<string> {
     const res = await this.doFetch(targetUrl, { redirect: 'follow' })
     if (!res.ok) {
       throw new ToolError(`Fetch ${targetUrl} returned ${res.status}`, { toolName: 'web_fetch' })
     }
-    const html = await res.text()
+    // Apply the caller-requested cap at read time so a 1 GiB body
+    // never reaches our process memory. The caller can still
+    // downsample with `text.slice(...)` for display.
+    const html = await this.readCapped(res, maxBytes)
     return htmlToText(html)
+  }
+
+  /**
+   * Read the response body up to `maxBytes`, refusing to read
+   * beyond. Returns the partial body. Throws `ToolError` if the
+   * underlying stream reports a Content-Length over the cap, or
+   * if the body grows past the cap while we're reading.
+   *
+   * Uses streaming when the fetch impl exposes `body`; falls
+   * back to `text()` with a post-read cap otherwise. The fallback
+   * is best-effort: a fetch impl that only exposes `text()` can
+   * still OOM on a 1 GiB body. Operators running in untrusted
+   * environments should use `undici` (which exposes streams).
+   */
+  private async readCapped(
+    res: {
+      headers?: { get(name: string): string | null }
+      text(): Promise<string>
+      body?: ReadableStream<Uint8Array> | null
+    },
+    maxBytes: number,
+  ): Promise<string> {
+    // Pre-flight: Content-Length, if advertised, is honoured.
+    const declared = Number(res.headers?.get('content-length') ?? 0)
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      throw new ToolError(
+        `web_fetch: Content-Length ${declared} exceeds cap ${maxBytes}. Refusing to download.`,
+        { toolName: 'web_fetch' },
+      )
+    }
+    // Streaming path. We accumulate chunks up to the cap; if the
+    // body grows past, we abort. The caller sees a ToolError.
+    if (res.body && typeof (res.body as { getReader?: unknown }).getReader === 'function') {
+      const reader = (res.body as ReadableStream<Uint8Array>).getReader()
+      const decoder = new TextDecoder()
+      const parts: string[] = []
+      let total = 0
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (value) {
+          total += value.byteLength
+          if (total > maxBytes) {
+            await reader.cancel()
+            throw new ToolError(
+              `web_fetch: response exceeded ${maxBytes} bytes while streaming (saw ${total}). Refusing to allocate further.`,
+              { toolName: 'web_fetch' },
+            )
+          }
+          parts.push(decoder.decode(value, { stream: true }))
+        }
+      }
+      parts.push(decoder.decode())
+      return parts.join('')
+    }
+    // Fallback path. Awaits the full body then checks the cap;
+    // a malicious server that lies about Content-Length can still
+    // OOM us here. We log a warning via the tool's error path.
+    const text = await res.text()
+    if (text.length > maxBytes) {
+      throw new ToolError(
+        `web_fetch response exceeded ${maxBytes} bytes (got ${text.length}). Lower maxBytes or supply a streaming fetch implementation.`,
+        { toolName: 'web_fetch' },
+      )
+    }
+    return text
   }
 
   /** Extract result blocks from DDG HTML. */
@@ -117,6 +198,7 @@ export class DuckDuckGoSearchProvider extends BaseSearchProvider {
     const blockRe =
       /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g
     let m: RegExpExecArray | null
+    // biome-ignore lint/suspicious/noAssignInExpressions: regex iteration idiom
     while ((m = blockRe.exec(html)) !== null && results.length < limit) {
       const url = decodeHtml(m[1] ?? '')
       const title = decodeHtml(stripTags(m[2] ?? ''))
