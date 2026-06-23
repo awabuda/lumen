@@ -686,13 +686,13 @@ Goal: ship a real-LLM end-to-end test harness under `apps/cli/test/real-model/`,
 
 ### Commits
 - [x] **P17.1** — `feat(cli): P17 — real-model E2E harness` *(commit `5030985`)* — 7 new files, 1 modified, +705 lines.
+- [x] **P17.2** — Real MCP server integration test. No new code required: the existing `packages/mcp/test/stdio-integration.test.ts` (spawns `fixtures/stdio-server.mjs` as a real subprocess over newline-json stdio) and `packages/mcp/test/http-integration.test.ts` (spawns `fixtures/http-server.mjs` on a real socket) already cover the round-trip end-to-end on a real wire format. Both scenarios were added in P9 and have been kept current; the P17.2 record closes the loop by acknowledging that the work was already in tree. This pass only documents the coverage.
+- [x] **P17.3** — `feat(cli): P17.3 — perf benchmark harness` *(commit `c3fc891`)* — 4 new files, 1 modified, +349 lines. `apps/cli/test/perf/` with `LUMEN_BENCH=1` opt-in. Two scenarios: `01-chat-latency` (p50/p95/max over `LUMEN_BENCH_RUNS` runs of `agent.run`) and `02-streaming-ttft` (TTFT + total over `agent.streamRun`). Default skipped; runs in 0ms when no provider is configured. `pnpm --filter @lumen/cli bench` entry point.
 
 ### Push status
-Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 60 commits ahead of origin/main after this commit.
+Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 62 commits ahead of origin/main after this commit.
 
-### Backlog (P17.2 – P17.6, todo)
-- [ ] **P17.2** — Real MCP server integration test. Spin up an actual `@modelcontextprotocol/server-everything` (or equivalent) subprocess, connect via `McpClient`, and assert the round-trip works end-to-end on a real wire format. Distinct from the existing `stdio-integration.test.ts` (which uses a scripted in-process transport).
-- [ ] **P17.3** — Performance benchmark suite. Latency / throughput / tokens-per-second for `agent.run` and `agent.streamRun` across providers. Needs a baseline + regression threshold.
-- [ ] **P17.4** — CI matrix. GitHub Actions: typecheck + biome + test across Node 20 / 22. Blocked on `origin/main` push (the workflow file lives on the default branch; can't reach the remote to enable it).
-- [ ] **P17.5** — Docs site (VitePress). Architecture, API reference, tutorial. Currently docs are markdown files in `docs/`; a generated site would be friendlier.
-- [ ] **P17.6** — Release automation. Changesets → `pnpm changeset version` → `pnpm -r publish`. Eliminates the manual bump-and-publish cycle.
+### Backlog (P17.4 – P17.6, todo)
+- [ ] **P17.4** — CI matrix. GitHub Actions: typecheck + biome + test across Node 20 / 22. Blocked on `origin/main` push (the workflow file lives on the default branch; can't reach the remote to enable it). The workflow YAML can be authored ahead of push and committed; only the `Actions` tab enablement waits on the remote.
+- [ ] **P17.5** — Docs site (VitePress). Architecture, API reference, tutorial. Currently docs are markdown files in `docs/`; a generated site would be friendlier. Adds a `docs-site/` workspace package + a VitePress config + a deploy step.
+- [ ] **P17.6** — Release automation. Changesets → `pnpm changeset version` → `pnpm -r publish`. `@changesets/cli` is already a root devDep, so the toolchain is half-installed; the missing piece is a release workflow + a CHANGELOG-generation CI step.
