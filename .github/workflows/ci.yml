@@ -1,0 +1,117 @@
+# GitHub Actions CI for lumen.
+#
+# Pipeline purpose: every PR + every push to main runs the
+# full static + unit + integration check on the supported
+# Node LTS matrix. Real-LLM scenarios (test/real-model and
+# test/perf) are opt-in via LUMEN_E2E=1 / LUMEN_BENCH=1 and
+# are NOT exercised here -- the CI environment has no
+# provider credentials, and the harness is explicitly
+# default-skipped so this is fine.
+#
+# Blocked on push:
+#   The workflow file lives on the default branch in
+#   .github/workflows/, so it will be picked up by GitHub
+#   Actions as soon as origin/main contains it. Until the
+#   remote push is unblocked (PAT / SSH / 443 all failing
+#   right now), this workflow exists as documentation and
+#   contract: the same commands run locally and will run on
+#   CI when the remote is reachable.
+#
+# Why pnpm@9.12.0 specifically:
+#   Pinned by `packageManager` in the root package.json.
+#   Installing a different pnpm version is a `pnpm` Corepack
+#   violation and the install step would refuse to proceed.
+#   actions/setup-node does not yet support pnpm via the
+#   `cache: pnpm` shortcut, so we install pnpm explicitly
+#   and cache the pnpm store directory ourselves.
+#
+# Why Node 20 + 22:
+#   Node 20 is the current LTS line; Node 22 is the next
+#   LTS. Skipping Node 18 because it is out of LTS as of
+#   2025-04. The matrix runs both because the project uses
+#   Node built-ins (ReadableStream, structuredClone) that
+#   have subtle differences between the two versions.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel an in-flight run for the same ref when a new
+# commit lands. Saves CI minutes during force-pushes and
+# rapid-fire PR updates; the run for the latest SHA is
+# the one that matters.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: typecheck + lint + test (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20.x', '22.x']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install pnpm
+        run: npm install -g pnpm@9.12.0
+
+      - name: Get pnpm store path
+        id: pnpm-cache
+        run: echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.store }}
+          key: pnpm-${{ runner.os }}-${{ matrix.node-version }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-${{ matrix.node-version }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # better-sqlite3 is a native module whose ABI is tied
+      # to the Node version. The pnpm install above fetches
+      # the prebuilt binary for the matrix Node, but if the
+      # install ran on a different Node it would be wrong.
+      # We run rebuild:native unconditionally -- it's a no-op
+      # when the binary is already correct, and cheap
+      # (sub-30s) when it's not.
+      - name: Rebuild native modules
+        run: pnpm rebuild:native
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint (biome)
+        run: pnpm lint
+
+      - name: Test
+        # Real-LLM E2E and perf benchmarks stay skipped
+        # (default). To exercise them, set LUMEN_E2E=1 /
+        # LUMEN_BENCH=1 plus the matching LUMEN_*_API_KEY
+        # env vars on the workflow -- intentionally not
+        # configured here, both for cost discipline and
+        # because GitHub-hosted runners have no provider
+        # credentials to use.
+        run: pnpm test
