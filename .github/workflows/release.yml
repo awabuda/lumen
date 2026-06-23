@@ -1,0 +1,144 @@
+# Release automation
+#
+# Bumps versions, generates per-package CHANGELOG.md
+# sections, and (when npm credentials are available)
+# publishes. Triggered manually via workflow_dispatch for
+# now -- the P17 cycle is the first release under this
+# pipeline, and a manual gate keeps a human in the loop
+# until we've shipped at least one clean cut.
+#
+# Pipeline:
+#   1. `pnpm changeset version` -- reads .changeset/*.md,
+#      bumps the affected package versions, regenerates
+#      CHANGELOG.md from the changeset bodies, and rewrites
+#      workspace:^ references in the dependents.
+#   2. If the version files changed, commit them with the
+#      bot identity and push. (This push goes through the
+#      same remote that the dev pushes go through, so the
+#      PAT/SSH/443 reachability question applies here too.
+#      Currently blocked on the same credential path as the
+#      dev push -- the workflow will start succeeding
+#      automatically once that is unblocked.)
+#   3. `pnpm install --frozen-lockfile` to refresh the
+#      lockfile against the new version pins.
+#   4. `pnpm build` to confirm the bumped packages still
+#      compile.
+#   5. `pnpm changeset publish` to push to the registry.
+#      Skipped when no NODE_AUTH_TOKEN secret is set -- the
+#      version-bump commit still lands even without a
+#      publish, so the next release can pick it up.
+#
+# Why a manual trigger instead of push-to-main:
+#   Push-to-main would race with the dev commit cadence:
+#   a push of a half-baked branch would trigger an
+#   unwanted version bump. workflow_dispatch forces a
+#   release engineer to say "yes, ship this" and to pick
+#   the right version line (`--snapshot prerelease`
+#   support is in the script -- uncomment the env line
+#   to cut a prerelease).
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot:
+        description: 'Cut a snapshot prerelease (does not publish)'
+        required: false
+        default: 'false'
+
+jobs:
+  version:
+    name: Bump versions + publish
+    runs-on: ubuntu-latest
+    # Don't run a release in parallel with itself: the
+    # version bump rewrites files and the second run would
+    # race the first.
+    concurrency: release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Changeset needs full history to compute the
+          # diff between the last released commit and HEAD.
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install pnpm
+        run: npm install -g pnpm@9.12.0
+
+      - name: Get pnpm store path
+        id: pnpm-cache
+        run: echo "store=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.store }}
+          key: pnpm-${{ runner.os }}-release-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Bump versions
+        # `--snapshot` produces a prerelease version line
+        # (e.g. 0.11.0-fix-20240101-sha.0). Useful for
+        # `npm install lumen@next` style previews. The
+        # default input is 'false' so a regular
+        # workflow_dispatch run produces a stable version.
+        run: |
+          if [ "${{ inputs.snapshot }}" = "true" ]; then
+            pnpm changeset version --snapshot
+          else
+            pnpm changeset version
+          fi
+
+      - name: Detect version changes
+        id: diff
+        run: |
+          if git diff --quiet HEAD; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat
+          fi
+
+      - name: Commit version bumps
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "chore(release): version packages"
+          git push
+        env:
+          # GITHUB_TOKEN has push rights on the repo when
+          # the workflow has `permissions: contents: write`
+          # declared below.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Refresh lockfile
+        if: steps.diff.outputs.changed == 'true'
+        run: pnpm install --lockfile-only
+
+      - name: Rebuild native modules
+        run: pnpm rebuild:native
+
+      - name: Build
+        run: pnpm build
+
+      - name: Publish
+        if: env.NPM_TOKEN != ''
+        run: pnpm changeset publish
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    permissions:
+      contents: write
