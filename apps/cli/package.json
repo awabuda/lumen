@@ -1,6 +1,6 @@
 {
   "name": "@lumen/cli",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "private": true,
   "type": "module",
   "bin": {
@@ -14,7 +14,9 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
