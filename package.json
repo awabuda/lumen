@@ -19,6 +19,8 @@
     "changeset": "changeset",
     "version": "changeset version",
     "publish": "changeset publish",
+    "docs:dev": "turbo run --filter @lumen/docs-site dev",
+    "docs:build": "turbo run --filter @lumen/docs-site build",
     "clean": "turbo run clean && rm -rf node_modules",
     "rebuild:native": "pnpm rebuild better-sqlite3 --filter @lumen/memory"
   },

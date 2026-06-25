@@ -1,0 +1,9 @@
+# VitePress build output.
+# The site is built into `../../../docs-dist` (resolved
+# relative to this file by .vitepress/config.mts) so it
+# lives outside the monorepo workspaces and outside the
+# apps/docs-site/ package boundary. Patterns below are
+# relative to this file's location.
+.vitepress/cache
+.vitepress/dist
+../../../docs-dist

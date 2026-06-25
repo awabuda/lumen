@@ -4,6 +4,7 @@ node_modules/
 dist/
 */dist/*
 **/dist/**
+docs-dist/
 .turbo/
 */.turbo/
 **/.turbo/

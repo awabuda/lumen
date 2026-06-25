@@ -112,17 +112,11 @@ describe('GitTool', () => {
     const tool = new GitTool()
     // `op: 'log'` does not accept `message`; the union requires
     // the `log` variant's exact shape (ref / maxCount / maxBytes).
-    await expect(
-      tool.call({ op: 'log', message: 'should not be allowed' }, ctx),
-    ).rejects.toThrow()
+    await expect(tool.call({ op: 'log', message: 'should not be allowed' }, ctx)).rejects.toThrow()
     // `op: 'commit'` does not accept `ref`.
-    await expect(
-      tool.call({ op: 'commit', message: 'msg', ref: 'HEAD~1' }, ctx),
-    ).rejects.toThrow()
+    await expect(tool.call({ op: 'commit', message: 'msg', ref: 'HEAD~1' }, ctx)).rejects.toThrow()
     // `op: 'status'` accepts no payload.
-    await expect(
-      tool.call({ op: 'status', ref: 'HEAD' }, ctx),
-    ).rejects.toThrow()
+    await expect(tool.call({ op: 'status', ref: 'HEAD' }, ctx)).rejects.toThrow()
   })
 
   it('exposes `approval-required` risk classification', () => {

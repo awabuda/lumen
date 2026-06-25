@@ -74,7 +74,12 @@ const GitOpDiff = z
     op: z.literal('diff'),
     ref: z.string().min(1).max(256).optional(),
     ref2: z.string().min(1).max(256).optional(),
-    maxBytes: z.number().int().min(1024).max(5 * 1024 * 1024).optional(),
+    maxBytes: z
+      .number()
+      .int()
+      .min(1024)
+      .max(5 * 1024 * 1024)
+      .optional(),
   })
   .strict()
 const GitOpLog = z
@@ -82,7 +87,12 @@ const GitOpLog = z
     op: z.literal('log'),
     ref: z.string().min(1).max(256).optional(),
     maxCount: z.number().int().min(1).max(500).optional(),
-    maxBytes: z.number().int().min(1024).max(5 * 1024 * 1024).optional(),
+    maxBytes: z
+      .number()
+      .int()
+      .min(1024)
+      .max(5 * 1024 * 1024)
+      .optional(),
   })
   .strict()
 const GitOpBranch = z
