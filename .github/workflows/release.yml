@@ -36,6 +36,15 @@
 #   the right version line (`--snapshot prerelease`
 #   support is in the script -- uncomment the env line
 #   to cut a prerelease).
+#
+#   The `push: tags: ['v*']` trigger is an alternate path
+#   that does not need a GitHub PAT to fire -- pushing a
+#   `vX.Y.Z` tag from a clone with a working SSH key is
+#   enough. It is intended for the same one-shot releases
+#   that workflow_dispatch supports; the workflow itself
+#   is identical on both paths. The release engineer's
+#   commit-msg is now `git tag v0.11.0 && git push --tags`
+#   in place of "go to the Actions tab and click Run".
 name: release
 
 on:
@@ -45,6 +54,9 @@ on:
         description: 'Cut a snapshot prerelease (does not publish)'
         required: false
         default: 'false'
+  push:
+    tags:
+      - 'v*.*.*'
 
 jobs:
   version:
