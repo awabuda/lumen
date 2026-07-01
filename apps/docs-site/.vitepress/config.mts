@@ -69,6 +69,7 @@ export default defineConfig({
       { text: 'Developer', link: '/developer' },
       { text: 'Security', link: '/security' },
       { text: 'L1 Audit', link: '/l1-audit' },
+      { text: 'P19 Design', link: '/p19-design' },
     ],
     sidebar: [
       {
@@ -80,6 +81,7 @@ export default defineConfig({
         items: [
           { text: 'Architecture', link: '/architecture' },
           { text: 'Security', link: '/security' },
+          { text: 'Pitfalls', link: '/pitfalls' },
         ],
       },
       {
@@ -88,6 +90,10 @@ export default defineConfig({
           { text: 'Developer guide', link: '/developer' },
           { text: 'L1 audit checklist', link: '/l1-audit' },
         ],
+      },
+      {
+        text: 'Roadmap',
+        items: [{ text: 'P19+ design', link: '/p19-design' }],
       },
     ],
     socialLinks: [{ icon: 'github', link: 'https://github.com/lumen/lumen' }],
