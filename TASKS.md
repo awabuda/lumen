@@ -700,3 +700,152 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 - [x] **P18.2** — `feat(cli): P18.2 — tool-call latency benchmark` *(commit `46d0af8`)* — 1 new file, +133 lines. `apps/cli/test/perf/03-tool-call-latency.test.ts` measures the wall-clock cost of a single `agent.run` call when a tool is in the registry. Tracks the ~30-100ms delta over the chat-only baseline (a second provider round-trip plus a tool dispatch). Same `LUMEN_BENCH=1` opt-in. Tool path is forced via system prompt ("You MUST call the add tool with a=2, b=3, then reply with the result.") so the model can't satisfy the request in prose. Local models that ignore the instruction are soft-flagged in the bench output; the iterations count is still recorded for the regression table. Per the P17.3 README deferral note, this scenario is now done; the "tool-calling throughput" entry in the README can be re-scoped (or removed) on the next perf README pass.
 - [x] **P18.3** — `feat(cli): P18.3 — concurrent throughput baseline` *(commit `22e407e`)* — 1 new file, +141 lines. `apps/cli/test/perf/04-concurrent-throughput.test.ts` measures throughput (ops/sec) at `LUMEN_BENCH_CONCURRENCY` parallelism (default 5, max 20) plus tail latency (slowest run in each batch). Gated behind a new `LUMEN_BENCH_CONCURRENT=1` switch so the other benchmarks are not affected. Baseline scope only -- no coordinated cancellation, per-tenant rate-limit accounting, or fairness across providers. A future refactor that accidentally serialises the parallel dispatch will show up as a tail-latency blow-up (max < 60s is the hard assertion), which is the only invariant worth enforcing at the harness level.
 - [x] **P18.4** — First real release. `git tag v0.11.0 && git push --tags` triggered the release workflow on push (the workflow now also accepts `push: tags: ['v*.*.*']` in addition to `workflow_dispatch`, which keeps the manual gate without needing a GitHub PAT to fire it). Local changeset version bumped `@lumen/cli` 0.10.0 → 0.11.0 in commit `bb8ec21`, CHANGELOG.md regenerated under `apps/cli/`. The dev-push blocker from prior P-passes is gone: SSH key was already in the agent (`~/.ssh/agent/s.6dZRgWsWD2...`), `ssh -T git@github.com` returns `Hi awabuda!`, and `git remote set-url origin git@github.com:awabuda/lumen.git` switched the remote from HTTPS (no credential helper) to SSH. **Caveats:** (1) The release workflow is not yet *verified* end-to-end in this session -- `api.github.com` and `github.com` HTTPS return bad-request / timeout in this sandbox (only SSH 22 + web-via-curl-with-HTTP/1.1 work), so I cannot poll the Actions page directly. Trust the tag push and the workflow file. (2) `pnpm changeset publish` inside the workflow is conditional on `NODE_AUTH_TOKEN` being set as a repository secret; if it is not yet configured the publish step skips and only the version commit / build artefact lands. Once `NODE_AUTH_TOKEN` is added, re-tagging (delete + recreate `v0.11.0`) re-fires the publish.
+
+---
+
+## P19 — Middleware 范式 + 多 Agent 编排 + 反思 + 安全 (target: P19 之后)
+
+> **P19+ 是 lumen 第二次大重构的入口。** P0–P18 解决了"agent 框架能跑起来并能 ship"；P19+ 解决"agent 框架与 LangChain 1.0 / LangGraph 1.0 / Claude Code / OpenClaw / Hermes 同代对齐，并且补齐在 2026-06-25 六问审计中暴露的全部 gap"。完整设计见 `docs/P19-DESIGN.md`（P-ticket 的方案 + 跨框架对比 + 关键决策 + 任务依赖图都在那一份）。本节是 commit-by-commit 的 task list。
+>
+> **核心范式（2026-06-25 三轮收敛）：**
+> 1. 任何"对 Agent loop 的扩展" = **middleware**（吸收 LangChain 1.0 GA）
+> 2. 任何"对 Agent state 的语义" = **state schema**（Zod discriminated）
+> 3. 任何"对 Agent 入口的封装" = **createAgent factory**
+> 4. 任何"抽象类只有 1 个实现" = **删除抽象，复用 Agent**（删 `BaseSubAgent`/`SingleRunSubAgent`）
+> 5. **tier 隔离保留**：core 不 import memory（DI 注入而非 import）
+> 6. **helper 优于抽象类**：`BasePlanner`/`BaseReflector` 抽象保留为 interface + helper function（function form，可独立 unit-test）
+
+### P19.0 — Middleware 抽象层（前置依赖，所有 P19.x 共享）
+
+- [ ] **P19.0.1** — `packages/core/src/agent/middleware.ts`：定义 `AgentMiddleware` 接口（`name`, `beforeModel?`, `afterModel?`, `wrapModelCall?`, `wrapToolCall?`）+ `MiddlewareContext` + `MiddlewareNext` 范型
+- [ ] **P19.0.2** — Agent.run loop 改写为显式 middleware 管道（保持 step hook 顺序，但 step 间插入 middleware 调用点）
+- [ ] **P19.0.3** — `createAgent({ model, tools, middleware: [...] })` factory 导出（apps/cli composition 改用它）
+- [ ] **P19.0.4** — middleware 单元测试：`packages/core/test/middleware.test.ts`（composition order / error short-circuit / async parity）+ Agent.run 仍兼容旧 `hooks` 字段
+- [ ] **P19.0.5** — `docs/P19-DESIGN.md` §1 middleware 范式 spec（已写好，P19.0 commit 一并 import）
+
+### P19.1 — Plan/Act mode wire-up（吸收 deepagents / Claude Code Plan mode）
+
+- [ ] **P19.1.1** — `AgentConfig` 加 `mode: 'plan' | 'act' | 'auto'` + `planner?: BasePlanner`（DI 注入）
+- [ ] **P19.1.2** — `PlanStore` 从 @lumen/memory 重新 export（core → memory 通过 DI 而非 import），plan 内容存为 `readonly plan: { id, steps: PlanStep[], approvedBy?: string }`
+- [ ] **P19.1.3** — Agent.run loop 在 `mode: 'plan'` 下首轮只生成 plan（含 `<plan id="x" />` 标记）并停止；`mode: 'act'` 直接执行；`mode: 'auto'` 第一轮 plan 第二轮 act
+- [ ] **P19.1.4** — `BasePlanner` 抽象保留为 interface + `LLMPlanner` / `RuleBasedPlanner` 改写为 helper function（function form，unit-testable）
+- [ ] **P19.1.5** — 3 个 e2e：plan-only 输出有 plan 标记 / plan-approve-act 走通完整链路 / auto mode 第一轮 plan 第二轮 act
+
+### P19.2 — Reflection 三档（inline / step-level / run-end）
+
+- [ ] **P19.2.1** — `AgentConfig` 加 `reflection?: { inline?: boolean, stepInterval?: number, runEnd?: 'rule' | 'llm' | 'off' }`，默认 `{ inline: true, stepInterval: 5, runEnd: 'rule' }`
+- [ ] **P19.2.2** — inline reflection：每轮在最后一条 assistant 消息后追加 `[confidence: 0.X]` token（1 token，0 cost）
+- [ ] **P19.2.3** — step-level reflection：每 5 步 1 次 LLM call（用 haiku / 本地 fallback）总结历史 + confidence score
+- [ ] **P19.2.4** — run-end reflection：run 结束 1 次 LLM call（haiku）总结完整 run，写入 BaseMemoryStore（带 trust score 起点 0.5）
+- [ ] **P19.2.5** — `BaseReflector` 抽象保留 interface，`LLMReflector` / `RuleBasedReflector` 改写为 helper（function form）
+- [ ] **P19.2.6** — 4 个 e2e：inline-only / step-only / run-end-only / 三档同时开
+
+### P19.3 — Sequential + Parallel Sub-agent
+
+- [ ] **P19.3.1** — **删除** `BaseSubAgent` 抽象和 `SingleRunSubAgent`（过度设计的 wrapper class，违反 P19 范式 #4）
+- [ ] **P19.3.2** — 重新设计为 `SubAgentSpec` interface（`{ name, description, systemPrompt, tools, model? }`）—— deepagents 风格
+- [ ] **P19.3.3** — `SubAgentMiddleware`（实现 `AgentMiddleware`）持有一个 SubAgentSpec 列表 + `task` 工具（input: `{ subagent, prompt }`），让主 agent 召唤 sub-agent
+- [ ] **P19.3.4** — `SequentialSubAgent extends BaseAgent`（**独立实现，不合并 middleware**，每个 ≈ 150-200 行）：串行执行 N 个 sub-agent
+- [ ] **P19.3.5** — `ParallelSubAgent extends BaseAgent`：`Promise.all` 并行执行 N 个 sub-agent，结果合并（hard assert `max < 60s` 沿用 P18.3）
+- [ ] **P19.3.6** — 3 个 e2e：sequential 串行 / parallel 并行 / sequential-then-parallel 嵌套
+
+### P19.4 — Handoff + Supervisor Sub-agent
+
+- [ ] **P19.4.1** — `HandoffSubAgent` 协议：sub-agent 通过 `{ handoff: { to: <name>, reason: string } }` tool call 把 control 交还给主 agent（OpenAI Swarm 风格）
+- [ ] **P19.4.2** — `SupervisorSubAgent`：supervisor 在每个 sub-agent step 后评估 `continue | redo | abort`，用 1 个 LLM call（haiku）决策
+- [ ] **P19.4.3** — Handoff 中间件：当 model 输出 `handoff` tool call 时停止当前 sub-agent，把 handoff 事件 push 到主 agent 上下文
+- [ ] **P19.4.4** — 3 个 e2e：handoff 单次 / handoff 链式 / supervisor 评估 abort 路径
+
+### P19.5 — MetaReflector + cross-run trust 调整
+
+- [ ] **P19.5.1** — `BaseMetaReflector` 抽象（interface）+ `ClusteringMetaReflector` 实现：聚合 N 个 run 的 run-end reflection，按相似度聚类
+- [ ] **P19.5.2** — `AgentConfig.metaReflection?: { interval?: number, strategy: 'clustering' }`，默认 `{ interval: 10, strategy: 'clustering' }`（每 10 run 触发）
+- [ ] **P19.5.3** — cross-run trust 调整：把 cross-run reflection 写回 BaseMemoryStore 的 fact，**trust delta**（不复写原 fact，只调整 trust score）—— 借鉴 fact_store 模式
+- [ ] **P19.5.4** — 2 个 e2e：10-run 触发 / trust 调整可观察
+
+### P19.6 — CLI surface: `lumen plan` / `lumen approve` / `lumen reflect`
+
+- [ ] **P19.6.1** — `apps/cli/src/commands/plan.ts` — 列出当前 active plan（来自 PlanStore）+ approve / reject 子命令
+- [ ] **P19.6.2** — `apps/cli/src/commands/reflect.ts` — 手动触发 run-end reflection（dev-only / debug 用）
+- [ ] **P19.6.3** — 4 个 integration test：plan list / plan approve-and-continue / reflect run / reflect meta
+
+### P19.7 — Bench: orchestration + reflection overhead
+
+- [ ] **P19.7.1** — `apps/cli/test/perf/05-sequential-subagent.test.ts` — N=3 sequential sub-agent wall-clock
+- [ ] **P19.7.2** — `apps/cli/test/perf/06-parallel-subagent.test.ts` — N=3 parallel sub-agent wall-clock
+- [ ] **P19.7.3** — `apps/cli/test/perf/07-reflection-overhead.test.ts` — inline vs step-level vs run-end 三档 reflection 的 token 成本对比
+- [ ] **P19.7.4** — `apps/cli/test/perf/08-meta-reflection.test.ts` — 10-run meta reflection 触发延迟
+- [ ] **P19.7.5** — LangSmith-style quality 第二 axis：在 bench 报告里加 `quality: { planCoverage, reflectionConfidence, subagentCoordination }`（用 rule-based 评分，0-1）
+
+### P19 关键决策（2026-06-25 三轮收敛，详细论证见 `docs/P19-DESIGN.md`）
+
+- **删 `BaseSubAgent`/`SingleRunSubAgent`**：当前实现是 wrapper class（一个实现继承抽象），违反 P19 范式 #4。换成 `SubAgentSpec` + `SubAgentMiddleware`
+- **middleware > config**（吸收 LangChain 1.0 GA）：避免在 AgentConfig 上堆 boolean flags
+- **helper function > abstract class**（保留可测性）：`BasePlanner`/`BaseReflector` 抽象保留为 interface，但具体实现改写为 function（function 形式可独立 unit-test，不需要 mock 抽象方法）
+- **tier 隔离通过 DI 而非 import**：core → memory 不 import，planner/reflector 通过 `AgentConfig.planner?` 注入
+- **sequential/parallel/handoff/supervisor 4 模式 = 独立实现 extends BaseAgent**（不合并 middleware）：每个 ≈ 150-200 行，跟 deepagents "sub-agent 是独立 agent" 哲学对齐
+- **plan/act/auto 三 mode**：`mode: 'plan'` 首轮只输出 plan 含 `<plan id="x" />` 标记；`mode: 'act'` 直接执行；`mode: 'auto'` 第一轮 plan 第二轮 act
+- **reflection 三档**：inline = 1 token confidence（0 cost）；step-level = 每 5 步 1 LLM call（haiku）；run-end = 每 run 1 LLM call（haiku）
+- **MetaReflector 触发频次 = 10 run**（默认）：cross-run trust delta 写回 SqliteStore fact（不删 fact，只调 trust score）
+- **bench 借鉴 LangSmith**：每 scenario 加 `quality` 第二 axis（rule-based 评分）
+
+### P19 上下游对比（完整 8 维度代码层对比见 `docs/P19-DESIGN.md` §3）
+
+| 维度 | LangChain 1.0 (2025-10-17 GA) | LangGraph 1.0 | OpenClaw | Claude Code | Hermes Agent | **Lumen P19+ 方案** |
+|---|---|---|---|---|---|---|
+| Architecture | LCEL `\|` 组合 | StateGraph declarative nodes+edges | daily→long-term 蒸馏 | Task subagent + Plan mode | session_search FTS5 | middleware + createAgent factory |
+| Type | Zod（TS port feature lag） | Pydantic（Python-first） | 内置 | 内置 | Zod | Zod full surface |
+| State | AgentState typed | typed channels+Command | SOUL.md | task list | fact_store holographic | state schema + middleware context |
+| Tools | Tool runtime + middleware | tool_node + Command | 调 LLM | WebFetch + Task | tool calling | Zod discriminated + middleware |
+| Memory | store API + checkpointers | checkpointer (production) | heartbeat distillation | checkpoints | fact_store trust score | SqliteStore + MetaReflector trust delta |
+| Concurrency | sync/async parity | prebuilt+Command | group-chat 礼仪 | Task 并行 | delegate_task | TS setInterval+AbortController + Promise.all |
+| Testing | pytest+LangSmith trace | pytest+checkpointer replay | 无 | 无 | session_search | vitest+E2E+perf（轻量版 LangSmith） |
+| Documentation | tutorial+cookbook+API | doc+cookbook | blog | 内部 | 散落 | VitePress（深但缺 tutorial 入口，P19 之后补） |
+
+### P19 Lumen 差异化（vs 4 框架）
+
+1. **TypeScript-only + tier 隔离 + 强 Zod 校验**（Type 维度 Lumen 胜 LangChain）
+2. **5 provider + Pool + failover + circuit breaker**（Resilience 维度 Lumen 已有）
+3. **Middleware 范式 + tier 隔离**（Architecture 维度对齐 LangChain 1.0 GA，但保留独立）
+4. **ToolRisk 三档 + Zod discriminated union**（Tools 维度）
+5. **deepagents 风格 + Lumen ProviderPool**：sub-agent 间可路由不同 model（独立于 LangChain）
+6. **E2E + perf bench harness**（轻量版 LangSmith，缺 dataset+scoring，P19.7 补）
+7. **不开 SaaS**（LangSmith 是商业产品，Lumen self-host）
+8. **强 typed error taxonomy**（P9 typed errors + P19 reflection error context）
+9. **PlanStore + 三档 reflection + MetaReflector**（OpenClaw 缺、Lumen 缺的真正差异化）
+10. **Sequential/Parallel/Handoff/Supervisor 4 种 sub-agent 编排**（Claude Code Task 工具的内部 + OpenAI Swarm 模式）
+
+### P19 总预算
+
+- 7 P-ticket × 平均 3-4 commit = **~24 commit** / 19 e2e + integration test
+- 预估代码行：+3000~+4000 行（middleware + 4 sub-agent + 3 reflection + CLI + bench）
+- 预估测试行：+2000~+3000 行
+- 预估 docs 行：+800 行（`docs/P19-DESIGN.md` + VitePress 同步）
+
+### Verification
+
+每个 P-ticket 完成后跑：
+```bash
+pnpm -r typecheck
+pnpm -r test
+pnpm exec biome check .
+cd packages/memory && pnpm rebuild better-sqlite3   # 若改了 memory 抽象
+```
+
+### Commits
+（待 P19.0 开 commit 后填）
+
+### Push status
+待 P19 完成 + 解决 sandbox 网络 + 配置 NODE_AUTH_TOKEN（npm publish）+ GH actions 验证后 push。
+
+### Backlog (P20+ candidates)
+- [ ] **P20.1** — HITL（Human-in-the-Loop）middleware（interrupt_on declarative，吸收 deepagents / LangChain 1.0）
+- [ ] **P20.2** — Heartbeat / long-running task supervisor（TS setInterval + AbortController，每 30s 探活，failed → 恢复）
+- [ ] **P20.3** — Context 压缩（summarization middleware，借鉴 deepagents 默认 stack 的 Summarization）
+- [ ] **P20.4** — Checkpoint / Resume（LangGraph-style checkpointer，state machine + SqliteStore 持久化）
+- [ ] **P20.5** — 失败降级链（fallback chain：primary → secondary → tertiary provider，加自动 checkpoint）
+- [ ] **P20.6** — Skill 渐进式加载（trigger-based loading，吸收 LangChain 1.0 deepagents Filesystem middleware 模式）
+- [ ] **P20.7** — Agent team（multi-agent workspace，借鉴 OpenClaw group-chat 礼仪 + Claude Code Task delegation）
+- [ ] **P20.8** — Observability 深度（trace ID + span，吸收 LangSmith 概念但不引 SaaS）
+- [ ] **P20.9** — Tutorial 入口（docs-site 加 getting-started.md 教程，弥补 docs 维度 Lumen 缺口）
+- [ ] **P20.10** — Dataset + scoring（bench harness 升级，吸收 LangSmith dataset 概念）
