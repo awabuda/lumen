@@ -80,12 +80,7 @@ import type { ZodType } from 'zod'
 import { z } from 'zod'
 
 import { AgentError } from '../errors/index.js'
-import type {
-  AssistantMessage,
-  Message,
-  ToolCall,
-  ToolResult,
-} from '../message/index.js'
+import type { AssistantMessage, Message, ToolCall, ToolResult } from '../message/index.js'
 
 /**
  * Per-invocation context for a middleware hook. Carries session metadata
@@ -301,10 +296,7 @@ export const parseMiddleware = <TState = unknown>(
       )
     }
     if (seen.has(raw.name)) {
-      throw new MiddlewareError(
-        `duplicate middleware name "${raw.name}" at index ${i}`,
-        raw.name,
-      )
+      throw new MiddlewareError(`duplicate middleware name "${raw.name}" at index ${i}`, raw.name)
     }
     seen.add(raw.name)
     // `stateSchema` is optional. Default to `z.unknown()` so the
