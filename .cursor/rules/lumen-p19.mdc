@@ -1,0 +1,142 @@
+---
+description: "Lumen P19+ middleware 范式 + 多 agent 编排 + 反思 + 安全 — hard rules. Auto-load whenever working in lumen repo (~/workspace/lumen). Applies to all P19+ tickets and any new package, provider, or pipeline feature."
+globs: ["**/*.ts", "**/*.tsx", "**/packages/*/src/**/*.ts", "**/apps/*/src/**/*.ts"]
+alwaysApply: true
+---
+
+# Lumen P19+ Hard Rules (Cursor auto-loaded)
+
+> **This rule file is auto-loaded by Cursor whenever you work in the
+> lumen repo.** It distills `~/workspace/lumen/CLAUDE.md` rules
+> #10-#19 (P19+ rules) into a Cursor-friendly summary. For the
+> full rationale and code examples, read `docs/PITFALLS.md` and
+> `docs/P19-DESIGN.md`.
+
+## When you start any new feature in lumen
+
+1. **Re-read** `docs/ARCHITECTURE.md` (tier diagram).
+2. **Re-read** `docs/PITFALLS.md` §"Pre-flight" (5-step probe).
+3. **Verify in tree first** — grep the package for the keyword
+   before proposing "build X":
+   ```bash
+   grep -rn '<keyword>' packages/<pkg>/src/
+   grep -rn '<keyword>' packages/<pkg>/test/
+   grep -rn '<keyword>' apps/
+   ```
+4. **Compare 4 upstream frameworks before writing a new abstraction.**
+   Fetch real docs (no memory citations):
+   ```bash
+   python3 ~/.hermes/skills/lumen-agent-framework/scripts/fetch-docs.py \
+     https://blog.langchain.com/langchain-v1-0/ \
+     https://langchain-ai.github.io/langgraph/concepts/ \
+     https://openclaw.ai/blog/ \
+     https://docs.claude.com/en/docs/claude-code/overview
+   ```
+   The user explicitly pushes back on "your solution is the best?"
+   — without fetch evidence, do not claim a design is optimal.
+
+## Hard rules (P19+)
+
+5. **任何"对 Agent loop 的扩展" = middleware.** 禁止在
+   `AgentConfig` 上堆 boolean flags（`enablePlan` /
+   `enableReflection` / `enableSkill`）。改 loop → 写
+   `AgentMiddleware`（interface + function，see
+   `docs/P19-DESIGN.md` §1）。
+6. **任何"对 Agent state 的语义" = Zod state schema.** 中间件
+   state 必须是 Zod discriminated union，append-only。
+7. **任何"对 Agent 入口的封装" = `createAgent` factory.** 不在
+   `apps/cli/src/composition.ts` 手写 `new Agent({...})` 加一堆
+   middleware。
+8. **任何"抽象类只有 1 个实现" = 删除抽象，复用 Agent.** 例：
+   `BaseSubAgent` / `SingleRunSubAgent` 在 P19.3 删除。继承链
+   至少 ≥ 2 个非 wrapper 实现。
+9. **helper function > abstract class.** `BasePlanner` /
+   `BaseReflector` 抽象保留为 **interface**，但具体实现
+   （`LLMPlanner` / `RuleBasedReflector`）改写为 **function**。
+10. **ToolRisk 三档必须 enforce.** `Agent.dispatchToolCall`
+    必须根据 `risk: 'safe' | 'approval-required' | 'dangerous'`
+    决定 throw / ask user / 直接执行。`write_file` / `terminal`
+    必须有 workspaceRoot 边界检查（`startsWith(workspaceRoot +
+    path.sep)`，trailing `path.sep` 防 prefix bypass）。
+11. **Sandbox cross-tool.** DefaultSandbox 路径检查必须覆盖
+    fs 工具（write_file / patch / read_file），不只是 terminal。
+12. **Reflection / Plan wire-up 才有价值.** P9.5 / P12.5 已
+    export 的 `BasePlanner` / `LLMPlanner` / `PlanStore` /
+    `RuleBasedReflector` / `LLMReflector` 都是 Agent.run 不调
+    的孤儿。P19.1 / P19.2 commit 必须 wire up middleware，并
+    至少 3 个 e2e。
+
+## Code-pattern rules (lumen P0–P18 evolved)
+
+13. **Zod discriminatedUnion + `.strict()`.** Tool input schema
+    用 `z.discriminatedUnion('kind', [...])` + `.strict()`。
+14. **`BaseTool.call` 边界 safeParse contract.** Tool 内部
+    `call(input, ctx)` 第一行必须 `safeParse`，失败 throw
+    `ValidationError({ toolName, issues })`。Tool 框架不再做
+    safeParse 兜底。
+15. **`process.env.X = undefined` 不要.** 用 `delete process.env.X`。
+16. **`enum` vs `as const` object.** 避免 `enum`（TS anti-pattern），
+    用 `as const` object。
+17. **No try/catch that swallows.** Re-throw or convert to typed
+    error (P9 typed error taxonomy: `ConfigError` /
+    `ValidationError` / `ProviderError` / `ToolError` / `AbortError`).
+18. **No `any` in committed code.** `unknown` is fine; narrow it.
+19. **Tests required for every new function.** ≥ 80% line coverage
+    on the file you changed.
+
+## Tooling gotchas (lumen-side)
+
+- **better-sqlite3 ABI mismatch**: rebuild from repo root AND
+  `cd packages/memory && pnpm rebuild better-sqlite3`. Wait for
+  `gyp info ok`. Triggered by biome `--write` on package.json
+  followed by `pnpm install`.
+- **`pnpm exec` 不在 root 跑** for `vitest` / `tsx` /
+  `biome`. Use `cd packages/<pkg>` or `pnpm --filter <pkg> exec`
+  or `pnpm --filter <pkg> test`. (Biome is OK at root as it is
+  a root devDep.)
+- **pnpm add 无 `--dry-run`.** Use `--lockfile-only` for safe
+  preview.
+- **macOS 沙箱无 `timeout` 命令.** Use `AbortController`, not
+  `child_process.exec('timeout 30 cmd')`.
+- **LSP cache lag.** Always verify with
+  `pnpm --filter <pkg> typecheck`, not LSP.
+
+## Tier isolation (forbidden imports)
+
+| From | May import | Forbidden |
+|---|---|---|
+| `packages/config` | (none) | All other Lumen packages |
+| `packages/core` | `packages/config` | `packages/llm`, `packages/tools`, `packages/memory`, `packages/skills`, `packages/mcp` |
+| `packages/llm` | `packages/core`, `packages/config` | `packages/tools`, `packages/memory`, `packages/skills`, `packages/mcp` |
+| `packages/tools` | `packages/core`, `packages/config` | `packages/llm`, `packages/memory`, `packages/skills`, `packages/mcp` |
+| `packages/memory` | `packages/core`, `packages/config` | `packages/llm`, `packages/tools`, `packages/skills`, `packages/mcp` |
+| `packages/skills` | `packages/core`, `packages/config` | `packages/llm`, `packages/tools`, `packages/memory`, `packages/mcp` |
+| `packages/mcp` | `packages/core`, `packages/config` | `packages/llm`, `packages/tools`, `packages/memory`, `packages/skills` |
+| `apps/cli` (Tier 3) | Everything | (none) |
+
+For P19+ sub-agent / plan / reflection, the DI pattern is:
+`AgentConfig.{planner?, reflector?, metaReflector?}` — the
+caller injects the implementation; core never imports memory.
+
+## Anti-patterns to avoid (P19 audit 6 questions)
+
+- **declared-but-not-enforced**: ToolRisk / PlanStore /
+  SkillTrigger 字段 export 但不查。
+- **wrapper-class / abstract-base-with-one-impl**:
+  `BaseSubAgent` / `SingleRunSubAgent` 是教科书反例。
+- **cross-tier import**: core import memory（Build 会 fail，
+  IDE 不报警）。
+- **boolean flag soup in AgentConfig**: 用 middleware 替代。
+
+## Where to look for existing context
+
+- `~/workspace/lumen/CLAUDE.md` — top-level rules
+- `~/workspace/lumen/docs/ARCHITECTURE.md` — tier diagram
+- `~/workspace/lumen/docs/PITFALLS.md` — session learnings
+- `~/workspace/lumen/docs/P19-DESIGN.md` — P19 design doc
+- `~/workspace/lumen/TASKS.md` — task list (P0-P19)
+- `~/workspace/lumen/CHANGELOG.md` — release history
+- `~/workspace/lumen/docs/SECURITY.md` — security findings
+
+Lumen repo **does not depend on hermes / fact_store to start.**
+The above docs are lumen-side assets, self-maintained.
