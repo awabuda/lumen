@@ -2,13 +2,16 @@
 
 import { describe, expect, it } from 'vitest'
 import {
-  BasePlanner,
+  type BasePlanner,
   LLMPlanner,
   ModeSchema,
   PlanSchema,
   PlanStepSchema,
   PlanStore,
   StaticPlanner,
+  createLLMPlanner,
+  createStaticPlanner,
+  revisePlan,
 } from '../src/plan/index.js'
 
 describe('PlanStepSchema', () => {
@@ -47,9 +50,10 @@ describe('PlanSchema', () => {
 })
 
 describe('ModeSchema', () => {
-  it('accepts plan and act', () => {
+  it('accepts plan, act, and auto', () => {
     expect(ModeSchema.safeParse('plan').success).toBe(true)
     expect(ModeSchema.safeParse('act').success).toBe(true)
+    expect(ModeSchema.safeParse('auto').success).toBe(true)
   })
 
   it('rejects other values', () => {
@@ -65,13 +69,13 @@ describe('StaticPlanner', () => {
       steps: [{ id: 's1', description: 'do x' }],
       createdAt: 0,
     }
-    const planner = new StaticPlanner({ plan })
+    const planner = createStaticPlanner({ plan })
     const result = await planner.plan('whatever')
     expect(result).toEqual(plan)
   })
 
   it('exposes id "static"', () => {
-    const planner = new StaticPlanner({
+    const planner = createStaticPlanner({
       plan: { id: 'p', goal: 'g', steps: [{ id: 's', description: 'd' }], createdAt: 0 },
     })
     expect(planner.id).toBe('static')
@@ -86,8 +90,8 @@ describe('BasePlanner.revise (default impl)', () => {
       steps: [{ id: 's', description: 'd' }],
       createdAt: 0,
     }
-    const planner = new StaticPlanner({ plan })
-    const revised = await planner.revise(plan, 'feedback')
+    const planner = createStaticPlanner({ plan })
+    const revised = await revisePlan(planner, plan, 'feedback')
     expect(revised).toBe(plan)
   })
 })
@@ -106,7 +110,7 @@ describe('LLMPlanner', () => {
         { id: 'step-2', description: 'transform', dependsOn: ['step-1'] },
       ],
     })
-    const planner = new LLMPlanner({ provider: fakeProvider(llmJson) as never })
+    const planner = createLLMPlanner({ provider: fakeProvider(llmJson) as never })
     const plan = await planner.plan('do something')
     expect(plan.steps).toHaveLength(2)
     expect(plan.steps[0]?.tools).toEqual(['read_file'])
@@ -114,13 +118,13 @@ describe('LLMPlanner', () => {
 
   it('strips prose around the JSON object', async () => {
     const llmText = 'Here is the plan:\n{"steps":[{"id":"s1","description":"x"}]}\nDone!'
-    const planner = new LLMPlanner({ provider: fakeProvider(llmText) as never })
+    const planner = createLLMPlanner({ provider: fakeProvider(llmText) as never })
     const plan = await planner.plan('goal')
     expect(plan.steps).toHaveLength(1)
   })
 
   it('throws on missing JSON (Rule 7)', async () => {
-    const planner = new LLMPlanner({ provider: fakeProvider('no json here') as never })
+    const planner = createLLMPlanner({ provider: fakeProvider('no json here') as never })
     await expect(planner.plan('goal')).rejects.toThrow()
   })
 
@@ -128,21 +132,21 @@ describe('LLMPlanner', () => {
     const llmJson = JSON.stringify({
       steps: [{ id: 'new-step', description: 'updated' }],
     })
-    const planner = new LLMPlanner({ provider: fakeProvider(llmJson) as never })
+    const planner = createLLMPlanner({ provider: fakeProvider(llmJson) as never })
     const original = {
       id: 'p1',
       goal: 'g',
       steps: [{ id: 'old', description: 'o' }],
       createdAt: 1000,
     }
-    const revised = await planner.revise(original, 'add detail')
+    const revised = await revisePlan(planner, original, 'add detail')
     expect(revised.id).toBe('p1')
     expect(revised.steps).toHaveLength(1)
     expect(revised.createdAt).toBe(1000)
   })
 
   it('exposes id "llm"', () => {
-    const planner = new LLMPlanner({ provider: fakeProvider('{}') as never })
+    const planner = createLLMPlanner({ provider: fakeProvider('{}') as never })
     expect(planner.id).toBe('llm')
   })
 })
@@ -198,9 +202,21 @@ describe('PlanStore', () => {
   })
 })
 
-describe('BasePlanner is abstract', () => {
-  it('cannot be instantiated directly', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: abstract class cannot be instantiated directly
-    ;new (BasePlanner as any)()
+describe('BasePlanner interface', () => {
+  it('is satisfied by plain object planner implementations', async () => {
+    const planner: BasePlanner = {
+      id: 'object',
+      async plan(goal) {
+        return {
+          id: 'p-object',
+          goal,
+          steps: [{ id: 's1', description: 'plain object implementation' }],
+          createdAt: 0,
+        }
+      },
+    }
+
+    const plan = await planner.plan('goal')
+    expect(plan.goal).toBe('goal')
   })
 })

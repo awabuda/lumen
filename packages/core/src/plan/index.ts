@@ -1,23 +1,18 @@
 /**
- * Plan/act mode — separates reasoning from execution.
+ * Plan/act mode — separates planning from execution.
  *
- * In **plan mode**, the agent reasons about a task and
- * produces a structured plan but does not invoke tools.
- * The user reviews the plan and approves, modifies, or
- * rejects it.
+ * P19.1 refactor note:
+ *   The original P9.5/P12.5 implementation exported an abstract
+ *   `BasePlanner` class plus `StaticPlanner` / `LLMPlanner` classes.
+ *   P19+ rule 15 replaces that pattern with an interface + helper
+ *   functions: helper function > abstract class, and abstract classes
+ *   need at least two non-wrapper implementations to justify the
+ *   inheritance cost. Planner implementations are plain objects now.
  *
- * In **act mode**, the agent executes the approved plan,
- * optionally with tool calls.
- *
- * This module provides the data structures and the
- * {@link BasePlanner} contract. The agent loop reads the
- * current mode from config and dispatches accordingly.
- *
- * Why a separate module:
- *   Plan/act is orthogonal to the agent loop. It can be
- *   implemented as a hook, a sub-mode of Agent.run, or a
- *   separate Agent subclass (via composition, not
- *   inheritance — see Agent JSDoc).
+ * Wire-up note:
+ *   This module owns data structures and planner helpers only.
+ *   Agent.run integration happens through `PlanMiddleware`
+ *   (P19.1.2/P19.1.3), not by adding boolean flags to AgentConfig.
  */
 
 import { z } from 'zod'
@@ -54,78 +49,91 @@ export interface Plan {
 }
 
 /** Zod schema for {@link PlanStep}. */
-export const PlanStepSchema = z.object({
-  id: z.string().min(1),
-  description: z.string().min(1),
-  tools: z.array(z.string()).optional(),
-  dependsOn: z.array(z.string()).optional(),
-})
+export const PlanStepSchema = z
+  .object({
+    id: z.string().min(1),
+    description: z.string().min(1),
+    tools: z.array(z.string()).optional(),
+    dependsOn: z.array(z.string()).optional(),
+  })
+  .strict()
 
 /** Zod schema for {@link Plan}. */
-export const PlanSchema = z.object({
-  id: z.string().min(1),
-  goal: z.string().min(1),
-  steps: z.array(PlanStepSchema).min(1),
-  createdAt: z.number().int().nonnegative(),
-  approvedAt: z.number().int().nonnegative().optional(),
-  rejectedAt: z.number().int().nonnegative().optional(),
-  notes: z.string().optional(),
-})
+export const PlanSchema = z
+  .object({
+    id: z.string().min(1),
+    goal: z.string().min(1),
+    steps: z.array(PlanStepSchema).min(1),
+    createdAt: z.number().int().nonnegative(),
+    approvedAt: z.number().int().nonnegative().optional(),
+    rejectedAt: z.number().int().nonnegative().optional(),
+    notes: z.string().optional(),
+  })
+  .strict()
 
 /** The agent's current mode. */
-export type Mode = 'plan' | 'act'
+export type Mode = 'plan' | 'act' | 'auto'
 
 /** Zod schema for {@link Mode}. */
-export const ModeSchema = z.enum(['plan', 'act'])
+export const ModeSchema = z.enum(['plan', 'act', 'auto'])
 
 /** The contract every planner implementation fulfills. */
-export abstract class BasePlanner {
+export interface BasePlanner {
   /** Stable identifier. */
-  public abstract readonly id: string
+  readonly id: string
 
   /**
-   * Given a goal, produce a structured plan. Does NOT
-   * invoke tools. Throws on failure (Rule 7).
+   * Given a goal, produce a structured plan. Does NOT invoke tools.
+   * Throws on failure (Rule 7).
    */
-  public abstract plan(goal: string): Promise<Plan>
+  plan(goal: string): Promise<Plan>
 
   /**
-   * Optionally revise an existing plan based on user
-   * feedback. Default impl returns the original plan
-   * unchanged.
+   * Optionally revise an existing plan based on user feedback.
+   * Implementations may omit this; callers use {@link revisePlan}
+   * for the default unchanged-plan behavior.
    */
-  public async revise(plan: Plan, _feedback: string): Promise<Plan> {
-    return plan
-  }
+  revise?: (plan: Plan, feedback: string) => Promise<Plan>
+}
+
+/** Default planner revision behavior: return the plan unchanged. */
+export const revisePlan = async (
+  planner: BasePlanner,
+  plan: Plan,
+  feedback: string,
+): Promise<Plan> => {
+  return planner.revise ? planner.revise(plan, feedback) : plan
 }
 
 // ---------------------------------------------------------------------------
-// StaticPlanner — for testing and scripted plans
+// Static planner helper — for testing and scripted plans
 // ---------------------------------------------------------------------------
 
-/** Options for {@link StaticPlanner}. */
+/** Options for {@link createStaticPlanner}. */
 export interface StaticPlannerOptions {
   /** The plan to return. */
   readonly plan: Plan
 }
 
 /** Returns a fixed plan. Useful for testing. */
-export class StaticPlanner extends BasePlanner {
-  public readonly id = 'static'
-  private readonly _plan: Plan
-
-  public constructor(options: StaticPlannerOptions) {
-    super()
-    this._plan = options.plan
-  }
-
-  public override async plan(_goal: string): Promise<Plan> {
-    return this._plan
+export const createStaticPlanner = (options: StaticPlannerOptions): BasePlanner => {
+  const plan = PlanSchema.parse(options.plan)
+  return {
+    id: 'static',
+    async plan(_goal: string): Promise<Plan> {
+      return plan
+    },
+    async revise(current: Plan, _feedback: string): Promise<Plan> {
+      return current
+    },
   }
 }
 
+/** Backwards-compatible function alias for the old class export name. */
+export const StaticPlanner = createStaticPlanner
+
 // ---------------------------------------------------------------------------
-// LLMPlanner — asks the LLM to generate a plan
+// LLM planner helper — asks the LLM to generate a plan
 // ---------------------------------------------------------------------------
 
 /** Minimal provider shape — mirrors @lumen/core's BaseProvider. */
@@ -138,117 +146,120 @@ interface MinimalProvider {
 }
 
 /** Zod schema for {@link LLMPlannerOptions}. */
-export const LLMPlannerOptionsSchema = z.object({
-  provider: z.custom<MinimalProvider>((v) => typeof v === 'object' && v !== null),
-  model: z.string().min(1).optional(),
-})
+export const LLMPlannerOptionsSchema = z
+  .object({
+    provider: z.custom<MinimalProvider>((v) => typeof v === 'object' && v !== null),
+    model: z.string().min(1).optional(),
+  })
+  .strict()
 
-/** Options for {@link LLMPlanner}. */
+/** Options for {@link createLLMPlanner}. */
 export type LLMPlannerOptions = z.input<typeof LLMPlannerOptionsSchema>
 
 /** Default model for planning. */
 const DEFAULT_PLAN_MODEL = 'gpt-4o-mini'
 
-/** Asks the LLM to generate a structured plan as JSON. */
-export class LLMPlanner extends BasePlanner {
-  public readonly id = 'llm'
-  private readonly provider: MinimalProvider
-  private readonly model: string
-
-  public constructor(options: LLMPlannerOptions) {
-    super()
-    LLMPlannerOptionsSchema.parse(options)
-    this.provider = options.provider
-    this.model = options.model ?? DEFAULT_PLAN_MODEL
-  }
-
-  public async plan(goal: string): Promise<Plan> {
-    const prompt = [
-      'You are a planning agent. Given a goal, produce a',
-      'JSON plan with this exact shape:',
-      '{',
-      '  "steps": [',
-      '    {',
-      '      "id": "step-1",',
-      '      "description": "...",',
-      '      "tools": ["..."],  // optional',
-      '      "dependsOn": ["..."]  // optional',
-      '    }',
-      '  ]',
-      '}',
-      '',
-      `Goal: ${goal}`,
-      '',
-      'Respond with ONLY the JSON object, no markdown fences.',
-    ].join('\n')
-
-    const response = await this.provider.chat({
-      model: this.model,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0,
-    })
-
-    const raw = this.extractJson(response.content)
-    const parsed = JSON.parse(raw) as { steps: PlanStep[] }
-
-    // Validate each step.
-    const steps: PlanStep[] = parsed.steps.map((s, i) =>
-      PlanStepSchema.parse({ ...s, id: s.id ?? `step-${i + 1}` }),
-    )
-
-    return PlanSchema.parse({
-      id: `plan-${Date.now()}`,
-      goal,
-      steps,
-      createdAt: Date.now(),
+/** Extract JSON from an LLM response that may include prose. */
+export const extractPlanJson = (text: string): string => {
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start === -1 || end === -1) {
+    throw new ProviderError('No JSON object found in LLM response', {
+      providerId: 'plan',
+      retryable: false,
     })
   }
-
-  public override async revise(plan: Plan, feedback: string): Promise<Plan> {
-    const prompt = [
-      'You are revising a plan based on user feedback.',
-      'Current plan:',
-      JSON.stringify(plan, null, 2),
-      '',
-      'Feedback:',
-      feedback,
-      '',
-      'Respond with the revised plan as JSON only.',
-    ].join('\n')
-
-    const response = await this.provider.chat({
-      model: this.model,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0,
-    })
-
-    const raw = this.extractJson(response.content)
-    const parsed = JSON.parse(raw) as { steps: PlanStep[] }
-    const steps = parsed.steps.map((s, i) =>
-      PlanStepSchema.parse({ ...s, id: s.id ?? `step-${i + 1}` }),
-    )
-
-    return PlanSchema.parse({
-      id: plan.id,
-      goal: plan.goal,
-      steps,
-      createdAt: plan.createdAt,
-    })
-  }
-
-  /** Extract JSON from an LLM response that may include prose. */
-  private extractJson(text: string): string {
-    const start = text.indexOf('{')
-    const end = text.lastIndexOf('}')
-    if (start === -1 || end === -1) {
-      throw new ProviderError('No JSON object found in LLM response', {
-        providerId: 'plan',
-        retryable: false,
-      })
-    }
-    return text.slice(start, end + 1)
-  }
+  return text.slice(start, end + 1)
 }
+
+/** Normalize + validate step ids from an LLM response. */
+export const parsePlanSteps = (
+  steps: ReadonlyArray<Partial<PlanStep>>,
+): ReadonlyArray<PlanStep> => {
+  return steps.map((s, i) => PlanStepSchema.parse({ ...s, id: s.id ?? `step-${i + 1}` }))
+}
+
+/** Asks the LLM to generate a structured plan as JSON. */
+export const createLLMPlanner = (options: LLMPlannerOptions): BasePlanner => {
+  const parsedOptions = LLMPlannerOptionsSchema.parse(options)
+  const provider = parsedOptions.provider
+  const model = parsedOptions.model ?? DEFAULT_PLAN_MODEL
+
+  const planner: BasePlanner = {
+    id: 'llm',
+    async plan(goal: string): Promise<Plan> {
+      const prompt = [
+        'You are a planning agent. Given a goal, produce a',
+        'JSON plan with this exact shape:',
+        '{',
+        '  "steps": [',
+        '    {',
+        '      "id": "step-1",',
+        '      "description": "...",',
+        '      "tools": ["..."],  // optional',
+        '      "dependsOn": ["..."]  // optional',
+        '    }',
+        '  ]',
+        '}',
+        '',
+        `Goal: ${goal}`,
+        '',
+        'Respond with ONLY the JSON object, no markdown fences.',
+      ].join('\n')
+
+      const response = await provider.chat({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0,
+      })
+
+      const raw = extractPlanJson(response.content)
+      const parsed = JSON.parse(raw) as { steps: Array<Partial<PlanStep>> }
+      const steps = parsePlanSteps(parsed.steps)
+
+      return PlanSchema.parse({
+        id: `plan-${Date.now()}`,
+        goal,
+        steps,
+        createdAt: Date.now(),
+      })
+    },
+    async revise(plan: Plan, feedback: string): Promise<Plan> {
+      const prompt = [
+        'You are revising a plan based on user feedback.',
+        'Current plan:',
+        JSON.stringify(plan, null, 2),
+        '',
+        'Feedback:',
+        feedback,
+        '',
+        'Respond with the revised plan as JSON only.',
+      ].join('\n')
+
+      const response = await provider.chat({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0,
+      })
+
+      const raw = extractPlanJson(response.content)
+      const parsed = JSON.parse(raw) as { steps: Array<Partial<PlanStep>> }
+      const steps = parsePlanSteps(parsed.steps)
+
+      return PlanSchema.parse({
+        id: plan.id,
+        goal: plan.goal,
+        steps,
+        createdAt: plan.createdAt,
+      })
+    },
+  }
+
+  return planner
+}
+
+/** Backwards-compatible function alias for the old class export name. */
+export const LLMPlanner = createLLMPlanner
 
 // ---------------------------------------------------------------------------
 // PlanStore — in-memory plan persistence

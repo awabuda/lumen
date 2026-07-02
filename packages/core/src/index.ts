@@ -190,13 +190,18 @@ export {
 
 // Plan/act mode
 export {
-  BasePlanner,
   StaticPlanner,
   LLMPlanner,
+  createStaticPlanner,
+  createLLMPlanner,
+  revisePlan,
+  extractPlanJson,
+  parsePlanSteps,
   PlanStore,
   PlanSchema,
   PlanStepSchema,
   ModeSchema,
+  type BasePlanner,
   type Plan,
   type PlanStep,
   type Mode,
