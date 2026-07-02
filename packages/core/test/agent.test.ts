@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { createAgent } from '../src/agent/factory.js'
 import { Agent } from '../src/agent/index.js'
 import { AbortError, MaxIterationsExceededError } from '../src/errors/index.js'
 import { ToolRegistry } from '../src/tools/index.js'
@@ -99,5 +100,127 @@ describe('Agent.run', () => {
     expect(persisted.length).toBe(3)
     expect(persisted[1]!.content).toBe('remember me')
     expect(persisted[2]!.content).toBe('ack')
+  })
+
+  it('runs beforeModel and afterModel middleware during Agent.run', async () => {
+    const provider = new FakeProvider([
+      { message: { role: 'assistant', content: 'base', toolCalls: [] } },
+    ])
+    const agent = createAgent({
+      provider,
+      tools: new ToolRegistry(),
+      middleware: [
+        {
+          name: 'inject-context',
+          beforeModel: (messages) => [
+            ...messages,
+            { role: 'system', content: 'middleware context' },
+          ],
+        },
+        {
+          name: 'append-confidence',
+          afterModel: (message) => ({ ...message, content: `${message.content}!` }),
+        },
+      ],
+    })
+
+    const result = await agent.run({ userMessage: 'hi' })
+
+    expect(provider.calls[0]?.messages.at(-1)?.content).toBe('middleware context')
+    expect(result.finalMessage.content).toBe('base!')
+  })
+
+  it('runs wrapModelCall middleware outside the provider call', async () => {
+    const order: string[] = []
+    const provider = new FakeProvider([
+      { message: { role: 'assistant', content: 'wrapped', toolCalls: [] } },
+    ])
+    const agent = createAgent({
+      provider,
+      tools: new ToolRegistry(),
+      middleware: [
+        {
+          name: 'outer',
+          wrapModelCall: async (messages, call) => {
+            order.push('outer:before')
+            const response = await call(messages)
+            order.push('outer:after')
+            return response
+          },
+        },
+        {
+          name: 'inner',
+          wrapModelCall: async (messages, call) => {
+            order.push('inner:before')
+            const response = await call(messages)
+            order.push('inner:after')
+            return response
+          },
+        },
+      ],
+    })
+
+    await agent.run({ userMessage: 'hi' })
+
+    expect(order).toEqual(['outer:before', 'inner:before', 'inner:after', 'outer:after'])
+  })
+
+  it('runs wrapToolCall middleware around each tool dispatch', async () => {
+    const order: string[] = []
+    const provider = new FakeProvider([
+      {
+        message: {
+          role: 'assistant',
+          content: '',
+          toolCalls: [{ id: 'c1', name: 'echo', arguments: { message: 'ping' } }],
+        },
+      },
+      { message: { role: 'assistant', content: 'done', toolCalls: [] } },
+    ])
+    const tools = new ToolRegistry().register(new EchoTool())
+    const agent = createAgent({
+      provider,
+      tools,
+      middleware: [
+        {
+          name: 'tool-wrapper',
+          wrapToolCall: async (toolCall, call) => {
+            order.push(`before:${toolCall.name}`)
+            const result = await call()
+            order.push(`after:${result.toolCallId}`)
+            return result
+          },
+        },
+      ],
+    })
+
+    const result = await agent.run({ userMessage: 'echo please' })
+
+    expect(result.finalMessage.content).toBe('done')
+    expect(order).toEqual(['before:echo', 'after:c1'])
+  })
+
+  it('wraps middleware failures in MiddlewareError', async () => {
+    const provider = new FakeProvider([
+      { message: { role: 'assistant', content: 'never used', toolCalls: [] } },
+    ])
+    const agent = createAgent({
+      provider,
+      tools: new ToolRegistry(),
+      middleware: [
+        {
+          name: 'bad-before',
+          beforeModel: () => {
+            throw new Error('boom')
+          },
+        },
+      ],
+    })
+
+    await expect(agent.run({ userMessage: 'hi' })).rejects.toMatchObject({
+      name: 'MiddlewareError',
+      middlewareName: 'bad-before',
+    })
+    expect(provider.calls).toHaveLength(0)
   })
 })

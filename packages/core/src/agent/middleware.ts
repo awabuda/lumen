@@ -250,6 +250,32 @@ export interface ParsedMiddleware<TState = unknown> {
 }
 
 /**
+ * Private symbol key under which parsed middleware is stored on an
+ * Agent instance. `Symbol.for(...)` keeps the identity stable across
+ * module reloads and avoids string-key collisions.
+ */
+export const AGENT_MIDDLEWARE = Symbol.for('@lumen/core/agent-middleware')
+
+/** Object shape used internally to attach middleware to an Agent. */
+export type MiddlewareHost = Record<symbol, ReadonlyArray<ParsedMiddleware> | undefined>
+
+/** Attach a parsed middleware list to an Agent-like instance. */
+export const attachAgentMiddleware = (
+  agent: object,
+  middleware: ReadonlyArray<ParsedMiddleware>,
+): void => {
+  ;(agent as MiddlewareHost)[AGENT_MIDDLEWARE] = middleware
+}
+
+/**
+ * Read the parsed middleware list attached to an Agent-like instance.
+ * Returns [] for bare `new Agent(...)` instances.
+ */
+export const getAgentMiddleware = (agent: object): ReadonlyArray<ParsedMiddleware> => {
+  return (agent as MiddlewareHost)[AGENT_MIDDLEWARE] ?? []
+}
+
+/**
  * Error thrown when a middleware violates a lumen rule (P19.0 wire-up
  * prerequisite). Carries the offending middleware `name` for debug.
  *

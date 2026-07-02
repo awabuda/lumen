@@ -44,6 +44,12 @@ import type {
 } from '../message/index.js'
 import type { BaseProvider } from '../message/provider.js'
 import type { ToolRegistry } from '../tools/index.js'
+import {
+  type MiddlewareContext,
+  MiddlewareError,
+  type ParsedMiddleware,
+  getAgentMiddleware,
+} from './middleware.js'
 
 export interface AgentConfig {
   /** The LLM provider to call. Required. */
@@ -223,6 +229,8 @@ export class Agent {
 
     let iterations = 0
     let lastMessage: AssistantMessage = { role: 'assistant', content: '', toolCalls: [] }
+    const middleware = getAgentMiddleware(this)
+    const middlewareState = this.createMiddlewareState(middleware)
 
     try {
       while (true) {
@@ -239,32 +247,49 @@ export class Agent {
           { sessionId, iteration: iterations, startedAt: Date.now() },
         )
 
-        // Call the provider.
-        const response = await this.callProvider(messages, budget, signal)
+        // Call the provider. Middleware may transform messages before the
+        // model call, wrap the model call itself, and post-process the
+        // assistant message after the provider returns.
+        const ctx = this.middlewareContext({
+          sessionId,
+          iteration: iterations,
+          startedAt: Date.now(),
+          state: middlewareState,
+          signal,
+        })
+        const modelMessages = await this.applyBeforeModel(middleware, messages, ctx)
+        const assistantMessage = await this.callProviderWithMiddleware(
+          middleware,
+          modelMessages,
+          budget,
+          signal,
+          ctx,
+        )
+        const responseMessage = await this.applyAfterModel(middleware, assistantMessage, ctx)
 
         // Track usage.
-        if (response.message.usage) {
-          budget.addTokens(response.message.usage.totalTokens)
+        if (responseMessage.usage) {
+          budget.addTokens(responseMessage.usage.totalTokens)
         }
 
         // Append assistant message to history and persist.
-        messages.push(response.message)
-        lastMessage = response.message
+        messages.push(responseMessage)
+        lastMessage = responseMessage
         await this.hooks.dispatch(
-          { kind: 'message:append', message: response.message },
+          { kind: 'message:append', message: responseMessage },
           { sessionId, iteration: iterations, startedAt: Date.now() },
         )
         if (this.memory) {
-          await this.persistMessage(sessionId, response.message)
+          await this.persistMessage(sessionId, responseMessage)
         }
 
         await this.hooks.dispatch(
-          { kind: 'step:end', iteration: iterations, message: response.message },
+          { kind: 'step:end', iteration: iterations, message: responseMessage },
           { sessionId, iteration: iterations, startedAt: Date.now() },
         )
 
         // If the model didn't ask for tools, we're done.
-        if (response.message.toolCalls.length === 0) {
+        if (responseMessage.toolCalls.length === 0) {
           break
         }
 
@@ -277,13 +302,13 @@ export class Agent {
         // Dispatch each tool call, then append a single tool message with
         // all results.
         const results: ToolResult[] = []
-        for (const call of response.message.toolCalls) {
+        for (const call of responseMessage.toolCalls) {
           await this.hooks.dispatch(
             { kind: 'tool:call', toolCall: call },
             { sessionId, iteration: iterations, startedAt: Date.now() },
           )
           const startedAt = Date.now()
-          const result = await this.dispatchToolCall(call, signal)
+          const result = await this.callToolWithMiddleware(middleware, call, signal, ctx)
           const durationMs = Date.now() - startedAt
           await this.hooks.dispatch(
             { kind: 'tool:result', toolCall: call, result, durationMs },
@@ -564,6 +589,100 @@ export class Agent {
   // -------------------------------------------------------------------------
   // Internals
   // -------------------------------------------------------------------------
+
+  private createMiddlewareState(
+    middleware: ReadonlyArray<ParsedMiddleware>,
+  ): Record<string, unknown> {
+    return Object.fromEntries(middleware.map((m) => [m.name, m.initialState]))
+  }
+
+  private middlewareContext(ctx: MiddlewareContext): MiddlewareContext {
+    return ctx
+  }
+
+  private async applyBeforeModel(
+    middleware: ReadonlyArray<ParsedMiddleware>,
+    messages: ReadonlyArray<Message>,
+    ctx: MiddlewareContext,
+  ): Promise<ReadonlyArray<Message>> {
+    let next = messages
+    for (const m of middleware) {
+      if (!m.raw.beforeModel) continue
+      try {
+        next = await m.raw.beforeModel(next, ctx)
+      } catch (err) {
+        throw new MiddlewareError('beforeModel failed', m.name, err)
+      }
+    }
+    return next
+  }
+
+  private async applyAfterModel(
+    middleware: ReadonlyArray<ParsedMiddleware>,
+    response: AssistantMessage,
+    ctx: MiddlewareContext,
+  ): Promise<AssistantMessage> {
+    let next = response
+    for (const m of middleware) {
+      if (!m.raw.afterModel) continue
+      try {
+        next = await m.raw.afterModel(next, ctx)
+      } catch (err) {
+        throw new MiddlewareError('afterModel failed', m.name, err)
+      }
+    }
+    return next
+  }
+
+  private async callProviderWithMiddleware(
+    middleware: ReadonlyArray<ParsedMiddleware>,
+    messages: ReadonlyArray<Message>,
+    budget: Budget,
+    signal: AbortSignal | undefined,
+    ctx: MiddlewareContext,
+  ): Promise<AssistantMessage> {
+    let call = async (input: ReadonlyArray<Message>): Promise<AssistantMessage> => {
+      const response = await this.callProvider(input, budget, signal)
+      return response.message
+    }
+
+    for (const m of [...middleware].reverse()) {
+      if (!m.raw.wrapModelCall) continue
+      const next = call
+      call = async (input: ReadonlyArray<Message>): Promise<AssistantMessage> => {
+        try {
+          return await m.raw.wrapModelCall!(input, next, ctx)
+        } catch (err) {
+          throw new MiddlewareError('wrapModelCall failed', m.name, err)
+        }
+      }
+    }
+
+    return call(messages)
+  }
+
+  private async callToolWithMiddleware(
+    middleware: ReadonlyArray<ParsedMiddleware>,
+    toolCall: ToolCall,
+    signal: AbortSignal | undefined,
+    ctx: MiddlewareContext,
+  ): Promise<ToolResult> {
+    let call = async (): Promise<ToolResult> => this.dispatchToolCall(toolCall, signal)
+
+    for (const m of [...middleware].reverse()) {
+      if (!m.raw.wrapToolCall) continue
+      const next = call
+      call = async (): Promise<ToolResult> => {
+        try {
+          return await m.raw.wrapToolCall!(toolCall, next, ctx)
+        } catch (err) {
+          throw new MiddlewareError('wrapToolCall failed', m.name, err)
+        }
+      }
+    }
+
+    return call()
+  }
 
   private async callProvider(
     messages: ReadonlyArray<Message>,

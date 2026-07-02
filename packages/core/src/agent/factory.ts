@@ -53,18 +53,14 @@
  */
 
 import { Agent, type AgentConfig } from '../index.js'
-import { type AgentMiddleware, type ParsedMiddleware, parseMiddleware } from './middleware.js'
+import {
+  type AgentMiddleware,
+  type ParsedMiddleware,
+  attachAgentMiddleware,
+  parseMiddleware,
+} from './middleware.js'
 
-/**
- * Private symbol key under which the parsed middleware list is
- * stored on the returned `Agent` instance. Exported as a const
- * (not a class) so the symbol identity is stable across module
- * reloads.
- *
- * P19.0.2 will read `agent[AGENT_MIDDLEWARE]` to dispatch the
- * 5 hook points. P19.0.3 only sets it.
- */
-export const AGENT_MIDDLEWARE = Symbol.for('@lumen/core/agent-middleware')
+export { AGENT_MIDDLEWARE, getAgentMiddleware } from './middleware.js'
 
 /**
  * Config accepted by {@link createAgent}. Extends `AgentConfig` with
@@ -140,25 +136,7 @@ export const createAgent = (config: CreateAgentConfig): Agent => {
   // The symbol is unique per process (Symbol.for reuses the
   // cross-realm identity, which is what we want: P19.0.2 lives
   // in the same package and uses Symbol.for too).
-  ;(agent as unknown as Record<symbol, ReadonlyArray<ParsedMiddleware>>)[AGENT_MIDDLEWARE] =
-    parsedMiddleware
+  attachAgentMiddleware(agent, parsedMiddleware)
 
   return agent
-}
-
-/**
- * Read the middleware list attached to an `Agent` instance by
- * {@link createAgent}. Returns `[]` when the agent was not built
- * via the factory (i.e. constructed via `new Agent(...)`).
- *
- * Intended for the P19.0.2 agent loop wire-up. External code
- * should not need this — middleware dispatch will be
- * transparent once the loop is wired. Exported for symmetry
- * with {@link AGENT_MIDDLEWARE}.
- */
-export const getAgentMiddleware = (agent: Agent): ReadonlyArray<ParsedMiddleware> => {
-  const list = (agent as unknown as Record<symbol, ReadonlyArray<ParsedMiddleware> | undefined>)[
-    AGENT_MIDDLEWARE
-  ]
-  return list ?? []
 }
