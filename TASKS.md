@@ -717,11 +717,11 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 
 ### P19.0 — Middleware 抽象层（前置依赖，所有 P19.x 共享）
 
-- [ ] **P19.0.1** — `packages/core/src/agent/middleware.ts`：定义 `AgentMiddleware` 接口（`name`, `beforeModel?`, `afterModel?`, `wrapModelCall?`, `wrapToolCall?`）+ `MiddlewareContext` + `MiddlewareNext` 范型
-- [ ] **P19.0.2** — Agent.run loop 改写为显式 middleware 管道（保持 step hook 顺序，但 step 间插入 middleware 调用点）
-- [ ] **P19.0.3** — `createAgent({ model, tools, middleware: [...] })` factory 导出（apps/cli composition 改用它）
-- [ ] **P19.0.4** — middleware 单元测试：`packages/core/test/middleware.test.ts`（composition order / error short-circuit / async parity）+ Agent.run 仍兼容旧 `hooks` 字段
-- [ ] **P19.0.5** — `docs/P19-DESIGN.md` §1 middleware 范式 spec（已写好，P19.0 commit 一并 import）
+- [x] **P19.0.1** — `packages/core/src/agent/middleware.ts`：定义 `AgentMiddleware` 接口（`name`, `beforeModel?`, `afterModel?`, `wrapModelCall?`, `wrapToolCall?`）+ `MiddlewareContext` + `ParsedMiddleware` + `parseMiddleware`（commit `5106481` + biome fix `bfe0446`）
+- [x] **P19.0.2** — Agent.run loop 改写为显式 middleware 管道（保持 step hook 顺序，但 step 间插入 middleware 调用点；bare `new Agent(...)` = `[]` middleware = 旧行为；commit `d6918a2`）
+- [x] **P19.0.3** — `createAgent({ provider, tools, middleware: [...] })` factory 导出（symbol-keyed middleware attach + barrel export；apps/cli composition 改用它留到 P19.6/P20 CLI cleanup；commit `815afca`）
+- [x] **P19.0.4** — middleware 单元测试：`packages/core/test/middleware.test.ts`（composition order / error short-circuit / async parity）+ Agent.run middleware wire-up tests（beforeModel/afterModel/wrapModelCall/wrapToolCall/MiddlewareError；commit `a19c78b` + `d6918a2`）
+- [x] **P19.0.5** — `docs/P19-DESIGN.md` §1 middleware 范式 spec（已写好并 import；commit `d77aa30`）
 
 ### P19.1 — Plan/Act mode wire-up（吸收 deepagents / Claude Code Plan mode）
 
@@ -833,7 +833,14 @@ cd packages/memory && pnpm rebuild better-sqlite3   # 若改了 memory 抽象
 ```
 
 ### Commits
-（待 P19.0 开 commit 后填）
+- [x] **P19 design lock** — `chore: P19 design lock — middleware spec + pitfalls + rules` *(commit `d77aa30`)* — Added `docs/P19-DESIGN.md` (551 lines), `docs/PITFALLS.md` (283 lines), `.cursor/rules/lumen-p19.mdc` (~7 KB), and P19+ rules / Pre-flight sections in `CLAUDE.md`. Design-only pass; no package API change.
+- [x] **P19 task list** — `docs: TASKS.md — P19+ 段 commit-by-commit 任务清单` *(commit `2918f26`)* — Added the P19.0-P19.7 checklist, 8-dimension framework comparison, P20+ backlog, and verification budget.
+- [x] **P19 docs-site nav** — `ci(docs): P19 段接入 VitePress nav + sidebar` *(commit `8a7c66c`)* — Exposed `/p19-design` and `/pitfalls` in VitePress nav/sidebar. Verified `pnpm --filter @lumen/docs-site build`.
+- [x] **P19 changelog entry** — `docs(changelog): 0.12.0 — P19+ middleware 范式 design lock (no code shipped)` *(commit `d9ccb9c`)* — Added design-lock entry. Explicitly no changeset for docs-only.
+- [x] **P19.0.1** — `feat(core): P19.0.1 — AgentMiddleware 抽象 spec (interface + parseMiddleware)` *(commit `5106481`, style fix `bfe0446`)* — Added `packages/core/src/agent/middleware.ts` with `AgentMiddleware`, `MiddlewareContext`, `ParsedMiddleware`, `MiddlewareError`, and `parseMiddleware`. Verified `@lumen/core` typecheck and 225 existing tests.
+- [x] **P19.0.4** — `test(core): P19.0.4 — middleware 单测（parseMiddleware + MiddlewareError + hook shape)` *(commit `a19c78b`)* — Added `packages/core/test/middleware.test.ts` (18 cases). Core tests increased 225 → 243.
+- [x] **P19.0.3** — `feat(core): P19.0.3 — createAgent factory + middleware barrel export` *(commit `815afca`)* — Added `packages/core/src/agent/factory.ts`, `packages/core/test/factory.test.ts` (11 cases), and barrel exports for `createAgent` / middleware types. Core tests increased 243 → 254.
+- [x] **P19.0.2** — `feat(core): P19.0.2 — wire Agent.run to middleware hook pipeline` *(commit `d6918a2`)* — Wired `Agent.run` to `beforeModel`, `wrapModelCall`, `afterModel`, and `wrapToolCall`; middleware failures wrap as `MiddlewareError`; bare `new Agent(...)` remains old behavior via empty middleware list. Added 4 Agent.run wire-up tests. Core tests increased 254 → 258. Verified `pnpm -r typecheck` and `pnpm -r --filter '!@lumen/docs-site' test` (11 packages / 1237 tests pass).
 
 ### Push status
 待 P19 完成 + 解决 sandbox 网络 + 配置 NODE_AUTH_TOKEN（npm publish）+ GH actions 验证后 push。
