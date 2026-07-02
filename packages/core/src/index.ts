@@ -239,6 +239,32 @@ export {
   type RunEvent,
 } from './agent/index.js'
 
+// createAgent factory (P19.0.3) — composition root's entry point.
+// Sits alongside the Agent export so consumers can pick either
+// the class or the factory. See packages/core/src/agent/factory.ts
+// for the rationale (CLAUDE.md P19+ rule 13).
+export {
+  createAgent,
+  getAgentMiddleware,
+  AGENT_MIDDLEWARE,
+  type CreateAgentConfig,
+} from './agent/factory.js'
+
+// Middleware 范式 spec (P19.0.1) — re-exported at the top of
+// @lumen/core so downstream packages can `import { AgentMiddleware }
+// from '@lumen/core'`. The factory above is the typical consumer.
+export {
+  type AgentMiddleware,
+  type BeforeModelHook,
+  type AfterModelHook,
+  type WrapModelCall,
+  type WrapToolCall,
+  type MiddlewareContext,
+  MiddlewareError,
+  parseMiddleware,
+  type ParsedMiddleware,
+} from './agent/middleware.js'
+
 // Concurrency primitives (async mutex)
 export {
   AcquireTimeoutError,
