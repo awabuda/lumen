@@ -737,7 +737,7 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 - [ ] **P19.2.2** — inline reflection：每轮在最后一条 assistant 消息后追加 `[confidence: 0.X]` token（1 token，0 cost）
 - [ ] **P19.2.3** — step-level reflection：每 5 步 1 次 LLM call（用 haiku / 本地 fallback）总结历史 + confidence score
 - [ ] **P19.2.4** — run-end reflection：run 结束 1 次 LLM call（haiku）总结完整 run，写入 BaseMemoryStore（带 trust score 起点 0.5）
-- [ ] **P19.2.5** — `BaseReflector` 抽象保留 interface，`LLMReflector` / `RuleBasedReflector` 改写为 helper（function form）
+- [x] **P19.2.5** — `BaseReflector` 抽象保留 interface，`LLMReflector` / `RuleBasedReflector` 改写为 helper（function form；`@lumen/memory` changeset；commit 待填）
 - [ ] **P19.2.6** — 4 个 e2e：inline-only / step-only / run-end-only / 三档同时开
 
 ### P19.3 — Sequential + Parallel Sub-agent

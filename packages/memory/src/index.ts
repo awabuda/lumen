@@ -56,9 +56,19 @@ export {
   type RetrievalResult,
 } from './retriever.js'
 export {
-  BaseReflector,
   RuleBasedReflector,
   LLMReflector,
+  createRuleBasedReflector,
+  createLLMReflector,
+  ruleBasedReflect,
+  llmReflect,
+  persistExtractedFacts,
+  buildReflectionPrompt,
+  parseReflectionFacts,
+  hashFactId,
+  type BaseReflector,
+  type ChatMessage,
+  type MinimalReflectionProvider,
   type ExtractedFact,
 } from './reflector.js'
 export {
