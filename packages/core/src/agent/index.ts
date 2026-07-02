@@ -341,7 +341,21 @@ export class Agent {
         { sessionId, iteration: iterations, startedAt: Date.now() },
       )
 
-      return { sessionId, finalMessage: lastMessage, iterations, messages }
+      const result: AgentRunResult = { sessionId, finalMessage: lastMessage, iterations, messages }
+      await this.applyAfterRun(
+        middleware,
+        result,
+        this.middlewareContext({
+          sessionId,
+          iteration: iterations,
+          startedAt: Date.now(),
+          state: middlewareState,
+          control: { continueAfterModel: false },
+          signal,
+        }),
+      )
+
+      return result
     } catch (err) {
       const recoverable = err instanceof AbortError
       await this.hooks.dispatch(
@@ -689,6 +703,21 @@ export class Agent {
     }
 
     return call()
+  }
+
+  private async applyAfterRun(
+    middleware: ReadonlyArray<ParsedMiddleware>,
+    result: AgentRunResult,
+    ctx: MiddlewareContext,
+  ): Promise<void> {
+    for (const m of middleware) {
+      if (!m.raw.afterRun) continue
+      try {
+        await m.raw.afterRun(result, ctx)
+      } catch (err) {
+        throw new MiddlewareError('afterRun failed', m.name, err)
+      }
+    }
   }
 
   private async callProvider(

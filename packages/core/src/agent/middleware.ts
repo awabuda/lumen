@@ -214,6 +214,20 @@ export type WrapToolCall = (
   ctx: MiddlewareContext,
 ) => Promise<ToolResult>
 
+/** Minimal Agent.run result shape visible to middleware. */
+export interface MiddlewareRunResult {
+  readonly sessionId: string
+  readonly finalMessage: AssistantMessage
+  readonly iterations: number
+  readonly messages: ReadonlyArray<Message>
+}
+
+/** `afterRun` hook signature. Runs after the loop has produced a result. */
+export type AfterRunHook = (
+  result: MiddlewareRunResult,
+  ctx: MiddlewareContext,
+) => Promise<void> | void
+
 /**
  * The AgentMiddleware contract.
  *
@@ -252,6 +266,8 @@ export interface AgentMiddleware<TState = unknown> {
   readonly wrapModelCall?: WrapModelCall
   /** Optional: wrap a single tool dispatch. */
   readonly wrapToolCall?: WrapToolCall
+  /** Optional: observe the final run result after run:end hooks. */
+  readonly afterRun?: AfterRunHook
 }
 
 /**

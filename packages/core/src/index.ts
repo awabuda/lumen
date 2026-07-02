@@ -276,6 +276,14 @@ export {
   type PlanMiddlewareOptions,
   type PlanMiddlewareState,
 } from './agent/middleware/plan.js'
+export {
+  createReflectionMiddleware,
+  ReflectionMiddleware,
+  ruleBasedReflectMessages,
+  type ReflectionMiddlewareOptions,
+  type ReflectionMiddlewareState,
+  type ReflectionResult,
+} from './agent/middleware/reflection.js'
 
 // Concurrency primitives (async mutex)
 export {
