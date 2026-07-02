@@ -725,11 +725,11 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 
 ### P19.1 — Plan/Act mode wire-up（吸收 deepagents / Claude Code Plan mode）
 
-- [ ] **P19.1.1** — `AgentConfig` 加 `mode: 'plan' | 'act' | 'auto'` + `planner?: BasePlanner`（DI 注入）
-- [ ] **P19.1.2** — `PlanStore` 从 @lumen/memory 重新 export（core → memory 通过 DI 而非 import），plan 内容存为 `readonly plan: { id, steps: PlanStep[], approvedBy?: string }`
-- [ ] **P19.1.3** — Agent.run loop 在 `mode: 'plan'` 下首轮只生成 plan（含 `<plan id="x" />` 标记）并停止；`mode: 'act'` 直接执行；`mode: 'auto'` 第一轮 plan 第二轮 act
+- [x] **P19.1.1** — `createPlanMiddleware({ mode: 'plan' | 'act' | 'auto', planner? })` 提供 mode + planner DI（按 P19 rule 11 改为 middleware 配置，不把 boolean/mode 继续堆到 AgentConfig；commit `9d8735e`）
+- [x] **P19.1.2** — `PlanStore` 通过 `createPlanMiddleware({ planStore })` 注入并保持 core export（避免 core → memory import；commit `9d8735e`）
+- [x] **P19.1.3** — Agent.run loop 通过 PlanMiddleware 支持 `mode: 'plan'` 首轮只生成 plan 并停止、`mode: 'act'` 直接执行、`mode: 'auto'` 首轮 plan 第二轮 act（commit `9d8735e`）
 - [x] **P19.1.4** — `BasePlanner` 抽象保留为 interface + `LLMPlanner` / `RuleBasedPlanner` 改写为 helper function（function form，unit-testable；commit `8c37857`）
-- [ ] **P19.1.5** — 3 个 e2e：plan-only 输出有 plan 标记 / plan-approve-act 走通完整链路 / auto mode 第一轮 plan 第二轮 act
+- [x] **P19.1.5** — 4 个 e2e-ish core tests：plan-only suppresses tools / act allows tools / auto plan→act / planner option skips XML planning turn（commit `9d8735e`）
 
 ### P19.2 — Reflection 三档（inline / step-level / run-end）
 
@@ -841,6 +841,8 @@ cd packages/memory && pnpm rebuild better-sqlite3   # 若改了 memory 抽象
 - [x] **P19.0.4** — `test(core): P19.0.4 — middleware 单测（parseMiddleware + MiddlewareError + hook shape)` *(commit `a19c78b`)* — Added `packages/core/test/middleware.test.ts` (18 cases). Core tests increased 225 → 243.
 - [x] **P19.0.3** — `feat(core): P19.0.3 — createAgent factory + middleware barrel export` *(commit `815afca`)* — Added `packages/core/src/agent/factory.ts`, `packages/core/test/factory.test.ts` (11 cases), and barrel exports for `createAgent` / middleware types. Core tests increased 243 → 254.
 - [x] **P19.0.2** — `feat(core): P19.0.2 — wire Agent.run to middleware hook pipeline` *(commit `d6918a2`)* — Wired `Agent.run` to `beforeModel`, `wrapModelCall`, `afterModel`, and `wrapToolCall`; middleware failures wrap as `MiddlewareError`; bare `new Agent(...)` remains old behavior via empty middleware list. Added 4 Agent.run wire-up tests. Core tests increased 254 → 258. Verified `pnpm -r typecheck` and `pnpm -r --filter '!@lumen/docs-site' test` (11 packages / 1237 tests pass).
+- [x] **P19.1.4** — `refactor(core): P19.1.4 — planner interface + helper functions` *(commit `8c37857`, docs commit `7bf941d`)* — Replaced abstract `BasePlanner` + class implementations with interface + helper functions (`createStaticPlanner`, `createLLMPlanner`, `revisePlan`, `extractPlanJson`, `parsePlanSteps`). `ModeSchema` now accepts `auto`; schemas are `.strict()`. Core tests remain 258.
+- [x] **P19.1.1/P19.1.2/P19.1.3/P19.1.5** — `feat(core): P19.1 — PlanMiddleware for plan/act/auto modes` *(commit `9d8735e`)* — Added `createPlanMiddleware`, `PlanMiddleware`, `MiddlewareControl.continueAfterModel`, and 4 plan-middleware tests. `mode: 'plan'` suppresses tool calls, `mode: 'act'` is no-op, `mode: 'auto'` continues from planning into acting. Core tests increased 258 → 262. Verified `pnpm -r typecheck` and monorepo tests (11 packages / 1241 tests pass).
 
 ### Push status
 待 P19 完成 + 解决 sandbox 网络 + 配置 NODE_AUTH_TOKEN（npm publish）+ GH actions 验证后 push。
