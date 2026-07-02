@@ -728,7 +728,7 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 - [ ] **P19.1.1** — `AgentConfig` 加 `mode: 'plan' | 'act' | 'auto'` + `planner?: BasePlanner`（DI 注入）
 - [ ] **P19.1.2** — `PlanStore` 从 @lumen/memory 重新 export（core → memory 通过 DI 而非 import），plan 内容存为 `readonly plan: { id, steps: PlanStep[], approvedBy?: string }`
 - [ ] **P19.1.3** — Agent.run loop 在 `mode: 'plan'` 下首轮只生成 plan（含 `<plan id="x" />` 标记）并停止；`mode: 'act'` 直接执行；`mode: 'auto'` 第一轮 plan 第二轮 act
-- [ ] **P19.1.4** — `BasePlanner` 抽象保留为 interface + `LLMPlanner` / `RuleBasedPlanner` 改写为 helper function（function form，unit-testable）
+- [x] **P19.1.4** — `BasePlanner` 抽象保留为 interface + `LLMPlanner` / `RuleBasedPlanner` 改写为 helper function（function form，unit-testable；commit `8c37857`）
 - [ ] **P19.1.5** — 3 个 e2e：plan-only 输出有 plan 标记 / plan-approve-act 走通完整链路 / auto mode 第一轮 plan 第二轮 act
 
 ### P19.2 — Reflection 三档（inline / step-level / run-end）
