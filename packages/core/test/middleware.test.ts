@@ -44,6 +44,7 @@ const ctx = (overrides: Partial<MiddlewareContext> = {}): MiddlewareContext => (
   iteration: 1,
   startedAt: 0,
   state: {},
+  control: { continueAfterModel: false },
   ...overrides,
 })
 

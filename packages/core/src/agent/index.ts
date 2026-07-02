@@ -241,6 +241,7 @@ export class Agent {
         if (iterations > maxIterations) {
           throw new MaxIterationsExceededError(maxIterations)
         }
+        const middlewareControl = { continueAfterModel: false }
 
         await this.hooks.dispatch(
           { kind: 'step:start', iteration: iterations },
@@ -255,6 +256,7 @@ export class Agent {
           iteration: iterations,
           startedAt: Date.now(),
           state: middlewareState,
+          control: middlewareControl,
           signal,
         })
         const modelMessages = await this.applyBeforeModel(middleware, messages, ctx)
@@ -288,9 +290,14 @@ export class Agent {
           { sessionId, iteration: iterations, startedAt: Date.now() },
         )
 
-        // If the model didn't ask for tools, we're done.
-        if (responseMessage.toolCalls.length === 0) {
+        // If the model didn't ask for tools, we're done unless a middleware
+        // explicitly asked the loop to continue (P19.1 auto plan -> act).
+        if (responseMessage.toolCalls.length === 0 && !middlewareControl.continueAfterModel) {
           break
+        }
+
+        if (responseMessage.toolCalls.length === 0 && middlewareControl.continueAfterModel) {
+          continue
         }
 
         // Grace-call check: if budget is exhausted AND this isn't the grace

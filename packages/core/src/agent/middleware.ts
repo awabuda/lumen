@@ -83,6 +83,20 @@ import { AgentError } from '../errors/index.js'
 import type { AssistantMessage, Message, ToolCall, ToolResult } from '../message/index.js'
 
 /**
+ * Mutable control flags for middleware to communicate with Agent.run.
+ *
+ * This is intentionally tiny. P19.1 needs exactly one control bit:
+ * `continueAfterModel` lets PlanMiddleware implement `auto` mode by
+ * asking the loop to keep going after a no-tool planning response.
+ * Future control bits must be added here deliberately (not as random
+ * state fields) to avoid boolean flag soup on AgentConfig.
+ */
+export interface MiddlewareControl {
+  /** Continue the loop even if the assistant message has no toolCalls. */
+  continueAfterModel: boolean
+}
+
+/**
  * Per-invocation context for a middleware hook. Carries session metadata
  * and the merged middleware state slice (see P19-DESIGN.md §1.2).
  *
@@ -104,6 +118,8 @@ export interface MiddlewareContext {
    * `stateSchema`.
    */
   readonly state: Readonly<Record<string, unknown>>
+  /** Mutable control flags for the current Agent.run iteration. */
+  readonly control: MiddlewareControl
   /** Abort signal. Middleware can check `signal.aborted`. */
   readonly signal?: AbortSignal
 }
@@ -226,6 +242,8 @@ export interface AgentMiddleware<TState = unknown> {
   readonly name: string
   /** Optional Zod schema for the middleware's state slice. */
   readonly stateSchema?: ZodType<TState>
+  /** Optional initial state slice parsed against stateSchema at construction time. */
+  readonly initialState?: TState
   /** Optional: pre-process messages before the model call. */
   readonly beforeModel?: BeforeModelHook
   /** Optional: post-process the model response. */
@@ -330,14 +348,17 @@ export const parseMiddleware = <TState = unknown>(
     // will start shipping typed schemas. The runtime parses
     // `set()` calls against this schema, but `z.unknown()` accepts
     // everything, so the default is a no-op.
+    const stateSchema = (raw.stateSchema ?? z.unknown()) as ZodType<TState>
+    const initialState =
+      raw.initialState === undefined ? (undefined as TState) : stateSchema.parse(raw.initialState)
     return {
       raw,
       name: raw.name,
       // Use `z.unknown()` as the default schema. P19.0 keeps the
       // runtime tolerant; P19.1 / P19.2 will require typed schemas
       // for their wire-up.
-      stateSchema: (raw.stateSchema ?? z.unknown()) as ZodType<TState>,
-      initialState: undefined as TState,
+      stateSchema,
+      initialState,
     }
   })
 }

@@ -265,10 +265,17 @@ export {
   type WrapModelCall,
   type WrapToolCall,
   type MiddlewareContext,
+  type MiddlewareControl,
   MiddlewareError,
   parseMiddleware,
   type ParsedMiddleware,
 } from './agent/middleware.js'
+export {
+  createPlanMiddleware,
+  PlanMiddleware,
+  type PlanMiddlewareOptions,
+  type PlanMiddlewareState,
+} from './agent/middleware/plan.js'
 
 // Concurrency primitives (async mutex)
 export {
