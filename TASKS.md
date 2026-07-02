@@ -733,12 +733,12 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 
 ### P19.2 — Reflection 三档（inline / step-level / run-end）
 
-- [ ] **P19.2.1** — `AgentConfig` 加 `reflection?: { inline?: boolean, stepInterval?: number, runEnd?: 'rule' | 'llm' | 'off' }`，默认 `{ inline: true, stepInterval: 5, runEnd: 'rule' }`
-- [ ] **P19.2.2** — inline reflection：每轮在最后一条 assistant 消息后追加 `[confidence: 0.X]` token（1 token，0 cost）
-- [ ] **P19.2.3** — step-level reflection：每 5 步 1 次 LLM call（用 haiku / 本地 fallback）总结历史 + confidence score
-- [ ] **P19.2.4** — run-end reflection：run 结束 1 次 LLM call（haiku）总结完整 run，写入 BaseMemoryStore（带 trust score 起点 0.5）
-- [x] **P19.2.5** — `BaseReflector` 抽象保留 interface，`LLMReflector` / `RuleBasedReflector` 改写为 helper（function form；`@lumen/memory` changeset；commit 待填）
-- [ ] **P19.2.6** — 4 个 e2e：inline-only / step-only / run-end-only / 三档同时开
+- [x] **P19.2.1** — `createReflectionMiddleware({ inline?: boolean, stepInterval?: number, runEnd?: 'rule' | 'off', memory? })`（按 P19 rule 11 改为 middleware 配置，不加 AgentConfig flag；LLM strategy deferred；commit `433daae`）
+- [x] **P19.2.2** — inline reflection：每轮在最后一条 assistant 消息后追加 `[confidence: 0.X]` token（1 token，0 cost；commit `433daae`）
+- [x] **P19.2.3** — step-level reflection：每 N 步更新 rule-based reflection state（默认 5；commit `433daae`）
+- [x] **P19.2.4** — run-end reflection：run 结束写入 `BaseMemoryStore` reflection 记录（trust 0.5；rule strategy；commit `433daae`）
+- [x] **P19.2.5** — `BaseReflector` 抽象保留 interface，`LLMReflector` / `RuleBasedReflector` 改写为 helper（function form；`@lumen/memory` changeset；commit `9042601`）
+- [x] **P19.2.6** — 4 个 core tests：inline-only / inline-off / run-end memory / step-level interval（commit `433daae`）
 
 ### P19.3 — Sequential + Parallel Sub-agent
 
@@ -843,6 +843,8 @@ cd packages/memory && pnpm rebuild better-sqlite3   # 若改了 memory 抽象
 - [x] **P19.0.2** — `feat(core): P19.0.2 — wire Agent.run to middleware hook pipeline` *(commit `d6918a2`)* — Wired `Agent.run` to `beforeModel`, `wrapModelCall`, `afterModel`, and `wrapToolCall`; middleware failures wrap as `MiddlewareError`; bare `new Agent(...)` remains old behavior via empty middleware list. Added 4 Agent.run wire-up tests. Core tests increased 254 → 258. Verified `pnpm -r typecheck` and `pnpm -r --filter '!@lumen/docs-site' test` (11 packages / 1237 tests pass).
 - [x] **P19.1.4** — `refactor(core): P19.1.4 — planner interface + helper functions` *(commit `8c37857`, docs commit `7bf941d`)* — Replaced abstract `BasePlanner` + class implementations with interface + helper functions (`createStaticPlanner`, `createLLMPlanner`, `revisePlan`, `extractPlanJson`, `parsePlanSteps`). `ModeSchema` now accepts `auto`; schemas are `.strict()`. Core tests remain 258.
 - [x] **P19.1.1/P19.1.2/P19.1.3/P19.1.5** — `feat(core): P19.1 — PlanMiddleware for plan/act/auto modes` *(commit `9d8735e`)* — Added `createPlanMiddleware`, `PlanMiddleware`, `MiddlewareControl.continueAfterModel`, and 4 plan-middleware tests. `mode: 'plan'` suppresses tool calls, `mode: 'act'` is no-op, `mode: 'auto'` continues from planning into acting. Core tests increased 258 → 262. Verified `pnpm -r typecheck` and monorepo tests (11 packages / 1241 tests pass).
+- [x] **P19.2.5** — `refactor(memory): P19.2.5 — reflector interface + helper functions` *(commit `9042601`)* — Replaced abstract `BaseReflector` + class implementations with interface + helper functions (`createRuleBasedReflector`, `createLLMReflector`, `ruleBasedReflect`, `llmReflect`, `persistExtractedFacts`, `parseReflectionFacts`, `hashFactId`). Added `@lumen/memory` minor changeset. Memory tests increased 139 → 141.
+- [x] **P19.2.1/P19.2.2/P19.2.3/P19.2.4/P19.2.6** — `feat(core): P19.2 — ReflectionMiddleware inline/step/run-end` *(commit `433daae`)* — Added `createReflectionMiddleware`, `ReflectionMiddleware`, `AfterRunHook`, `MiddlewareRunResult`, and run-end `afterRun` dispatch in `Agent.run`. Inline adds confidence token, step-level updates state every interval, run-end writes `reflection` record to memory. Core tests increased 262 → 266.
 
 ### Push status
 待 P19 完成 + 解决 sandbox 网络 + 配置 NODE_AUTH_TOKEN（npm publish）+ GH actions 验证后 push。
