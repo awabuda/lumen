@@ -286,6 +286,16 @@ export {
   type ReflectionMiddlewareState,
   type ReflectionResult,
 } from './agent/middleware/reflection.js'
+export {
+  createSubAgentMiddleware,
+  SubAgentMiddleware,
+  SubAgentTaskTool,
+  SUB_AGENT_TOOL_NAME,
+  SUB_AGENT_TOOL_RISK,
+  TaskToolInputSchema,
+  type SubAgentMiddlewareOptions,
+  type SubAgentMiddlewareState,
+} from './agent/middleware/sub-agent.js'
 
 // Concurrency primitives (async mutex)
 export {

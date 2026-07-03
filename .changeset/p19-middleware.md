@@ -12,5 +12,6 @@ P19.0 introduces the middleware extension surface and the `createAgent` factory.
 - Adds `createPlanMiddleware({ mode, planner?, planStore? })` and `PlanMiddleware` for `plan` / `act` / `auto` orchestration. `plan` mode suppresses tool calls, `act` mode is a no-op, and `auto` mode uses `MiddlewareControl.continueAfterModel` to continue from planning into acting.
 - Adds `createReflectionMiddleware({ inline?, stepInterval?, runEnd?, memory? })` and `ReflectionMiddleware` for inline confidence tokens, step-level rule reflection state, and run-end rule reflection persistence. Adds `MiddlewareControl` and `afterRun` middleware support used by reflection.
 - Refactors sub-agent delegation to remove the single-implementation `BaseSubAgent` / `SingleRunSubAgent` wrapper-class pattern. Adds `SubAgentSpec`, `SubAgentRunner`, `createSubAgent`, and `createSubAgentFromSpec`.
+- Adds `createSubAgentMiddleware({ parent, specs })` for deepagents-style sub-agent dispatch via the stub `task` tool, plus `SubAgentTaskTool`, `SUB_AGENT_TOOL_NAME`, `SUB_AGENT_TOOL_RISK`, and `TaskToolInputSchema`.
 
 `streamRun` remains on the old path for now; P19.0.2 only wires the non-streaming `Agent.run` loop.
