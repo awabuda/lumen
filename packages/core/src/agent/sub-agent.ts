@@ -1,19 +1,12 @@
 /**
- * Sub-agent delegation — lets the main agent spawn focused
- * sub-tasks that run their own conversation loop.
+ * Sub-agent delegation — lets a parent agent run focused sub-tasks.
  *
- * A {@link BaseSubAgent} wraps an {@link Agent} with a single
- * goal-driven run. Sub-agents share the parent's provider,
- * memory, and hooks, but can be restricted to a subset of
- * tools via {@link SubAgentOptions.allowedTools}.
- *
- * Why a wrapper, not a subclass of Agent:
- *   `Agent` is explicitly non-subclassable — see
- *   {@link Agent} JSDoc, "do NOT subclass Agent". Sub-agents
- *   don't change the loop, they reuse it.
- *
- * Security: sub-agents inherit the parent's tool registry
- * but can be restricted via `allowedTools`.
+ * P19.3 refactor note:
+ *   The old module exported `BaseSubAgent` + `SingleRunSubAgent`, an
+ *   abstract class with one wrapper implementation. P19+ rule 14 says
+ *   this pattern must be deleted: abstract classes need at least two
+ *   non-wrapper implementations. Sub-agents are now plain interface
+ *   contracts plus factory helpers that reuse Agent directly.
  */
 
 import { z } from 'zod'
@@ -23,28 +16,54 @@ import { ToolRegistry } from '../tools/index.js'
 import type { AgentConfig, AgentRunOptions, AgentRunResult, RunEvent } from './index.js'
 
 /** Zod schema for {@link SubAgentOptions}. */
-export const SubAgentOptionsSchema = z.object({
-  /** The goal / task description. */
-  goal: z.string().min(1),
-  /** Maximum iterations. Defaults to 10. */
-  maxIterations: z.number().int().positive().optional(),
-  /** Restrict to these tool names. If omitted, all tools are available. */
-  allowedTools: z.array(z.string()).optional(),
-  /** System prompt override. */
-  systemPrompt: z.string().optional(),
-  /** Model to use. Defaults to parent's model. */
-  model: z.string().optional(),
-})
+export const SubAgentOptionsSchema = z
+  .object({
+    /** The goal / task description. */
+    goal: z.string().min(1),
+    /** Maximum iterations. Defaults to 10. */
+    maxIterations: z.number().int().positive().optional(),
+    /** Restrict to these tool names. If omitted, all tools are available. */
+    allowedTools: z.array(z.string()).optional(),
+    /** System prompt override. */
+    systemPrompt: z.string().optional(),
+    /** Model to use. Defaults to parent's model. */
+    model: z.string().optional(),
+  })
+  .strict()
 
-/**
- * Configuration for a sub-agent.
- *
- * `maxIterations` is optional in user input; the default
- * 10 is applied at construction time inside SingleRunSubAgent.
- */
+/** Configuration for a one-shot sub-agent run. */
 export type SubAgentOptions = z.input<typeof SubAgentOptionsSchema>
 
-/** Default system prompt template for sub-agents. */
+/** Deepagents-style reusable sub-agent spec. */
+export const SubAgentSpecSchema = z
+  .object({
+    /** Stable name used by task routing. */
+    name: z.string().min(1),
+    /** Human-facing description of when to call this sub-agent. */
+    description: z.string().min(1),
+    /** System prompt for the spawned agent. */
+    systemPrompt: z.string().min(1),
+    /** Optional tool allow-list. Omitted means inherit all tools. */
+    tools: z.array(z.string()).optional(),
+    /** Optional model override. */
+    model: z.string().optional(),
+  })
+  .strict()
+
+/** Deepagents-style reusable sub-agent spec. */
+export type SubAgentSpec = z.input<typeof SubAgentSpecSchema>
+
+/** Runtime contract for a sub-agent runner. */
+export interface SubAgentRunner {
+  /** Stable identifier for the runner. */
+  readonly id: string
+  /** Run the sub-agent to completion. */
+  run(): Promise<AgentRunResult>
+  /** Stream the sub-agent's run, yielding events as they happen. */
+  stream(): AsyncGenerator<RunEvent>
+}
+
+/** Default system prompt template for one-shot sub-agents. */
 const SUB_AGENT_SYSTEM_PROMPT = (goal: string): string =>
   [
     'You are a focused sub-agent. Your only task is:',
@@ -55,69 +74,6 @@ const SUB_AGENT_SYSTEM_PROMPT = (goal: string): string =>
     'provide a clear summary of what you did and what you found.',
     'Do not ask clarifying questions — make your best judgment.',
   ].join('\n')
-
-/**
- * The contract every sub-agent implementation fulfills.
- *
- * Implementations extend Agent's loop via composition (a
- * held Agent instance), not via inheritance.
- */
-export abstract class BaseSubAgent {
-  /** Stable identifier for the implementation. */
-  public abstract readonly id: string
-
-  /**
-   * Run the sub-agent to completion. Throws on failure —
-   * callers must handle errors with try/catch (Rule 7).
-   */
-  public abstract run(): Promise<AgentRunResult>
-
-  /** Stream the sub-agent's run, yielding events as they happen. */
-  public abstract stream(): AsyncGenerator<RunEvent>
-}
-
-/**
- * The default sub-agent: wraps a single Agent instance
- * with a goal-driven run.
- */
-export class SingleRunSubAgent extends BaseSubAgent {
-  public readonly id = 'single'
-
-  private readonly agent: Agent
-  private readonly runOptions: AgentRunOptions
-
-  public constructor(parent: AgentConfig, options: SubAgentOptions) {
-    super()
-    const tools = options.allowedTools
-      ? buildRestrictedRegistry(parent.tools, options.allowedTools)
-      : parent.tools
-
-    this.agent = new Agent({
-      ...parent,
-      tools,
-      model: options.model ?? parent.model,
-      systemPrompt: options.systemPrompt ?? SUB_AGENT_SYSTEM_PROMPT(options.goal),
-    })
-
-    this.runOptions = {
-      userMessage: options.goal,
-      maxIterations: options.maxIterations ?? 10,
-    }
-  }
-
-  public async run(): Promise<AgentRunResult> {
-    // Agent.run throws on error — let it propagate (Rule 7).
-    return this.agent.run(this.runOptions)
-  }
-
-  public async *stream(): AsyncGenerator<RunEvent> {
-    yield* this.agent.streamRun(this.runOptions)
-  }
-}
-
-/** Factory: create a sub-agent from a parent agent config + options. */
-export const createSubAgent = (parent: AgentConfig, options: SubAgentOptions): BaseSubAgent =>
-  new SingleRunSubAgent(parent, options)
 
 /** Build a new ToolRegistry containing only the named tools. */
 const buildRestrictedRegistry = (
@@ -130,4 +86,66 @@ const buildRestrictedRegistry = (
     if (tool) restricted.register(tool)
   }
   return restricted
+}
+
+const buildAgent = (
+  parent: AgentConfig,
+  goal: string,
+  options: {
+    readonly allowedTools?: ReadonlyArray<string>
+    readonly systemPrompt?: string
+    readonly model?: string
+  },
+): Agent => {
+  const tools = options.allowedTools
+    ? buildRestrictedRegistry(parent.tools, options.allowedTools)
+    : parent.tools
+
+  return new Agent({
+    ...parent,
+    tools,
+    model: options.model ?? parent.model,
+    systemPrompt: options.systemPrompt ?? SUB_AGENT_SYSTEM_PROMPT(goal),
+  })
+}
+
+/** Create a one-shot sub-agent runner from a parent config + options. */
+export const createSubAgent = (parent: AgentConfig, options: SubAgentOptions): SubAgentRunner => {
+  const parsed = SubAgentOptionsSchema.parse(options)
+  const agent = buildAgent(parent, parsed.goal, {
+    allowedTools: parsed.allowedTools,
+    systemPrompt: parsed.systemPrompt,
+    model: parsed.model,
+  })
+  const runOptions: AgentRunOptions = {
+    userMessage: parsed.goal,
+    maxIterations: parsed.maxIterations ?? 10,
+  }
+
+  return {
+    id: 'single',
+    async run(): Promise<AgentRunResult> {
+      return agent.run(runOptions)
+    },
+    async *stream(): AsyncGenerator<RunEvent> {
+      yield* agent.streamRun(runOptions)
+    },
+  }
+}
+
+/** Create a one-shot sub-agent runner from a reusable spec + prompt. */
+export const createSubAgentFromSpec = (
+  parent: AgentConfig,
+  spec: SubAgentSpec,
+  prompt: string,
+  maxIterations = 10,
+): SubAgentRunner => {
+  const parsed = SubAgentSpecSchema.parse(spec)
+  return createSubAgent(parent, {
+    goal: prompt,
+    maxIterations,
+    allowedTools: parsed.tools,
+    systemPrompt: parsed.systemPrompt,
+    model: parsed.model,
+  })
 }

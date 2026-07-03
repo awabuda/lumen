@@ -1,8 +1,13 @@
-/** Tests for {@link SingleRunSubAgent}. */
+/** Tests for sub-agent helpers. */
 
 import { describe, expect, it } from 'vitest'
 import type { AgentConfig } from '../src/agent/index.js'
-import { SingleRunSubAgent, SubAgentOptionsSchema, createSubAgent } from '../src/agent/sub-agent.js'
+import {
+  SubAgentOptionsSchema,
+  SubAgentSpecSchema,
+  createSubAgent,
+  createSubAgentFromSpec,
+} from '../src/agent/sub-agent.js'
 import { ToolRegistry } from '../src/tools/index.js'
 import { FakeProvider } from './fake-provider.js'
 
@@ -18,7 +23,7 @@ describe('SubAgentOptionsSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('applies the default maxIterations when omitted', () => {
+  it('keeps maxIterations optional when omitted', () => {
     const result = SubAgentOptionsSchema.parse({ goal: 'do x' })
     expect(result.maxIterations).toBeUndefined()
   })
@@ -39,9 +44,22 @@ describe('SubAgentOptionsSchema', () => {
   })
 })
 
-describe('SingleRunSubAgent', () => {
+describe('SubAgentSpecSchema', () => {
+  it('requires name, description, and systemPrompt', () => {
+    expect(SubAgentSpecSchema.safeParse({ name: 'a' }).success).toBe(false)
+    expect(
+      SubAgentSpecSchema.safeParse({
+        name: 'researcher',
+        description: 'Researches a topic',
+        systemPrompt: 'You research.',
+      }).success,
+    ).toBe(true)
+  })
+})
+
+describe('createSubAgent', () => {
   it('runs the sub-agent and returns the result', async () => {
-    const sub = new SingleRunSubAgent(buildConfig('child response'), {
+    const sub = createSubAgent(buildConfig('child response'), {
       goal: 'do something',
     })
     const result = await sub.run()
@@ -50,12 +68,12 @@ describe('SingleRunSubAgent', () => {
   })
 
   it('exposes id "single"', () => {
-    const sub = new SingleRunSubAgent(buildConfig('x'), { goal: 'x' })
+    const sub = createSubAgent(buildConfig('x'), { goal: 'x' })
     expect(sub.id).toBe('single')
   })
 
   it('uses the custom system prompt when provided', () => {
-    const sub = new SingleRunSubAgent(buildConfig('x'), {
+    const sub = createSubAgent(buildConfig('x'), {
       goal: 'x',
       systemPrompt: 'custom prompt',
     })
@@ -63,28 +81,39 @@ describe('SingleRunSubAgent', () => {
   })
 
   it('uses the custom model when provided', () => {
-    const sub = new SingleRunSubAgent(buildConfig('x'), {
+    const sub = createSubAgent(buildConfig('x'), {
       goal: 'x',
       model: 'gpt-4o',
     })
     expect(sub).toBeDefined()
   })
 
-  it('factory function returns a SingleRunSubAgent', () => {
-    const sub = createSubAgent(buildConfig('x'), { goal: 'x' })
-    expect(sub).toBeInstanceOf(SingleRunSubAgent)
-  })
-
   it('does not swallow errors from Agent.run (Rule 7)', async () => {
-    const sub = new SingleRunSubAgent(buildConfig('x'), { goal: 'x' })
-    // Agent.run returns a result here; sub.run must propagate.
+    const sub = createSubAgent(buildConfig('x'), { goal: 'x' })
     await expect(sub.run()).resolves.toBeDefined()
   })
 })
 
-describe('SingleRunSubAgent.stream', () => {
+describe('createSubAgentFromSpec', () => {
+  it('creates a runner from a reusable SubAgentSpec', async () => {
+    const sub = createSubAgentFromSpec(
+      buildConfig('spec response'),
+      {
+        name: 'researcher',
+        description: 'Researches a topic',
+        systemPrompt: 'You research.',
+      },
+      'research x',
+    )
+
+    const result = await sub.run()
+    expect(result.finalMessage.content).toBe('spec response')
+  })
+})
+
+describe('SubAgentRunner.stream', () => {
   it('yields at least one run:start event', async () => {
-    const sub = new SingleRunSubAgent(buildConfig('streamed'), { goal: 'x' })
+    const sub = createSubAgent(buildConfig('streamed'), { goal: 'x' })
     const events = []
     for await (const ev of sub.stream()) {
       events.push(ev)

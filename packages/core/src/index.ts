@@ -139,11 +139,13 @@ export {
 
 // Sub-agent delegation
 export {
-  BaseSubAgent,
-  SingleRunSubAgent,
   createSubAgent,
+  createSubAgentFromSpec,
   SubAgentOptionsSchema,
+  SubAgentSpecSchema,
   type SubAgentOptions,
+  type SubAgentSpec,
+  type SubAgentRunner,
 } from './agent/sub-agent.js'
 
 // Provider pool (multi-backend routing + failover)
