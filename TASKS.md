@@ -745,9 +745,9 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 - [x] **P19.3.1** — **删除** `BaseSubAgent` 抽象和 `SingleRunSubAgent`（过度设计的 wrapper class，违反 P19 范式 #4；commit 待填）
 - [x] **P19.3.2** — 重新设计为 `SubAgentSpec` interface（`{ name, description, systemPrompt, tools, model? }`）—— deepagents 风格（commit 待填）
 - [x] **P19.3.3** — `SubAgentMiddleware`（实现 `AgentMiddleware`）持有一个 SubAgentSpec 列表 + `task` 工具（input: `{ subagent, prompt }`），让主 agent 召唤 sub-agent（commit 待填）
-- [ ] **P19.3.4** — `SequentialSubAgent extends BaseAgent`（**独立实现，不合并 middleware**，每个 ≈ 150-200 行）：串行执行 N 个 sub-agent
-- [ ] **P19.3.5** — `ParallelSubAgent extends BaseAgent`：`Promise.all` 并行执行 N 个 sub-agent，结果合并（hard assert `max < 60s` 沿用 P18.3）
-- [ ] **P19.3.6** — 3 个 e2e：sequential 串行 / parallel 并行 / sequential-then-parallel 嵌套
+- [x] **P19.3.4** — `createSequentialSubAgent`（**独立实现，不合并 middleware**）：串行执行 N 个 sub-agent（commit 待填）
+- [x] **P19.3.5** — `createParallelSubAgent`：`Promise.all` 并行执行 N 个 sub-agent，结果合并（hard assert `max < 60s` 沿用 P18.3；commit 待填）
+- [x] **P19.3.6** — 6 个 core tests：sequential 顺序 / sequential id / sequential stream / parallel 并发顺序 / parallel id / parallel timeout（commit 待填）
 
 ### P19.4 — Handoff + Supervisor Sub-agent
 

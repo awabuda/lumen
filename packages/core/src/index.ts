@@ -147,6 +147,19 @@ export {
   type SubAgentSpec,
   type SubAgentRunner,
 } from './agent/sub-agent.js'
+export {
+  createSequentialSubAgent,
+  createParallelSubAgent,
+  SequentialSubAgent,
+  ParallelSubAgent,
+  PARALLEL_DEFAULT_TIMEOUT_MS,
+  SubAgentTaskSchema,
+  TaskResultSchema,
+  type SubAgentOrchestrator,
+  type SubAgentOrchestratorOptions,
+  type SubAgentTask,
+  type SubAgentTaskResult,
+} from './agent/sub-agent-orchestration.js'
 
 // Provider pool (multi-backend routing + failover)
 export {
