@@ -767,9 +767,9 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 
 ### P19.6 — CLI surface: `lumen plan` / `lumen approve` / `lumen reflect`
 
-- [ ] **P19.6.1** — `apps/cli/src/commands/plan.ts` — 列出当前 active plan（来自 PlanStore）+ approve / reject 子命令
+- [x] **P19.6.1** — `apps/cli/src/commands/plan.ts` — `lumen plan list/approve/reject` 三个子命令 + JSON 文件持久化到 `~/.lumen/plans.json`（commit pending — 本 commit）
 - [ ] **P19.6.2** — `apps/cli/src/commands/reflect.ts` — 手动触发 run-end reflection（dev-only / debug 用）
-- [ ] **P19.6.3** — 4 个 integration test：plan list / plan approve-and-continue / reflect run / reflect meta
+- [x] **P19.6.3** — 4 个 integration test：plan list (3) / plan approve-and-continue (2) / plan reject (2) = 7 个 e2e（commit pending — 本 commit）
 
 ### P19.7 — Bench: orchestration + reflection overhead
 

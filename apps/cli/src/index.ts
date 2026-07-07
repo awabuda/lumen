@@ -118,6 +118,43 @@ program
   })
 
 program
+  .command('plan')
+  .description('Inspect and manage persisted plans (list / approve / reject)')
+  .argument('[subcommand]', '"list" (default), "approve <id>", or "reject <id>"', 'list')
+  .argument('[id]', 'Plan id (for "approve" and "reject")')
+  .option('--notes <text>', 'Approve/reject: free-form notes to record on the plan')
+  .option('--plans-path <path>', 'Override the plans JSON file path')
+  .action(async (subcommand: string, id: string | undefined, opts: Record<string, unknown>) => {
+    const { planApproveCommand, planListCommand, planRejectCommand } = await import(
+      './commands/plan.js'
+    )
+    const file = opts.plansPath as string | undefined
+    const notes = opts.notes as string | undefined
+    let code = 0
+    if (subcommand === 'list') {
+      code = await planListCommand({ file })
+    } else if (subcommand === 'approve') {
+      if (!id) {
+        process.stderr.write('lumen plan: missing <id> for "approve"\n')
+        code = 1
+      } else {
+        code = await planApproveCommand({ id, notes, file })
+      }
+    } else if (subcommand === 'reject') {
+      if (!id) {
+        process.stderr.write('lumen plan: missing <id> for "reject"\n')
+        code = 1
+      } else {
+        code = await planRejectCommand({ id, notes, file })
+      }
+    } else {
+      process.stderr.write(`lumen plan: unknown subcommand: ${subcommand}\n`)
+      code = 1
+    }
+    process.exit(code)
+  })
+
+program
   .command('update')
   .description('Check for newer Lumen releases')
   .argument('[subcommand]', '"check" (default) or "print-version"', 'check')
