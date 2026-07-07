@@ -773,8 +773,8 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 
 ### P19.7 — Bench: orchestration + reflection overhead
 
-- [x] **P19.7.1** — `apps/cli/test/perf/05-sequential-subagent.test.ts` — N=3 sequential sub-agent wall-clock（commit pending — 本 commit；bench 输出：N=3 p50 0.13ms / max 0.96ms on FakeProvider，orchestration overhead 接近零）
-- [ ] **P19.7.2** — `apps/cli/test/perf/06-parallel-subagent.test.ts` — N=3 parallel sub-agent wall-clock
+- [x] **P19.7.1** — `apps/cli/test/perf/05-sequential-subagent.test.ts` — N=3 sequential sub-agent wall-clock（commit `5641199`；bench 输出：N=3 p50 0.13ms / max 0.96ms on FakeProvider，orchestration overhead 接近零）
+- [x] **P19.7.2** — `apps/cli/test/perf/06-parallel-subagent.test.ts` — N=3 parallel sub-agent wall-clock（commit pending — 本 commit；bench 输出：N=3 p50 0.12ms / max 1.06ms on FakeProvider；in-process provider 让 sequential/parallel 几乎相同，real-provider bench 才是有意义的对比）
 - [ ] **P19.7.3** — `apps/cli/test/perf/07-reflection-overhead.test.ts` — inline vs step-level vs run-end 三档 reflection 的 token 成本对比
 - [ ] **P19.7.4** — `apps/cli/test/perf/08-meta-reflection.test.ts` — 10-run meta reflection 触发延迟
 - [ ] **P19.7.5** — LangSmith-style quality 第二 axis：在 bench 报告里加 `quality: { planCoverage, reflectionConfidence, subagentCoordination }`（用 rule-based 评分，0-1）
