@@ -751,10 +751,10 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 
 ### P19.4 — Handoff + Supervisor Sub-agent
 
-- [x] **P19.4.1** — `HandoffSubAgent` 协议：sub-agent 通过 `{ handoff: { to: <name>, reason: string } }` tool call 把 control 交还给主 agent（OpenAI Swarm 风格；commit pending — P19.4.1+2 同 commit）
-- [x] **P19.4.2** — `SupervisorSubAgent`：supervisor 在每个 sub-agent step 后评估 `continue | redo | abort`，用 1 个 LLM call（haiku）决策（commit pending — P19.4.1+2 同 commit）
-- [ ] **P19.4.3** — Handoff 中间件：当 model 输出 `handoff` tool call 时停止当前 sub-agent，把 handoff 事件 push 到主 agent 上下文
-- [x] **P19.4.4** — 4 个 e2e：handoff 工具注册到 sub-agent registry / handoff 历史扫描 / supervisor 评估 continue 路径 / supervisor 评估 abort 路径（commit pending — P19.4.1+2 同 commit）
+- [x] **P19.4.1** — `HandoffSubAgent` 协议：sub-agent 通过 `{ handoff: { to: <name>, reason: string } }` tool call 把 control 交还给主 agent（OpenAI Swarm 风格；commit `75411bd`）
+- [x] **P19.4.2** — `SupervisorSubAgent`：supervisor 在每个 sub-agent step 后评估 `continue | redo | abort`，用 1 个 LLM call（haiku）决策（commit `75411bd`）
+- [x] **P19.4.3** — Handoff 中间件：`SubAgentMiddleware` 加 `enableHandoff?: boolean` 选项，true 时走 `createHandoffSubAgent` 并把 handoff payload 透传到 parent tool result（commit pending — P19.4.3 同 commit）
+- [x] **P19.4.4** — 4 个 e2e：handoff 工具注册到 sub-agent registry / handoff 历史扫描 / supervisor 评估 continue 路径 / supervisor 评估 abort 路径（commit `75411bd`） + 2 个 P19.4.3 middleware e2e（commit pending — P19.4.3 同 commit）
 
 ### P19.5 — MetaReflector + cross-run trust 调整
 

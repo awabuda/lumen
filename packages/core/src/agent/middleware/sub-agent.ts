@@ -14,6 +14,7 @@ import type { BaseProvider } from '../../message/provider.js'
 import { BaseTool, type ToolContext, type ToolRisk } from '../../tools/index.js'
 import type { AgentMiddleware } from '../middleware.js'
 import { type SubAgentSpec, SubAgentSpecSchema, createSubAgentFromSpec } from '../sub-agent.js'
+import { createHandoffSubAgent } from '../sub-agent-handoff.js'
 
 /** Stable tool name for the sub-agent dispatch tool. */
 export const SUB_AGENT_TOOL_NAME = 'task' as const
@@ -31,6 +32,14 @@ export interface SubAgentMiddlewareOptions {
   readonly specs: ReadonlyArray<SubAgentSpec>
   /** Optional per-call default max iterations. */
   readonly maxIterations?: number
+  /**
+   * P19.4.3 — if true, the middleware routes sub-agent runs through
+   * `createHandoffSubAgent` instead of the plain single-run factory.
+   * The handoff stub tool is auto-registered into the sub-agent's
+   * tool registry, and any `handoff` tool call the sub-agent emits
+   * is surfaced in the tool result so the parent can act on it.
+   */
+  readonly enableHandoff?: boolean
 }
 
 /** Internal state for the SubAgentMiddleware. */
@@ -84,6 +93,7 @@ interface ParsedSubAgentOptions {
   readonly specs: ReadonlyArray<SubAgentSpec>
   readonly maxIterations: number
   readonly specByName: ReadonlyMap<string, SubAgentSpec>
+  readonly enableHandoff: boolean
 }
 
 const parseOptions = (options: SubAgentMiddlewareOptions): ParsedSubAgentOptions => {
@@ -102,11 +112,16 @@ const parseOptions = (options: SubAgentMiddlewareOptions): ParsedSubAgentOptions
     specs,
     maxIterations: options.maxIterations ?? 10,
     specByName,
+    enableHandoff: options.enableHandoff === true,
   }
 }
 
 const formatOutput = (text: string): string =>
   text.length > 0 ? text : '(sub-agent produced no text)'
+
+/** Format a handoff payload as a parent-readable tool result suffix. */
+const formatHandoff = (handoff: { to: string; reason: string }): string =>
+  `\n[handoff: to=${handoff.to} reason=${JSON.stringify(handoff.reason)}]`
 
 /** Create the SubAgentMiddleware instance. */
 export const createSubAgentMiddleware = (
@@ -140,13 +155,32 @@ export const createSubAgentMiddleware = (
         }
       }
       try {
+        const parentConfig = {
+          provider: parsed.parent.provider,
+          tools: parsed.parent.tools,
+          ...(parsed.parent.model ? { model: parsed.parent.model } : {}),
+          ...(parsed.parent.cwd ? { cwd: parsed.parent.cwd } : {}),
+        }
+        if (parsed.enableHandoff) {
+          const handoff = createHandoffSubAgent({
+            parent: parentConfig,
+            spec,
+            prompt: parsedInput.data.prompt,
+            maxIterations: parsed.maxIterations,
+          })
+          const handoffResult = await handoff.run()
+          const text = formatOutput(handoffResult.result.finalMessage.content ?? '')
+          const handoffSuffix = handoffResult.handoff
+            ? formatHandoff(handoffResult.handoff)
+            : ''
+          return {
+            toolCallId: toolCall.id,
+            isError: false,
+            content: `${text}${handoffSuffix}`,
+          }
+        }
         const runner = createSubAgentFromSpec(
-          {
-            provider: parsed.parent.provider,
-            tools: parsed.parent.tools,
-            ...(parsed.parent.model ? { model: parsed.parent.model } : {}),
-            ...(parsed.parent.cwd ? { cwd: parsed.parent.cwd } : {}),
-          },
+          parentConfig,
           spec,
           parsedInput.data.prompt,
           parsed.maxIterations,
