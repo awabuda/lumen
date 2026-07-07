@@ -758,10 +758,12 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 
 ### P19.5 — MetaReflector + cross-run trust 调整
 
-- [x] **P19.5.1** — `BaseMetaReflector` 抽象（interface）+ `ClusteringMetaReflector` 实现：聚合 N 个 run 的 run-end reflection，按相似度聚类（commit pending — P19.5.1+2+3 同 commit）
-- [x] **P19.5.2** — 默认 `interval: 10, similarityThreshold: 0.5, kind: 'fact'`（每 10 run 触发；`META_REFLECTOR_DEFAULT_INTERVAL` 常量；commit pending — P19.5.1+2+3 同 commit）
-- [x] **P19.5.3** — cross-run trust 调整：`applyTrustDelta` helper 输出 `TrustDeltaPatch { recordId, delta, nextTrust, clusterSize }`，delta 范围 `[-0.1, +0.1]`，不对 record content 做修改（commit pending — P19.5.1+2+3 同 commit）
-- [x] **P19.5.4** — 2 个 e2e：cluster 触发 / trust delta 可观察（commit pending — P19.5.1+2+3 同 commit）
+- [x] **P19.5.1** — `BaseMetaReflector` 抽象（interface）+ `ClusteringMetaReflector` 实现：聚合 N 个 run 的 run-end reflection，按相似度聚类（commit `c58585c`）
+- [x] **P19.5.2** — 默认 `interval: 10, similarityThreshold: 0.5, kind: 'fact'`（每 10 run 触发；`META_REFLECTOR_DEFAULT_INTERVAL` 常量；commit `c58585c`）
+- [x] **P19.5.3** — cross-run trust 调整：`applyTrustDelta` helper 输出 `TrustDeltaPatch { recordId, delta, nextTrust, clusterSize }`，delta 范围 `[-0.1, +0.1]`，不对 record content 做修改（commit `c58585c`）
+- [x] **P19.5.4** — 2 个 e2e：cluster 触发 / trust delta 可观察（commit `c58585c`）+ 1 个 Q2 config-override e2e（commit pending — 本 commit）
+- [x] **P19.5 design basis** — 4 框架对比研究（LangGraph 1.0 long-term memory / Claude Code CLAUDE.md + auto memory / OpenClaw 未验证 / Hermes fact_feedback trust delta），结论：lumen 当前对称 ±0.1 + 10 run 周期是 Lumen 自己的经验值（commit `64c0a29`）
+- [ ] **P19.5.5** — asymmetric trust delta 决策（Hermes 模式：+0.05 / -0.10 负向 2x 权重）。设计依据见 `docs/p19.5-meta-reflector-design-basis.md` §5 Q1。当前实现保持对称 ±0.1，**等 P20 收集 1 个 production run-end reflection 信号后再决定**
 
 ### P19.6 — CLI surface: `lumen plan` / `lumen approve` / `lumen reflect`
 

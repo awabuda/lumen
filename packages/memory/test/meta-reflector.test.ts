@@ -183,4 +183,25 @@ describe('createClusteringMetaReflector', () => {
     const reflector = createClusteringMetaReflector()
     expect(reflector.id).toBe('clustering')
   })
+
+  it('honors a custom interval (Q2: factory option overrides the default constant)', async () => {
+    const store = new FakeStore()
+    // Cluster of size 5 with default interval 10 would yield
+    // ~0.07 delta. With interval=5 the same cluster should yield
+    // the full +0.1 delta (ratio = 1).
+    store.seed(fact('a', 'The user prefers dark mode', { createdAt: 1, trust: 0.5, tags: ['theme'] }))
+    store.seed(fact('b', 'The user prefers dark mode in the editor', { createdAt: 2, trust: 0.5, tags: ['theme'] }))
+    store.seed(fact('c', 'The user prefers dark mode in the IDE', { createdAt: 3, trust: 0.5, tags: ['theme'] }))
+    store.seed(fact('d', 'The user prefers dark mode everywhere', { createdAt: 4, trust: 0.5, tags: ['theme'] }))
+    store.seed(fact('e', 'The user prefers dark mode always', { createdAt: 5, trust: 0.5, tags: ['theme'] }))
+
+    const reflector = createClusteringMetaReflector({
+      interval: 5,
+      similarityThreshold: 0.4,
+    })
+    const patches = await reflector.reflect(store)
+    expect(patches).toHaveLength(1)
+    expect(patches[0]?.clusterSize).toBe(5)
+    expect(patches[0]?.delta).toBeCloseTo(META_REFLECTOR_MAX_DELTA, 4)
+  })
 })
