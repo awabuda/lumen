@@ -758,10 +758,10 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 
 ### P19.5 — MetaReflector + cross-run trust 调整
 
-- [ ] **P19.5.1** — `BaseMetaReflector` 抽象（interface）+ `ClusteringMetaReflector` 实现：聚合 N 个 run 的 run-end reflection，按相似度聚类
-- [ ] **P19.5.2** — `AgentConfig.metaReflection?: { interval?: number, strategy: 'clustering' }`，默认 `{ interval: 10, strategy: 'clustering' }`（每 10 run 触发）
-- [ ] **P19.5.3** — cross-run trust 调整：把 cross-run reflection 写回 BaseMemoryStore 的 fact，**trust delta**（不复写原 fact，只调整 trust score）—— 借鉴 fact_store 模式
-- [ ] **P19.5.4** — 2 个 e2e：10-run 触发 / trust 调整可观察
+- [x] **P19.5.1** — `BaseMetaReflector` 抽象（interface）+ `ClusteringMetaReflector` 实现：聚合 N 个 run 的 run-end reflection，按相似度聚类（commit pending — P19.5.1+2+3 同 commit）
+- [x] **P19.5.2** — 默认 `interval: 10, similarityThreshold: 0.5, kind: 'fact'`（每 10 run 触发；`META_REFLECTOR_DEFAULT_INTERVAL` 常量；commit pending — P19.5.1+2+3 同 commit）
+- [x] **P19.5.3** — cross-run trust 调整：`applyTrustDelta` helper 输出 `TrustDeltaPatch { recordId, delta, nextTrust, clusterSize }`，delta 范围 `[-0.1, +0.1]`，不对 record content 做修改（commit pending — P19.5.1+2+3 同 commit）
+- [x] **P19.5.4** — 2 个 e2e：cluster 触发 / trust delta 可观察（commit pending — P19.5.1+2+3 同 commit）
 
 ### P19.6 — CLI surface: `lumen plan` / `lumen approve` / `lumen reflect`
 

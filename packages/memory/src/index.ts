@@ -72,6 +72,18 @@ export {
   type ExtractedFact,
 } from './reflector.js'
 export {
+  applyTrustDelta,
+  clusterFactsBySimilarity,
+  createClusteringMetaReflector,
+  META_REFLECTOR_DEFAULT_INTERVAL,
+  META_REFLECTOR_DEFAULT_SIMILARITY,
+  META_REFLECTOR_MAX_DELTA,
+  type BaseMetaReflector,
+  type ClusterOptions,
+  type FactCluster,
+  type TrustDeltaPatch,
+} from './meta-reflector.js'
+export {
   BaseConflictDetector,
   KeywordConflictDetector,
   LLMConflictDetector,
