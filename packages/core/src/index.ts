@@ -160,6 +160,26 @@ export {
   type SubAgentTask,
   type SubAgentTaskResult,
 } from './agent/sub-agent-orchestration.js'
+export {
+  createHandoffSubAgent,
+  createSupervisorSubAgent,
+  HandoffSubAgent,
+  SupervisorSubAgent,
+  HANDOFF_TOOL_NAME,
+  HANDOFF_TOOL_RISK,
+  HandoffPayloadSchema,
+  HandoffToolInputSchema,
+  SupervisorDecisionSchema,
+  SupervisorDecisionToolInputSchema,
+  HandoffResultSchema,
+  SupervisorRunResultSchema,
+  extractHandoff,
+  type HandoffSubAgentOptions,
+  type HandoffResult,
+  type SupervisorSubAgentOptions,
+  type SupervisorDecision,
+  type SupervisorRunResult,
+} from './agent/sub-agent-handoff.js'
 
 // Provider pool (multi-backend routing + failover)
 export {

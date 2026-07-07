@@ -742,19 +742,19 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 
 ### P19.3 — Sequential + Parallel Sub-agent
 
-- [x] **P19.3.1** — **删除** `BaseSubAgent` 抽象和 `SingleRunSubAgent`（过度设计的 wrapper class，违反 P19 范式 #4；commit 待填）
-- [x] **P19.3.2** — 重新设计为 `SubAgentSpec` interface（`{ name, description, systemPrompt, tools, model? }`）—— deepagents 风格（commit 待填）
-- [x] **P19.3.3** — `SubAgentMiddleware`（实现 `AgentMiddleware`）持有一个 SubAgentSpec 列表 + `task` 工具（input: `{ subagent, prompt }`），让主 agent 召唤 sub-agent（commit 待填）
-- [x] **P19.3.4** — `createSequentialSubAgent`（**独立实现，不合并 middleware**）：串行执行 N 个 sub-agent（commit 待填）
-- [x] **P19.3.5** — `createParallelSubAgent`：`Promise.all` 并行执行 N 个 sub-agent，结果合并（hard assert `max < 60s` 沿用 P18.3；commit 待填）
-- [x] **P19.3.6** — 6 个 core tests：sequential 顺序 / sequential id / sequential stream / parallel 并发顺序 / parallel id / parallel timeout（commit 待填）
+- [x] **P19.3.1** — **删除** `BaseSubAgent` 抽象和 `SingleRunSubAgent`（过度设计的 wrapper class，违反 P19 范式 #4；commit `fa24bf4`）
+- [x] **P19.3.2** — 重新设计为 `SubAgentSpec` interface（`{ name, description, systemPrompt, tools, model? }`）—— deepagents 风格（commit `fa24bf4`）
+- [x] **P19.3.3** — `SubAgentMiddleware`（实现 `AgentMiddleware`）持有一个 SubAgentSpec 列表 + `task` 工具（input: `{ subagent, prompt }`），让主 agent 召唤 sub-agent（commit `f22ffcd`）
+- [x] **P19.3.4** — `createSequentialSubAgent`（**独立实现，不合并 middleware**）：串行执行 N 个 sub-agent（commit `bb07060`）
+- [x] **P19.3.5** — `createParallelSubAgent`：`Promise.all` 并行执行 N 个 sub-agent，结果合并（hard assert `max < 60s` 沿用 P18.3；commit `bb07060`）
+- [x] **P19.3.6** — 6 个 core tests：sequential 顺序 / sequential id / sequential stream / parallel 并发顺序 / parallel id / parallel timeout（commit `bb07060`）
 
 ### P19.4 — Handoff + Supervisor Sub-agent
 
-- [ ] **P19.4.1** — `HandoffSubAgent` 协议：sub-agent 通过 `{ handoff: { to: <name>, reason: string } }` tool call 把 control 交还给主 agent（OpenAI Swarm 风格）
-- [ ] **P19.4.2** — `SupervisorSubAgent`：supervisor 在每个 sub-agent step 后评估 `continue | redo | abort`，用 1 个 LLM call（haiku）决策
+- [x] **P19.4.1** — `HandoffSubAgent` 协议：sub-agent 通过 `{ handoff: { to: <name>, reason: string } }` tool call 把 control 交还给主 agent（OpenAI Swarm 风格；commit pending — P19.4.1+2 同 commit）
+- [x] **P19.4.2** — `SupervisorSubAgent`：supervisor 在每个 sub-agent step 后评估 `continue | redo | abort`，用 1 个 LLM call（haiku）决策（commit pending — P19.4.1+2 同 commit）
 - [ ] **P19.4.3** — Handoff 中间件：当 model 输出 `handoff` tool call 时停止当前 sub-agent，把 handoff 事件 push 到主 agent 上下文
-- [ ] **P19.4.4** — 3 个 e2e：handoff 单次 / handoff 链式 / supervisor 评估 abort 路径
+- [x] **P19.4.4** — 4 个 e2e：handoff 工具注册到 sub-agent registry / handoff 历史扫描 / supervisor 评估 continue 路径 / supervisor 评估 abort 路径（commit pending — P19.4.1+2 同 commit）
 
 ### P19.5 — MetaReflector + cross-run trust 调整
 
