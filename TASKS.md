@@ -776,8 +776,8 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 - [x] **P19.7.1** — `apps/cli/test/perf/05-sequential-subagent.test.ts` — N=3 sequential sub-agent wall-clock（commit `5641199`）
 - [x] **P19.7.2** — `apps/cli/test/perf/06-parallel-subagent.test.ts` — N=3 parallel sub-agent wall-clock（commit `4e28a46`）
 - [x] **P19.7.3** — `apps/cli/test/perf/07-reflection-overhead.test.ts` — 4 档 reflection overhead 对比（commit `ad81dff`）
-- [x] **P19.7.4** — `apps/cli/test/perf/08-meta-reflection.test.ts` — 10-run meta reflection 触发延迟（commit pending — 本 commit；bench 输出：p50 0.05ms / max 1.01ms / patches=1，1 个 cluster from 10 deduped facts）
-- [ ] **P19.7.5** — LangSmith-style quality 第二 axis：在 bench 报告里加 `quality: { planCoverage, reflectionConfidence, subagentCoordination }`（用 rule-based 评分，0-1）
+- [x] **P19.7.4** — `apps/cli/test/perf/08-meta-reflection.test.ts` — 10-run meta reflection 触发延迟（commit `9f9550e`）
+- [x] **P19.7.5** — LangSmith-style quality 第二 axis：`packages/core/src/bench/quality.ts` 提供 `planCoverageScore` / `reflectionConfidenceScore` / `subagentCoordinationScore` 三个 rule-based 评分 + `computeQualityScores` 聚合（commit pending — 本 commit；3 个 helper 全部 [0,1]，0 LLM 调用，e2e deterministic；11 个 unit test 覆盖）
 
 ### P19 关键决策（2026-06-25 三轮收敛，详细论证见 `docs/P19-DESIGN.md`）
 

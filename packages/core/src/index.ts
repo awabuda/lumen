@@ -340,3 +340,17 @@ export {
   type AcquireResult,
   type MutexOptions,
 } from './concurrency/index.js'
+
+// Bench quality scoring (P19.7.5) — rule-based second axis for
+// performance reports. Kept in core (not in the bench files)
+// so app-level tools can also call these helpers for ad-hoc
+// quality reporting.
+export {
+  QualityScoresSchema,
+  type QualityScores,
+  planCoverageScore,
+  reflectionConfidenceScore,
+  subagentCoordinationScore,
+  computeQualityScores,
+  qualityTableCell,
+} from './bench/quality.js'
