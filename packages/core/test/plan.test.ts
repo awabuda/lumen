@@ -200,6 +200,24 @@ describe('PlanStore', () => {
     const store = new PlanStore()
     expect(() => store.save({ ...plan, steps: [] })).toThrow()
   })
+
+  it('serializes via toJSON and re-hydrates into a fresh store', () => {
+    const store = new PlanStore()
+    store.save(plan)
+    store.save({ ...plan, id: 'p2' })
+    const json = store.toJSON()
+    expect(json).toHaveLength(2)
+
+    const restored = new PlanStore()
+    restored.hydrate(json)
+    expect(restored.size).toBe(2)
+    expect(restored.get(plan.id)?.id).toBe(plan.id)
+  })
+
+  it('rejects invalid payloads on hydrate', () => {
+    const store = new PlanStore()
+    expect(() => store.hydrate([{ ...plan, steps: [] }])).toThrow()
+  })
 })
 
 describe('BasePlanner interface', () => {

@@ -308,4 +308,26 @@ export class PlanStore {
   public get all(): ReadonlyArray<Plan> {
     return [...this.plans.values()]
   }
+
+  /**
+   * Serialize every plan to a plain JSON-serializable array. Used by
+   * CLI commands to persist PlanStore to a file across process
+   * restarts (e.g. `~/.lumen/plans.json`).
+   */
+  public toJSON(): ReadonlyArray<Plan> {
+    return [...this.plans.values()].map((plan) => PlanSchema.parse(plan))
+  }
+
+  /**
+   * Hydrate the store from a serialized payload (e.g. read back from
+   * a JSON file). Existing entries with the same id are overwritten;
+   * the store is **not** cleared first — callers that want a
+   * from-scratch store should construct a new `PlanStore` instance.
+   */
+  public hydrate(plans: ReadonlyArray<Plan>): void {
+    for (const raw of plans) {
+      const plan = PlanSchema.parse(raw)
+      this.plans.set(plan.id, plan)
+    }
+  }
 }
