@@ -155,6 +155,42 @@ program
   })
 
 program
+  .command('reflect')
+  .description('Manually trigger reflection (rule-based or cross-run meta)')
+  .argument('[subcommand]', '"run" (per-session rule-based) or "meta" (cross-run trust delta)', 'run')
+  .option('--memory-path <path>', 'Override the SQLite memory database path')
+  .option('--session-id <id>', 'reflect run: explicit session id (default: most recent)')
+  .option('--interval <n>', 'reflect meta: trust-delta interval (default 10)')
+  .option('--similarity <n>', 'reflect meta: Jaccard similarity threshold (default 0.5)')
+  .action(async (subcommand: string, opts: Record<string, unknown>) => {
+    const { reflectMetaCommand, reflectRunCommand } = await import('./commands/reflect.js')
+    const memoryPath = opts.memoryPath as string | undefined
+    let code = 0
+    if (subcommand === 'run') {
+      code = await reflectRunCommand({
+        ...(memoryPath !== undefined ? { memoryPath } : {}),
+        ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId as string } : {}),
+      })
+    } else if (subcommand === 'meta') {
+      const intervalRaw = opts.interval
+      const similarityRaw = opts.similarity
+      code = await reflectMetaCommand({
+        ...(memoryPath !== undefined ? { memoryPath } : {}),
+        ...(typeof intervalRaw === 'string'
+          ? { interval: Number.parseInt(intervalRaw, 10) }
+          : {}),
+        ...(typeof similarityRaw === 'string'
+          ? { similarityThreshold: Number.parseFloat(similarityRaw) }
+          : {}),
+      })
+    } else {
+      process.stderr.write(`lumen reflect: unknown subcommand: ${subcommand}\n`)
+      code = 1
+    }
+    process.exit(code)
+  })
+
+program
   .command('update')
   .description('Check for newer Lumen releases')
   .argument('[subcommand]', '"check" (default) or "print-version"', 'check')
