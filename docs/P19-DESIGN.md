@@ -275,14 +275,16 @@ export async function llmReflect(
 |---|---|---|
 | **LangChain 1.0** | 无原生 reflection | Lumen 新增 |
 | **LangGraph 1.0** | 无原生 reflection | Lumen 新增 |
-| **OpenClaw** | daily→long-term 蒸馏（cross-session reflection） | Lumen P19.5 meta 借鉴 |
+| **OpenClaw** | 未公开（公开内容仅 chat-platform gateway + `soul.md` 哲学散文站，无 memory 架构文档；2026-07-07 fetch 验证） | ⚠️ **未验证**。本表 3.4/5.4/早期 draft 中提到的"OpenClaw daily→long-term 蒸馏"在 `https://openclaw.ai/blog/`、`https://soul.md` 上**无证据**。详见 `docs/p19.5-meta-reflector-design-basis.md` §0/§2.3 |
 | **Claude Code** | 无 reflection（visible 思考） | Lumen 新增 |
-| **Hermes** | fact_store trust score（per-fact reflection） | Lumen P19.5 cross-run 借鉴 |
+| **Hermes** | fact_store trust score（per-fact reflection） | Lumen P19.5 cross-run 借鉴（**唯一真实 fetch 证据**） |
 
 Lumen 三档 reflection 是 **新设计**。inline 0-cost 启发式是
-lumen 自己想的；step-level + run-end 借鉴 OpenClaw daily distillation
-的概念但实现完全不同（OpenClaw 是 cross-session，Lumen 是
-cross-step + cross-run）。
+lumen 自己想的；step-level + run-end 是 lumen 内部 cross-step
++ cross-run 模式，**不借鉴任何 upstream 框架的具体实现**
+（早期 draft 误称"借鉴 OpenClaw daily distillation"，**该陈述
+应视为已撤销** — 见 `docs/p19.5-meta-reflector-design-basis.md`
+§4.4 修正建议）。
 
 ---
 
@@ -394,12 +396,14 @@ Hermes fact_store 的 holographic trust 模式。
 | 框架 | Meta/cross-run reflection | 与 Lumen P19.5 对齐点 |
 |---|---|---|
 | **LangChain 1.0** | 无 | Lumen 新增 |
-| **OpenClaw** | daily→long-term 蒸馏（cross-session memory upgrade） | Lumen 借鉴但实现不同 |
-| **Hermes** | fact_store trust score（per-fact, holographic） | Lumen 借鉴 trust delta 模式 |
+| **OpenClaw** | 未公开 | ⚠️ **未验证**（公开博客无 memory 架构；详见 `docs/p19.5-meta-reflector-design-basis.md` §2.3） |
+| **Hermes** | fact_store trust score（per-fact, holographic） | Lumen 借鉴 trust delta 模式（**唯一真实 fetch 证据**） |
 | **LangGraph 1.0** | 无 | Lumen 新增 |
 
 Lumen P19.5 是 **新设计**（meta reflection + trust delta）。其他
-框架都没有 typed meta reflection。
+框架都没有 typed meta reflection。**OpenClaw 行降级为未验证** —
+早期 draft 中"借鉴 OpenClaw daily→long-term 蒸馏"的陈述应视为
+已撤销。
 
 ---
 

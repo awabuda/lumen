@@ -795,11 +795,11 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 
 | 维度 | LangChain 1.0 (2025-10-17 GA) | LangGraph 1.0 | OpenClaw | Claude Code | Hermes Agent | **Lumen P19+ 方案** |
 |---|---|---|---|---|---|---|
-| Architecture | LCEL `\|` 组合 | StateGraph declarative nodes+edges | daily→long-term 蒸馏 | Task subagent + Plan mode | session_search FTS5 | middleware + createAgent factory |
+| Architecture | LCEL `\|` 组合 | StateGraph declarative nodes+edges | chat-gateway 转发（无 memory 架构）⚠️ | Task subagent + Plan mode | session_search FTS5 | middleware + createAgent factory |
 | Type | Zod（TS port feature lag） | Pydantic（Python-first） | 内置 | 内置 | Zod | Zod full surface |
-| State | AgentState typed | typed channels+Command | SOUL.md | task list | fact_store holographic | state schema + middleware context |
-| Tools | Tool runtime + middleware | tool_node + Command | 调 LLM | WebFetch + Task | tool calling | Zod discriminated + middleware |
-| Memory | store API + checkpointers | checkpointer (production) | heartbeat distillation | checkpoints | fact_store trust score | SqliteStore + MetaReflector trust delta |
+| State | AgentState typed | typed channels+Command | N/A（未公开 memory 架构）⚠️ | task list | fact_store holographic | state schema + middleware context |
+| Tools | Tool runtime + middleware | tool_node + Command | chat platform 转发（无 agent 工具层公开） | WebFetch + Task | tool calling | Zod discriminated + middleware |
+| Memory | store API + checkpointers | checkpointer (production) | **未验证**（`openclaw.ai/blog` 公开内容仅 chat-gateway + security，**无 memory 蒸馏机制**；`soul.md` 是 steipete 哲学散文站不是产品）⚠️ | checkpoints | fact_store trust score | SqliteStore + MetaReflector trust delta |
 | Concurrency | sync/async parity | prebuilt+Command | group-chat 礼仪 | Task 并行 | delegate_task | TS setInterval+AbortController + Promise.all |
 | Testing | pytest+LangSmith trace | pytest+checkpointer replay | 无 | 无 | session_search | vitest+E2E+perf（轻量版 LangSmith） |
 | Documentation | tutorial+cookbook+API | doc+cookbook | blog | 内部 | 散落 | VitePress（深但缺 tutorial 入口，P19 之后补） |
@@ -814,7 +814,7 @@ Same as P0–P16 — remote unreachable (PAT / SSH / 443 all failed), no retry. 
 6. **E2E + perf bench harness**（轻量版 LangSmith，缺 dataset+scoring，P19.7 补）
 7. **不开 SaaS**（LangSmith 是商业产品，Lumen self-host）
 8. **强 typed error taxonomy**（P9 typed errors + P19 reflection error context）
-9. **PlanStore + 三档 reflection + MetaReflector**（OpenClaw 缺、Lumen 缺的真正差异化）
+9. **PlanStore + 三档 reflection + MetaReflector**（无 upstream 公开对应 — 4 框架对比里 OpenClaw 公开内容不含此机制，Hermes fact_feedback 是最接近的对照但实现完全不同）
 10. **Sequential/Parallel/Handoff/Supervisor 4 种 sub-agent 编排**（Claude Code Task 工具的内部 + OpenAI Swarm 模式）
 
 ### P19 总预算
