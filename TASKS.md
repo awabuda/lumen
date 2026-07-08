@@ -855,8 +855,8 @@ cd packages/memory && pnpm rebuild better-sqlite3   # 若改了 memory 抽象
 - [ ] **P20.1** — HITL（Human-in-the-Loop）middleware（interrupt_on declarative，吸收 deepagents / LangChain 1.0）
 - [ ] **P20.2** — Heartbeat / long-running task supervisor（TS setInterval + AbortController，每 30s 探活，failed → 恢复）
 - [ ] **P20.3** — Context 压缩（summarization middleware，借鉴 deepagents 默认 stack 的 Summarization）
-- [x] **P20.4.1** — `packages/core/src/agent/checkpoint.ts` — `AgentCheckpoint` interface + `BaseCheckpointStore` interface + `InMemoryCheckpointStore` + `checkpointFromRun` helper + `AgentCheckpointSchema`（commit pending — 本 commit；10 个 unit test）
-- [ ] **P20.4.2** — `Agent.run` 集成 `resumeFrom?: AgentCheckpoint` + abort 时自动 save checkpoint
+- [x] **P20.4.1** — `packages/core/src/agent/checkpoint.ts` — `AgentCheckpoint` interface + `BaseCheckpointStore` interface + `InMemoryCheckpointStore` + `checkpointFromRun` helper + `AgentCheckpointSchema`（commit `291a943`）
+- [x] **P20.4.2** — `Agent.run` 集成 `resumeFrom?: AgentCheckpoint` + abort 时自动 save checkpoint（commit pending — 本 commit；3 个 e2e：auto-save on tool-dispatch failure / resume from checkpoint preserves message history / default still uses fresh system+user seed）
 - [ ] **P20.4.3** — `lumen checkpoint list/show/save` CLI 子命令
 - [ ] **P20.4.4** — SQLite-backed checkpoint store（downstream package，core tier 不依赖 @lumen/memory）
 - [ ] **P20.5** — 失败降级链（fallback chain：primary → secondary → tertiary provider，加自动 checkpoint）

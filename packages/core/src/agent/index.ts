@@ -90,6 +90,23 @@ export interface AgentRunOptions {
    * cut off mid-thought.
    */
   readonly oneTurnGraceCall?: boolean
+  /**
+   * P20.4.2: resume from a previously saved checkpoint. When
+   * provided, the agent loop re-enters with the checkpoint's
+   * `messages` as the conversation history (the `userMessage`
+   * option is ignored). The session id from the checkpoint is
+   * reused unless `sessionId` is explicitly given.
+   */
+  readonly resumeFrom?: import('./checkpoint.js').AgentCheckpoint
+  /**
+   * P20.4.2: when the loop throws (abort, max iterations, budget
+   * exceeded), the latest message history is auto-saved as a
+   * checkpoint under this store. Pass `InMemoryCheckpointStore`
+   * for tests; pass a SQLite-backed store for cross-process
+   * persistence. The store is **not** read on resume — use
+   * `resumeFrom` for that.
+   */
+  readonly checkpointStore?: import('./checkpoint.js').BaseCheckpointStore
 }
 
 export interface AgentRunResult {
@@ -194,7 +211,12 @@ export class Agent {
    * Returns the final assistant message plus the full message history.
    */
   public async run(options: AgentRunOptions): Promise<AgentRunResult> {
-    const sessionId = options.sessionId ?? newSessionId()
+    // P20.4.2: when resumeFrom is provided, reuse the checkpoint's
+    // sessionId and skip the fresh "system + user" seed. The agent
+    // loop continues with the checkpoint's messages as the
+    // conversation history; the userMessage option is ignored.
+    const checkpoint = options.resumeFrom
+    const sessionId = options.sessionId ?? checkpoint?.sessionId ?? newSessionId()
     const signal = options.signal
     const maxIterations = options.maxIterations ?? 50
     const oneTurnGrace = options.oneTurnGraceCall ?? true
@@ -205,10 +227,12 @@ export class Agent {
       throw new AbortError('pre-aborted')
     }
 
-    const messages: Message[] = [
-      { role: 'system', content: this.systemPrompt },
-      { role: 'user', content: options.userMessage },
-    ]
+    const messages: Message[] = checkpoint
+      ? [...checkpoint.messages]
+      : [
+          { role: 'system', content: this.systemPrompt },
+          { role: 'user', content: options.userMessage },
+        ]
 
     const budget = new Budget({
       tokens: this.provider.capabilities.maxContextTokens, // rough upper bound
@@ -366,6 +390,28 @@ export class Agent {
         },
         { sessionId, iteration: iterations, startedAt: Date.now() },
       )
+      // P20.4.2: when a checkpointStore is provided, snapshot the
+      // current message history so the caller can resume later. We
+      // save BEFORE the throw so a caller wrapping the run in
+      // `try { ... } catch { await store.get(...) }` finds the
+      // snapshot ready. We use a dynamic import to avoid a
+      // top-level cycle (checkpoint.ts imports from this file).
+      if (options.checkpointStore) {
+        try {
+          const { checkpointFromRun: toCheckpoint } = await import('./checkpoint.js')
+          await options.checkpointStore.save(
+            toCheckpoint({
+              sessionId,
+              finalMessage: lastMessage,
+              iterations,
+              messages,
+            }),
+          )
+        } catch {
+          // Checkpoint save is best-effort; the original error
+          // is the one the caller asked us to throw.
+        }
+      }
       throw err
     }
   }
