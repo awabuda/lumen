@@ -420,3 +420,17 @@ export {
   type HeartbeatHandle,
   type HeartbeatOptions,
 } from './heartbeat.js'
+
+// Observability — trace context (P20.8). Lightweight W3C-style
+// trace propagation: 16-hex-char traceId + spanId, optional
+// parentSpanId, optional name. `runWithTrace` is the documented
+// entry point for trace-tagged scopes. A future P20.8.x ticket
+// can add `createTraceHook(trace)` to wire the trace into Agent
+// hook events without breaking the public surface.
+export {
+  createTrace,
+  formatTrace,
+  runWithTrace,
+  type CreateTraceOptions,
+  type TraceContext,
+} from './trace.js'
