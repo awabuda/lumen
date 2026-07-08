@@ -434,3 +434,20 @@ export {
   type CreateTraceOptions,
   type TraceContext,
 } from './trace.js'
+
+// Dataset + scoring (P20.10) — structured benchmark harness.
+// Sits on top of the existing apps/cli/test/perf/ harness;
+// adds BenchmarkCase / BenchmarkScore types and a
+// runDatasetBench helper that never throws (per-case errors
+// are captured as failed score rows). Future P20.10.2 can
+// rewrite the existing per-scenario benches in terms of
+// runDatasetBench without changing the bench output format.
+export {
+  BenchmarkScoreSchema,
+  reportTableRow,
+  runDatasetBench,
+  type BenchmarkCase,
+  type BenchmarkReport,
+  type BenchmarkScore,
+  type RunDatasetBenchOptions,
+} from './benchmark.js'
