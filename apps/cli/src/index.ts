@@ -155,6 +155,46 @@ program
   })
 
 program
+  .command('checkpoint')
+  .description('Inspect and manage saved agent run checkpoints')
+  .argument('<subcommand>', '"list <session-id>", "show <id>", or "delete <id>"')
+  .argument('[arg]', 'Session id (for "list") or checkpoint id (for "show"/"delete")')
+  .action(async (subcommand: string, arg: string | undefined) => {
+    const {
+      checkpointDeleteCommand,
+      checkpointListCommand,
+      checkpointShowCommand,
+    } = await import('./commands/checkpoint.js')
+    let code = 0
+    if (subcommand === 'list') {
+      if (!arg) {
+        process.stderr.write('lumen checkpoint: missing <session-id> for "list"\n')
+        code = 1
+      } else {
+        code = await checkpointListCommand({ sessionId: arg })
+      }
+    } else if (subcommand === 'show') {
+      if (!arg) {
+        process.stderr.write('lumen checkpoint: missing <id> for "show"\n')
+        code = 1
+      } else {
+        code = await checkpointShowCommand({ id: arg })
+      }
+    } else if (subcommand === 'delete') {
+      if (!arg) {
+        process.stderr.write('lumen checkpoint: missing <id> for "delete"\n')
+        code = 1
+      } else {
+        code = await checkpointDeleteCommand({ id: arg })
+      }
+    } else {
+      process.stderr.write(`lumen checkpoint: unknown subcommand: ${subcommand}\n`)
+      code = 1
+    }
+    process.exit(code)
+  })
+
+program
   .command('reflect')
   .description('Manually trigger reflection (rule-based or cross-run meta)')
   .argument('[subcommand]', '"run" (per-session rule-based) or "meta" (cross-run trust delta)', 'run')
