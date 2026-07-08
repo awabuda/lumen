@@ -407,3 +407,16 @@ export {
   type SkillTriggerOptions,
   type SkillTriggerState,
 } from './agent/middleware/skill-trigger.js'
+
+// Heartbeat / long-running supervisor (P20.2) — outer wrapper
+// around Agent.run that aborts the run after `timeoutMs` of
+// inactivity. Deliberately NOT a middleware: the supervisor
+// runs between agent iterations and the agent loop has no
+// "last activity" hook. A wrapper is the only honest place.
+export {
+  HEARTBEAT_DEFAULT_INTERVAL_MS,
+  runWithHeartbeat,
+  startHeartbeat,
+  type HeartbeatHandle,
+  type HeartbeatOptions,
+} from './heartbeat.js'
