@@ -852,7 +852,11 @@ cd packages/memory && pnpm rebuild better-sqlite3   # 若改了 memory 抽象
 待 P19 完成 + 解决 sandbox 网络 + 配置 NODE_AUTH_TOKEN（npm publish）+ GH actions 验证后 push。
 
 ### Backlog (P20+ candidates)
-- [ ] **P20.1** — HITL（Human-in-the-Loop）middleware（interrupt_on declarative，吸收 deepagents / LangChain 1.0）
+### P20.1 — HITL（Human-in-the-Loop）middleware（interrupt_on declarative，吸收 deepagents / LangChain 1.0）
+
+- [x] **P20.1.1** — `packages/core/src/agent/middleware/interrupt.ts` — `createInterruptMiddleware({ toolNames?, maxIterations?, onError? })` + `InterruptOptionsSchema` + `InterruptReasonSchema` + `InterruptState`（commit pending — 本 commit；6 个 e2e：rule-less throw / tool-name abort + checkpoint / not-in-list pass / maxIterations abort + checkpoint / name 'interrupt' / non-positive reject）
+- [ ] **P20.1.2** — `lumen chat` TUI 集成 interrupt 提示 + 人工 approve / reject 按钮
+- [ ] **P20.1.3** — `lumen run` 集成 `--interrupt-on <tool-name>` flag
 - [ ] **P20.2** — Heartbeat / long-running task supervisor（TS setInterval + AbortController，每 30s 探活，failed → 恢复）
 - [ ] **P20.3** — Context 压缩（summarization middleware，借鉴 deepagents 默认 stack 的 Summarization）
 - [x] **P20.4.1** — `packages/core/src/agent/checkpoint.ts` — `AgentCheckpoint` interface + `BaseCheckpointStore` interface + `InMemoryCheckpointStore` + `checkpointFromRun` helper + `AgentCheckpointSchema`（commit `291a943`）

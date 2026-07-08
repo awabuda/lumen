@@ -366,3 +366,16 @@ export {
   type AgentCheckpoint,
   type BaseCheckpointStore,
 } from './agent/checkpoint.js'
+
+// HITL interrupt middleware (P20.1) — declarative rules that
+// throw AbortError when a tool name, max-iteration, or tool
+// error matches. The P20.4.2 catch path in Agent.run then
+// auto-saves a checkpoint so the caller can resume.
+export {
+  InterruptOptionsSchema,
+  InterruptReasonSchema,
+  createInterruptMiddleware,
+  type InterruptOptions,
+  type InterruptReason,
+  type InterruptState,
+} from './agent/middleware/interrupt.js'
