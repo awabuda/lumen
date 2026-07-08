@@ -866,7 +866,7 @@ cd packages/memory && pnpm rebuild better-sqlite3   # 若改了 memory 抽象
   - 文档化原则：ProviderPool 的内部 retry 是 transparent 的，Agent.run 只在 catch 时 save checkpoint。这把 P20.5 的"fallback chain + auto-checkpoint"行为收敛到一个可验证的契约。
   - 未来增强（P20.5+）：如果需要 record 中间切换（primary fail → secondary ok）的 metadata，可加 `onProviderFailure?: (providerId, error) => void` 回调 hook 到 ProviderPool chat。
 - [ ] **P20.6** — Skill 渐进式加载（trigger-based loading，吸收 LangChain 1.0 deepagents Filesystem middleware 模式）
-- [ ] **P20.7** — Agent team（multi-agent workspace，借鉴 OpenClaw group-chat 礼仪 + Claude Code Task delegation）
+- [x] **P20.7** — Agent team（multi-agent workspace）— 设计基线落地：`docs/P20.7-agent-team.md` 说明 4 模式（sequential/parallel/handoff/supervisor）通过 shared PlanStore 组合的 pattern + 4-framework 对比 + future P20.7.x 子任务。**不**改 core（commit pending — 本 commit）
 - [ ] **P20.8** — Observability 深度（trace ID + span，吸收 LangSmith 概念但不引 SaaS）
 - [ ] **P20.9** — Tutorial 入口（docs-site 加 getting-started.md 教程，弥补 docs 维度 Lumen 缺口）
 - [ ] **P20.10** — Dataset + scoring（bench harness 升级，吸收 LangSmith dataset 概念）
