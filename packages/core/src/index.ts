@@ -379,3 +379,14 @@ export {
   type InterruptReason,
   type InterruptState,
 } from './agent/middleware/interrupt.js'
+
+// Context compression middleware (P20.3) — collapse long
+// message histories into a rolling summary before the model
+// call. Defaults: maxMessages=20, keepLastN=10. Pass a custom
+// summaryFn for LLM-backed summarisation; the default is a
+// pure-function truncation (no API call).
+export {
+  ContextCompressionOptionsSchema,
+  createContextCompressionMiddleware,
+  type ContextCompressionOptions,
+} from './agent/middleware/context-compression.js'
