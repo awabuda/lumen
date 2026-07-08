@@ -1,7 +1,19 @@
 /** P20.4.2 e2e: Agent.run resumeFrom + auto-save on abort. */
 
 import { describe, expect, it } from 'vitest'
-import { Agent, InMemoryCheckpointStore, ToolRegistry } from '../src/index.js'
+import {
+  Agent,
+  BaseProvider,
+  type ChatRequest,
+  type ChatResponse,
+  type ProviderCapabilities,
+  InMemoryCheckpointStore,
+  type StreamEvent,
+  type StreamOptions,
+  ToolRegistry,
+} from '../src/index.js'
+import { ProviderError } from '../src/errors/index.js'
+import { ProviderPool } from '../src/agent/pool.js'
 import { FakeProvider } from './fake-provider.js'
 
 describe('Agent.run checkpoint integration (P20.4.2)', () => {
@@ -102,5 +114,128 @@ describe('Agent.run checkpoint integration (P20.4.2)', () => {
     await agent.run({ userMessage: 'go' })
     // The first provider call should have 2 messages: system + user.
     expect(provider.calls[0]?.messages).toHaveLength(2)
+  })
+})
+
+/**
+ * P20.5 e2e: provider pool failover + checkpoint.
+ *
+ * The ProviderPool transparently falls back from a failing
+ * primary provider to a working secondary. When fallback
+ * succeeds, Agent.run never throws, so no checkpoint is
+ * saved (the run completed normally). When every provider
+ * in the pool exhausts its retries, Agent.run throws
+ * PoolExhaustedError, which is caught by the existing
+ * P20.4.2 checkpoint-on-throw path. This suite documents
+ * both behaviours so the "fallback chain + auto-checkpoint"
+ * P20.5 promise is verifiable in a regression.
+ */
+describe('Agent.run + ProviderPool checkpoint (P20.5)', () => {
+  /**
+   * A provider that always throws a retryable ProviderError.
+   * Used to simulate a primary provider that is "down" for
+   * the duration of the test.
+   */
+  class AlwaysFailingProvider extends BaseProvider {
+    public readonly id: string
+    public callCount = 0
+    public constructor(id: string) {
+      super()
+      this.id = id
+    }
+    public override readonly capabilities: ProviderCapabilities = {
+      streaming: false,
+      embeddings: false,
+      toolUse: false,
+      vision: false,
+      reasoning: false,
+      promptCaching: false,
+      structuredOutput: false,
+      maxContextTokens: 8000,
+    }
+    public override async chat(
+      _request: ChatRequest,
+      _options?: StreamOptions,
+    ): Promise<ChatResponse> {
+      this.callCount += 1
+      throw new ProviderError(`Provider '${this.id}' simulated outage`, {
+        providerId: this.id,
+        statusCode: 503,
+        retryable: true,
+      })
+    }
+    public override async *stream(): AsyncGenerator<StreamEvent, void, void> {
+      this.callCount += 1
+      throw new ProviderError(`Provider '${this.id}' simulated outage`, {
+        providerId: this.id,
+        statusCode: 503,
+        retryable: true,
+      })
+    }
+  }
+
+  it('does NOT save a checkpoint when the pool falls back successfully', async () => {
+    const store = new InMemoryCheckpointStore()
+    const failing = new AlwaysFailingProvider('primary')
+    const working = new FakeProvider([
+      { message: { role: 'assistant', content: 'fallback ok', toolCalls: [] } },
+    ])
+    const pool = new ProviderPool({
+      providers: [
+        { provider: failing, weight: 1 },
+        { provider: working, weight: 1 },
+      ],
+    })
+    const agent = new Agent({
+      provider: pool,
+      tools: new ToolRegistry(),
+      model: 'fake-model',
+    })
+    const result = await agent.run({
+      userMessage: 'go',
+      sessionId: 'fallback-success',
+      checkpointStore: store,
+    })
+    expect(result.finalMessage.content).toBe('fallback ok')
+    expect(failing.callCount).toBeGreaterThanOrEqual(1)
+    // Run succeeded -> no checkpoint saved.
+    const list = await store.list('fallback-success')
+    expect(list).toHaveLength(0)
+  })
+
+  it('saves a checkpoint when the pool exhausts every provider', async () => {
+    const store = new InMemoryCheckpointStore()
+    const a = new AlwaysFailingProvider('a')
+    const b = new AlwaysFailingProvider('b')
+    const c = new AlwaysFailingProvider('c')
+    const pool = new ProviderPool({
+      providers: [
+        { provider: a, weight: 1 },
+        { provider: b, weight: 1 },
+        { provider: c, weight: 1 },
+      ],
+    })
+    const agent = new Agent({
+      provider: pool,
+      tools: new ToolRegistry(),
+      model: 'fake-model',
+    })
+    await expect(
+      agent.run({
+        userMessage: 'go',
+        sessionId: 'pool-exhausted',
+        checkpointStore: store,
+      }),
+    ).rejects.toThrow()
+    // All three providers were tried.
+    expect(a.callCount).toBeGreaterThanOrEqual(1)
+    expect(b.callCount).toBeGreaterThanOrEqual(1)
+    expect(c.callCount).toBeGreaterThanOrEqual(1)
+    // PoolExhaustedError is caught by Agent.run's existing
+    // checkpoint-on-throw path, so the store has a snapshot
+    // for this session.
+    const list = await store.list('pool-exhausted')
+    expect(list).toHaveLength(1)
+    expect(list[0]?.messages.some((m) => m.role === 'user' && m.content === 'go')).toBe(true)
   })
 })

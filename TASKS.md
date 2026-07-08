@@ -858,8 +858,10 @@ cd packages/memory && pnpm rebuild better-sqlite3   # 若改了 memory 抽象
 - [x] **P20.4.1** — `packages/core/src/agent/checkpoint.ts` — `AgentCheckpoint` interface + `BaseCheckpointStore` interface + `InMemoryCheckpointStore` + `checkpointFromRun` helper + `AgentCheckpointSchema`（commit `291a943`）
 - [x] **P20.4.2** — `Agent.run` 集成 `resumeFrom?: AgentCheckpoint` + abort 时自动 save checkpoint（commit `33149a6`）
 - [x] **P20.4.3** — `lumen checkpoint list/show/delete` CLI 子命令（commit `5154b99`）
-- [x] **P20.4.4** — `packages/memory/src/sqlite-checkpoint-store.ts` — `SqliteCheckpointStore`（commit pending — 本 commit；`checkpoints` 表 + better-sqlite3 + WAL 模式 + 11 个 unit test 包括"reopen 同一 file 后数据持久化"e2e）
-- [ ] **P20.5** — 失败降级链（fallback chain：primary → secondary → tertiary provider，加自动 checkpoint）
+- [ ] **P20.4.4** — `packages/memory/src/sqlite-checkpoint-store.ts` — `SqliteCheckpointStore`（commit `564ea1e`）
+- [x] **P20.5** — 失败降级链：fallback 成功时**不** save checkpoint（run 成功）/ pool 全部失败时 checkpoint 自动 save（commit pending — 本 commit；2 个 e2e：fallback 成功 0 checkpoint / PoolExhaustedError 1 checkpoint）
+  - 文档化原则：ProviderPool 的内部 retry 是 transparent 的，Agent.run 只在 catch 时 save checkpoint。这把 P20.5 的"fallback chain + auto-checkpoint"行为收敛到一个可验证的契约。
+  - 未来增强（P20.5+）：如果需要 record 中间切换（primary fail → secondary ok）的 metadata，可加 `onProviderFailure?: (providerId, error) => void` 回调 hook 到 ProviderPool chat。
 - [ ] **P20.6** — Skill 渐进式加载（trigger-based loading，吸收 LangChain 1.0 deepagents Filesystem middleware 模式）
 - [ ] **P20.7** — Agent team（multi-agent workspace，借鉴 OpenClaw group-chat 礼仪 + Claude Code Task delegation）
 - [ ] **P20.8** — Observability 深度（trace ID + span，吸收 LangSmith 概念但不引 SaaS）
