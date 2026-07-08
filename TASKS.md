@@ -855,18 +855,19 @@ cd packages/memory && pnpm rebuild better-sqlite3   # 若改了 memory 抽象
 ### P20.1 — HITL（Human-in-the-Loop）middleware（interrupt_on declarative，吸收 deepagents / LangChain 1.0）
 
 - [x] **P20.1.1** — `packages/core/src/agent/middleware/interrupt.ts` — `createInterruptMiddleware({ toolNames?, maxIterations?, onError? })` + `InterruptOptionsSchema` + `InterruptReasonSchema` + `InterruptState`（commit `6b55ac9`）
-- [ ] **P20.1.2** — `lumen chat` TUI 集成 interrupt 提示 + 人工 approve / reject 按钮
-- [ ] **P20.1.3** — `lumen run` 集成 `--interrupt-on <tool-name>` flag
-- [x] **P20.3** — Context 压缩（summarization middleware，借鉴 deepagents 默认 stack 的 Summarization；commit pending — 本 commit；`createContextCompressionMiddleware({ maxMessages, keepLastN, summaryFn? })` + 7 个 e2e）
+- [ ] **P20.1.2** — `lumen chat` TUI 集成 interrupt 提示 + 人工 approve / reject 按钮（pending P20+ — TUI ink 集成）
+- [ ] **P20.1.3** — `lumen run` 集成 `--interrupt-on <tool-name>` flag（pending P20+ — CLI surface）
+- [x] **P20.2** — Heartbeat / long-running task supervisor（commit `4feda2c`；`startHeartbeat` + `runWithHeartbeat` outer wrapper，30 000 ms default interval）
+- [x] **P20.3** — Context 压缩（summarization middleware；commit `4cff9f1`；`createContextCompressionMiddleware({ maxMessages, keepLastN, summaryFn? })` + 7 个 e2e）
 - [x] **P20.4.1** — `packages/core/src/agent/checkpoint.ts` — `AgentCheckpoint` interface + `BaseCheckpointStore` interface + `InMemoryCheckpointStore` + `checkpointFromRun` helper + `AgentCheckpointSchema`（commit `291a943`）
 - [x] **P20.4.2** — `Agent.run` 集成 `resumeFrom?: AgentCheckpoint` + abort 时自动 save checkpoint（commit `33149a6`）
 - [x] **P20.4.3** — `lumen checkpoint list/show/delete` CLI 子命令（commit `5154b99`）
-- [ ] **P20.4.4** — `packages/memory/src/sqlite-checkpoint-store.ts` — `SqliteCheckpointStore`（commit `564ea1e`）
-- [x] **P20.5** — 失败降级链：fallback 成功时**不** save checkpoint（run 成功）/ pool 全部失败时 checkpoint 自动 save（commit pending — 本 commit；2 个 e2e：fallback 成功 0 checkpoint / PoolExhaustedError 1 checkpoint）
+- [x] **P20.4.4** — `packages/memory/src/sqlite-checkpoint-store.ts` — `SqliteCheckpointStore`（commit `564ea1e`；persistent cross-process checkpoint store）
+- [x] **P20.5** — 失败降级链：fallback 成功时**不** save checkpoint / pool 全部失败时 checkpoint 自动 save（commit `b6cb0d1`；2 个 e2e：fallback 成功 0 checkpoint / PoolExhaustedError 1 checkpoint）
   - 文档化原则：ProviderPool 的内部 retry 是 transparent 的，Agent.run 只在 catch 时 save checkpoint。这把 P20.5 的"fallback chain + auto-checkpoint"行为收敛到一个可验证的契约。
   - 未来增强（P20.5+）：如果需要 record 中间切换（primary fail → secondary ok）的 metadata，可加 `onProviderFailure?: (providerId, error) => void` 回调 hook 到 ProviderPool chat。
-- [ ] **P20.6** — Skill 渐进式加载（trigger-based loading，吸收 LangChain 1.0 deepagents Filesystem middleware 模式）
-- [x] **P20.7** — Agent team（multi-agent workspace）— 设计基线落地：`docs/P20.7-agent-team.md` 说明 4 模式（sequential/parallel/handoff/supervisor）通过 shared PlanStore 组合的 pattern + 4-framework 对比 + future P20.7.x 子任务。**不**改 core（commit pending — 本 commit）
-- [ ] **P20.8** — Observability 深度（trace ID + span，吸收 LangSmith 概念但不引 SaaS）
-- [x] **P20.9** — Tutorial 入口（docs-site 加 getting-started.md 教程，弥补 docs 维度 Lumen 缺口；commit pending — 本 commit；`docs/GETTING-STARTED.md` 8 节：install / first run / config / 5 providers / 5 use cases in 60s / next steps / CLI map / pinned design commitments）
-- [ ] **P20.10** — Dataset + scoring（bench harness 升级，吸收 LangSmith dataset 概念）
+- [x] **P20.6** — Skill 渐进式加载（trigger-based loading；commit `0969118`；`createSkillTriggerMiddleware({ trigger, maxActive?, formatActive? })` + 10 个 e2e，core 不 import @lumen/skills 保持 tier 隔离）
+- [x] **P20.7** — Agent team（multi-agent workspace）— 设计基线落地：`docs/P20.7-agent-team.md` 说明 4 模式（sequential/parallel/handoff/supervisor）通过 shared PlanStore 组合的 pattern + 4-framework 对比 + future P20.7.x 子任务。**不**改 core（commit `be21f65`）
+- [x] **P20.8** — Observability 深度（trace ID + span；commit `8015520`；`createTrace` + `runWithTrace` + `formatTrace` outer helper，14 个 e2e，forward-compatible with W3C / OpenTelemetry bridges）
+- [x] **P20.9** — Tutorial 入口（`docs/GETTING-STARTED.md` 8 节：install / first run / config / 5 providers / 5 use cases in 60s / next steps / CLI map / pinned design commitments；commit `4669a34`）
+- [x] **P20.10** — Dataset + scoring（commit `7c2de26`；`BenchmarkCase` + `BenchmarkScore` + `BenchmarkScoreSchema` + `runDatasetBench` + `reportTableRow` + 11 个 e2e）
