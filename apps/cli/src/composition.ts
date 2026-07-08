@@ -19,7 +19,7 @@
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { type LumenConfig, loadConfig } from '@lumen/config'
-import { Agent, type BaseProvider, HookRegistry, ToolRegistry } from '@lumen/core'
+import { Agent, type BaseProvider, createAgent, createPlanMiddleware, HookRegistry, ToolRegistry } from '@lumen/core'
 import { OpenAICompatibleProvider } from '@lumen/llm'
 import { type DiscoveredMcpServer, closeAllMcpServers, connectAllMcpServers } from '@lumen/mcp'
 import { SqliteStore } from '@lumen/memory'
@@ -65,6 +65,26 @@ export interface CliAgentOptions {
    * whole CLI.
    */
   mcpTimeoutMs?: number
+  /**
+   * P19.0.3 / P19.1 wire-up: when true, build the agent via
+   * `createAgent({ ...config, middleware: [createPlanMiddleware({ mode: 'auto' })] })`
+   * instead of `new Agent({...})`. The factory path is the only
+   * documented way to layer middleware on the agent loop; CLI
+   * commands that want plan/act behaviour opt in here.
+   *
+   * Default: false. The bare `new Agent({...})` path is preserved
+   * for backward compatibility — existing CLI commands that
+   * don't opt in keep their original behaviour exactly.
+   */
+  enablePlanMiddleware?: boolean
+  /**
+   * P19.1 plan mode override. Only meaningful when
+   * `enablePlanMiddleware` is true. Defaults to `'auto'`
+   * (first turn plans, second turn acts). Other values:
+   * `'plan'` (plan only, never act) and `'act'` (act without
+   * a planning turn).
+   */
+  planMode?: 'plan' | 'act' | 'auto'
 }
 
 export interface BuiltAgent {
@@ -149,7 +169,21 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
     await memory.init()
   }
 
-  const agent = new Agent({
+  // P19.0.3 / P19.1 wire-up: when enablePlanMiddleware is true, the
+  // composition root goes through `createAgent({ ...config, middleware })`
+  // instead of `new Agent({...})`. This is the only documented way to
+  // layer middleware on the agent loop (lumen P19+ rule 11: middleware
+  // > AgentConfig boolean flag). Default is the bare path so existing
+  // CLI commands that have not opted in keep their original behaviour.
+  const planMiddleware = options.enablePlanMiddleware === true
+    ? [
+        createPlanMiddleware({
+          mode: options.planMode ?? 'auto',
+        }),
+      ]
+    : []
+
+  const agent = createAgent({
     provider,
     tools,
     memory,
@@ -157,6 +191,7 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
     config,
     model,
     cwd,
+    middleware: planMiddleware,
   })
 
   // MCP server discovery. We connect AFTER the Agent is

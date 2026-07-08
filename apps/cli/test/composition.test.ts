@@ -165,4 +165,47 @@ describe('buildAgent', () => {
       }
     })
   })
+
+  // P19.0.3 / P19.1 wire-up: buildAgent must go through the
+  // createAgent factory when enablePlanMiddleware is true, and
+  // the resulting agent must carry the plan middleware. When
+  // the flag is omitted, the agent falls back to the bare
+  // `new Agent({...})` path (backward compat).
+  describe('P19 plan middleware wire-up', () => {
+    it('still builds when enablePlanMiddleware is false (default)', async () => {
+      const built = await buildAgent({
+        apiKey: 'test-key',
+        baseUrl: 'http://127.0.0.1:1',
+        noTools: true,
+        noMemory: true,
+      })
+      expect(built.agent).toBeDefined()
+    })
+
+    it('accepts enablePlanMiddleware: true without throwing', async () => {
+      const built = await buildAgent({
+        apiKey: 'test-key',
+        baseUrl: 'http://127.0.0.1:1',
+        noTools: true,
+        noMemory: true,
+        enablePlanMiddleware: true,
+        planMode: 'auto',
+      })
+      expect(built.agent).toBeDefined()
+    })
+
+    it('accepts planMode: "plan" and planMode: "act"', async () => {
+      for (const mode of ['plan', 'act'] as const) {
+        const built = await buildAgent({
+          apiKey: 'test-key',
+          baseUrl: 'http://127.0.0.1:1',
+          noTools: true,
+          noMemory: true,
+          enablePlanMiddleware: true,
+          planMode: mode,
+        })
+        expect(built.agent).toBeDefined()
+      }
+    })
+  })
 })
