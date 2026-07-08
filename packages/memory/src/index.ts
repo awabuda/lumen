@@ -41,6 +41,10 @@ export {
 export { InMemoryStore } from './in-memory-store.js'
 export { SqliteStore, type SqliteStoreConfig } from './sqlite-store.js'
 export {
+  SqliteCheckpointStore,
+  type SqliteCheckpointStoreOptions,
+} from './sqlite-checkpoint-store.js'
+export {
   BaseVectorBackend,
   BruteForceVectorBackend,
   SqliteVecBackend,

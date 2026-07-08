@@ -857,8 +857,8 @@ cd packages/memory && pnpm rebuild better-sqlite3   # 若改了 memory 抽象
 - [ ] **P20.3** — Context 压缩（summarization middleware，借鉴 deepagents 默认 stack 的 Summarization）
 - [x] **P20.4.1** — `packages/core/src/agent/checkpoint.ts` — `AgentCheckpoint` interface + `BaseCheckpointStore` interface + `InMemoryCheckpointStore` + `checkpointFromRun` helper + `AgentCheckpointSchema`（commit `291a943`）
 - [x] **P20.4.2** — `Agent.run` 集成 `resumeFrom?: AgentCheckpoint` + abort 时自动 save checkpoint（commit `33149a6`）
-- [x] **P20.4.3** — `lumen checkpoint list/show/delete` CLI 子命令（commit pending — 本 commit；6 个 e2e：list empty / list seeded newest-first / show full payload / show unknown id / delete happy / delete unknown id）
-- [ ] **P20.4.4** — SQLite-backed checkpoint store（downstream package，core tier 不依赖 @lumen/memory）
+- [x] **P20.4.3** — `lumen checkpoint list/show/delete` CLI 子命令（commit `5154b99`）
+- [x] **P20.4.4** — `packages/memory/src/sqlite-checkpoint-store.ts` — `SqliteCheckpointStore`（commit pending — 本 commit；`checkpoints` 表 + better-sqlite3 + WAL 模式 + 11 个 unit test 包括"reopen 同一 file 后数据持久化"e2e）
 - [ ] **P20.5** — 失败降级链（fallback chain：primary → secondary → tertiary provider，加自动 checkpoint）
 - [ ] **P20.6** — Skill 渐进式加载（trigger-based loading，吸收 LangChain 1.0 deepagents Filesystem middleware 模式）
 - [ ] **P20.7** — Agent team（multi-agent workspace，借鉴 OpenClaw group-chat 礼仪 + Claude Code Task delegation）
