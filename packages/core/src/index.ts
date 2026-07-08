@@ -354,3 +354,15 @@ export {
   computeQualityScores,
   qualityTableCell,
 } from './bench/quality.js'
+
+// Checkpoint / Resume (P20.4) — agent run-state snapshots. The
+// in-memory implementation is in core; a SQLite-backed store
+// lives downstream in @lumen/memory (or apps/cli) so the core
+// package can stay storage-agnostic.
+export {
+  AgentCheckpointSchema,
+  InMemoryCheckpointStore,
+  checkpointFromRun,
+  type AgentCheckpoint,
+  type BaseCheckpointStore,
+} from './agent/checkpoint.js'
