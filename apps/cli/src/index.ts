@@ -393,6 +393,10 @@ program
   )
   .argument('[path]', 'Path to a team.json file (for "validate", "show", and "run")')
   .option('--list-dir <dir>', 'list: directory to scan for team.json files (defaults to ./teams)')
+  .option(
+    '--team-checkpoint <path>',
+    'run: persist a team-level checkpoint to this SQLite file after the run resolves (success or failure). Defaults to in-memory (no persistence).',
+  )
   .action(
     async (subcommand: string, filePath: string | undefined, opts: Record<string, unknown>) => {
       const { teamCommand } = await import('./commands/team.js')
@@ -440,6 +444,19 @@ program
             process.stderr.write(`lumen team run: failed to build agent: ${msg}\n`)
             process.exit(1)
           }
+          // P20.7.4: optional team-level SqliteCheckpointStore.
+          // Built only when the operator passes --team-checkpoint
+          // so a default `lumen team run` keeps the
+          // checkpoint-free in-memory behaviour.
+          let teamCheckpointStore: import('@lumen/core').BaseCheckpointStore | undefined
+          const teamCheckpointPath = opts.teamCheckpoint as string | undefined
+          if (teamCheckpointPath) {
+            const { SqliteCheckpointStore } = await import('@lumen/memory')
+            // SqliteCheckpointStore opens its own database
+            // connection + runs the DDL in the constructor
+            // (P20.4.4). No init() call is required.
+            teamCheckpointStore = new SqliteCheckpointStore({ path: teamCheckpointPath })
+          }
           code = await teamCommand({
             action: 'run',
             path: filePath,
@@ -453,6 +470,7 @@ program
               // with the agent's actual working directory.
               cwd: process.cwd(),
             },
+            ...(teamCheckpointStore ? { teamCheckpointStore } : {}),
           })
         }
       } else {

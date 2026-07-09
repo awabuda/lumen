@@ -35,6 +35,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
+  type BaseCheckpointStore,
   type SubAgentSpec,
   SubAgentSpecSchema,
   createHandoffSubAgent,
@@ -187,13 +188,65 @@ export interface TeamParent {
  * need to compose with streams, timeouts, and progress
  * reporting. The core orchestrators already have that
  * contract; we just dispatch.
+ *
+ * P20.7.4: an optional `teamCheckpointStore` makes the
+ * returned runner save a single team-level checkpoint
+ * after the underlying orchestrator resolves, with a
+ * label that includes the team name + success / error
+ * outcome. The checkpoint is a *summary* of the team run
+ * (not a per-sub-agent snapshot) and is best-effort — a
+ * checkpoint-save failure does not change the team's
+ * run result.
  */
 export interface TeamRunner {
   readonly id: string
   run(): Promise<ReadonlyArray<unknown>>
 }
 
-export const orchestrateTeam = (team: Team, parent: TeamParent): TeamRunner => {
+/** Options for {@link orchestrateTeam}. */
+export interface OrchestrateTeamOptions {
+  /**
+   * Optional team-level checkpoint store. When set, the
+   * returned runner saves one checkpoint after the run
+   * resolves (success or failure), tagged with
+   * `label = 'team:<name>:<outcome>'`.
+   */
+  readonly teamCheckpointStore?: BaseCheckpointStore
+}
+
+/**
+ * Save a synthetic team-level checkpoint to the store.
+ * Pure helper (no module-level side effects) so it is
+ * testable in isolation. The checkpoint is a *summary* —
+ * it captures the team's name, mode, and the iteration
+ * count (= number of tasks completed before save). The
+ * `messages` field is empty because the per-task message
+ * history is not normalised across the 4 orchestrator
+ * modes; a future ticket can extend this with a richer
+ * snapshot if a use case needs it.
+ */
+export const saveTeamCheckpoint = async (
+  store: BaseCheckpointStore,
+  team: Team,
+  outcome: 'success' | 'error',
+  iterations: number,
+  errorMessage?: string,
+): Promise<void> => {
+  await store.save({
+    id: `team:${team.name}:${outcome}:${Date.now()}`,
+    sessionId: `team:${team.name}`,
+    messages: [],
+    iterations,
+    createdAt: Date.now(),
+    label: `team:${team.name}:${outcome}${errorMessage ? `: ${errorMessage}` : ''}`,
+  })
+}
+
+export const orchestrateTeam = (
+  team: Team,
+  parent: TeamParent,
+  options: OrchestrateTeamOptions = {},
+): TeamRunner => {
   const mode: TeamMode = team.mode ?? 'sequential'
   // When `tasks` is missing, fall back to one task per agent
   // with the agent's description as the prompt. This keeps the
@@ -211,6 +264,49 @@ export const orchestrateTeam = (team: Team, parent: TeamParent): TeamRunner => {
     return { spec, prompt: t.prompt }
   })
 
+  // Helper that wraps an inner runner with the team-level
+  // checkpoint save. Centralised so all 4 modes share the
+  // same save behaviour; the inner runner returns
+  // ReadonlyArray<unknown> (per-mode-specific shapes).
+  const wrapWithCheckpoint = (
+    inner: () => Promise<ReadonlyArray<unknown>>,
+    expectedIterations: number,
+  ): (() => Promise<ReadonlyArray<unknown>>) => {
+    if (!options.teamCheckpointStore) return inner
+    return async (): Promise<ReadonlyArray<unknown>> => {
+      try {
+        const out = await inner()
+        // Best-effort save: a checkpoint failure must not
+        // change the team's run result.
+        try {
+          await saveTeamCheckpoint(
+            options.teamCheckpointStore as BaseCheckpointStore,
+            team,
+            'success',
+            expectedIterations,
+          )
+        } catch {
+          // Swallow — see header note.
+        }
+        return out
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        try {
+          await saveTeamCheckpoint(
+            options.teamCheckpointStore as BaseCheckpointStore,
+            team,
+            'error',
+            expectedIterations,
+            msg,
+          )
+        } catch {
+          // Swallow — see header note.
+        }
+        throw err
+      }
+    }
+  }
+
   if (mode === 'sequential') {
     const orchestrator = createSequentialSubAgent({
       parent,
@@ -218,7 +314,7 @@ export const orchestrateTeam = (team: Team, parent: TeamParent): TeamRunner => {
     })
     return {
       id: `team:${team.name}:sequential`,
-      run: async () => orchestrator.run(),
+      run: wrapWithCheckpoint(() => orchestrator.run(), tasks.length),
     }
   }
   if (mode === 'parallel') {
@@ -228,7 +324,7 @@ export const orchestrateTeam = (team: Team, parent: TeamParent): TeamRunner => {
     })
     return {
       id: `team:${team.name}:parallel`,
-      run: async () => orchestrator.run(),
+      run: wrapWithCheckpoint(() => orchestrator.run(), tasks.length),
     }
   }
   if (mode === 'handoff') {
@@ -239,7 +335,7 @@ export const orchestrateTeam = (team: Team, parent: TeamParent): TeamRunner => {
     // use case shows up.
     return {
       id: `team:${team.name}:handoff`,
-      run: async () => {
+      run: wrapWithCheckpoint(async () => {
         const out: unknown[] = []
         for (const t of tasks) {
           const runner = createHandoffSubAgent({
@@ -250,7 +346,7 @@ export const orchestrateTeam = (team: Team, parent: TeamParent): TeamRunner => {
           out.push(await runner.run())
         }
         return out
-      },
+      }, tasks.length),
     }
   }
   // mode === 'supervisor' (Zod enum guarantees this is exhaustive).
@@ -260,14 +356,14 @@ export const orchestrateTeam = (team: Team, parent: TeamParent): TeamRunner => {
   })
   return {
     id: `team:${team.name}:supervisor`,
-    run: async () => {
+    run: wrapWithCheckpoint(async () => {
       // Supervisor returns a single `AgentRunResult`, but the
       // `TeamRunner` contract returns an array. Wrap the
       // single result so callers get a uniform shape across
       // all 4 modes.
       const result = await orchestrator.run()
       return [result]
-    },
+    }, tasks.length),
   }
 }
 
@@ -317,6 +413,15 @@ export interface TeamCommandOptions {
    * for the wire-up.
    */
   readonly runParent?: TeamParent
+  /**
+   * `run` action only: optional team-level checkpoint store
+   * (P20.7.4). When set, the runner saves one synthetic
+   * checkpoint after the team resolves (success or failure).
+   * In production this is a `SqliteCheckpointStore` from
+   * `@lumen/memory`; tests pass an `InMemoryCheckpointStore`
+   * from `@lumen/core`.
+   */
+  readonly teamCheckpointStore?: import('@lumen/core').BaseCheckpointStore
 }
 
 /**
@@ -513,7 +618,9 @@ export const teamCommand = async (options: TeamCommandOptions): Promise<number> 
       )
       return 2
     }
-    const runner = orchestrateTeam(team, options.runParent)
+    const runner = orchestrateTeam(team, options.runParent, {
+      ...(options.teamCheckpointStore ? { teamCheckpointStore: options.teamCheckpointStore } : {}),
+    })
     process.stdout.write(`Running team "${team.name}" (mode=${resolveTeamMode(team)})\n\n`)
     let results: ReadonlyArray<unknown>
     try {
