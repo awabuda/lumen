@@ -130,8 +130,13 @@ export type Team = z.infer<typeof TeamSchema>
 /** Errors thrown by the team module. */
 export class TeamConfigError extends Error {
   public override readonly name = 'TeamConfigError'
-  public constructor(message: string) {
-    super(message)
+  public constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options)
+    // Forward the cause to the public field so callers can
+    // inspect it without digging into `error.cause` (which
+    // is the spec-correct path but ergonomically awkward for
+    // a CLI that prints a single line of error context).
+    if (options?.cause !== undefined) this.cause = options.cause
   }
 }
 
@@ -192,18 +197,18 @@ export const orchestrateTeam = (team: Team, parent: TeamParent): TeamRunner => {
   // When `tasks` is missing, fall back to one task per agent
   // with the agent's description as the prompt. This keeps the
   // `agents: [...]` shorthand useful for tiny teams.
-  const tasks = (team.tasks ?? team.agents.map((a) => ({ agentName: a.name, prompt: a.description }))).map(
-    (t) => {
-      const spec = team.agents.find((a) => a.name === t.agentName)
-      // safeParse above guarantees this; the `!` is a type
-      // assertion to satisfy TS without a non-null assertion
-      // operator (P19+ style guide).
-      if (!spec) {
-        throw new TeamConfigError(`team references missing agent "${t.agentName}"`)
-      }
-      return { spec, prompt: t.prompt }
-    },
-  )
+  const tasks = (
+    team.tasks ?? team.agents.map((a) => ({ agentName: a.name, prompt: a.description }))
+  ).map((t) => {
+    const spec = team.agents.find((a) => a.name === t.agentName)
+    // safeParse above guarantees this; the `!` is a type
+    // assertion to satisfy TS without a non-null assertion
+    // operator (P19+ style guide).
+    if (!spec) {
+      throw new TeamConfigError(`team references missing agent "${t.agentName}"`)
+    }
+    return { spec, prompt: t.prompt }
+  })
 
   if (mode === 'sequential') {
     const orchestrator = createSequentialSubAgent({

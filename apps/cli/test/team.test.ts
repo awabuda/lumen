@@ -166,10 +166,7 @@ describe('orchestrateTeam', () => {
       { message: { role: 'assistant', content: 'a-out', toolCalls: [] } },
       { message: { role: 'assistant', content: 'b-out', toolCalls: [] } },
     ])
-    const runner = orchestrateTeam(
-      { ...twoAgentTeam(), mode: 'sequential' },
-      parent(provider),
-    )
+    const runner = orchestrateTeam({ ...twoAgentTeam(), mode: 'sequential' }, parent(provider))
     const out = await runner.run()
     expect(out).toHaveLength(2)
   })
@@ -185,10 +182,7 @@ describe('orchestrateTeam', () => {
       { message: { role: 'assistant', content: 'a-out', toolCalls: [] } },
       { message: { role: 'assistant', content: 'b-out', toolCalls: [] } },
     ])
-    const runner = orchestrateTeam(
-      { ...twoAgentTeam(), mode: 'parallel' },
-      parent(provider),
-    )
+    const runner = orchestrateTeam({ ...twoAgentTeam(), mode: 'parallel' }, parent(provider))
     const out = await runner.run()
     expect(out).toHaveLength(2)
   })
@@ -198,10 +192,7 @@ describe('orchestrateTeam', () => {
       { message: { role: 'assistant', content: 'a', toolCalls: [] } },
       { message: { role: 'assistant', content: 'b', toolCalls: [] } },
     ])
-    const runner = orchestrateTeam(
-      { ...twoAgentTeam(), mode: 'handoff' },
-      parent(provider),
-    )
+    const runner = orchestrateTeam({ ...twoAgentTeam(), mode: 'handoff' }, parent(provider))
     expect(runner.id).toBe('team:pair:handoff')
     const out = await runner.run()
     // handoff mode returns one result per task (each is a
@@ -225,7 +216,7 @@ describe('orchestrateTeam', () => {
 
   it('defaults to sequential mode when the team does not specify one', () => {
     const team = twoAgentTeam()
-    delete (team as { mode?: string }).mode
+    ;(team as { mode?: string }).mode = undefined
     const runner = orchestrateTeam(team, parent(new FakeProvider([])))
     expect(runner.id).toBe('team:pair:sequential')
   })
