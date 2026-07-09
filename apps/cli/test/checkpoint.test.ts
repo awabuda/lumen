@@ -1,5 +1,8 @@
 /** Tests for `lumen checkpoint` command handlers. */
 
+import * as fs from 'node:fs/promises'
+import * as os from 'node:os'
+import * as path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { InMemoryCheckpointStore } from '@lumen/core'
 import {
@@ -112,5 +115,60 @@ describe('lumen checkpoint delete', () => {
     const code = await checkpointDeleteCommand({ id: 'missing', store })
     expect(code).toBe(1)
     expect(stderr).toContain('no checkpoint with id "missing"')
+  })
+})
+
+describe('lumen checkpoint with SqliteCheckpointStore (P20.4.5)', () => {
+  it('list / show / delete round-trip through a SQLite file', async () => {
+    const { SqliteCheckpointStore } = await import('@lumen/memory')
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lumen-cli-cp-sqlite-'))
+    const dbPath = path.join(tmpDir, 'checkpoints.db')
+    const store = new SqliteCheckpointStore({ path: dbPath })
+    try {
+      await store.save({
+        id: 'sql-1',
+        sessionId: 'sql',
+        messages: [
+          { role: 'system', content: 'sys' },
+          { role: 'user', content: 'go' },
+        ],
+        iterations: 1,
+        createdAt: 12345,
+        label: 'sqlite-roundtrip',
+      })
+    } finally {
+      await store.dispose()
+    }
+
+    // Re-open the same file via the CLI handler to prove
+    // cross-process persistence.
+    const listCode = await checkpointListCommand({
+      sessionId: 'sql',
+      file: dbPath,
+    })
+    expect(listCode).toBe(0)
+    expect(stdout).toContain('sql-1')
+    expect(stdout).toContain('sqlite-roundtrip')
+
+    stdout = ''
+    const showCode = await checkpointShowCommand({ id: 'sql-1', file: dbPath })
+    expect(showCode).toBe(0)
+    expect(stdout).toContain('id:        sql-1')
+    expect(stdout).toContain('sessionId: sql')
+
+    stdout = ''
+    const delCode = await checkpointDeleteCommand({ id: 'sql-1', file: dbPath })
+    expect(delCode).toBe(0)
+    expect(stdout).toContain('deleted sql-1')
+
+    stdout = ''
+    const listAfter = await checkpointListCommand({
+      sessionId: 'sql',
+      file: dbPath,
+    })
+    expect(listAfter).toBe(0)
+    expect(stdout).toContain('(no checkpoints for session sql)')
+
+    await fs.rm(tmpDir, { recursive: true, force: true })
   })
 })

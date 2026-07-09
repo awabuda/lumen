@@ -27,67 +27,109 @@
  * makes this CLI genuinely useful for production use.
  */
 
-import { type AgentCheckpoint, InMemoryCheckpointStore } from '@lumen/core'
+import { type AgentCheckpoint, type BaseCheckpointStore, InMemoryCheckpointStore } from '@lumen/core'
+
+/**
+ * Resolve the checkpoint store to operate on.
+ *
+ * Resolution order:
+ *   1. The `store` option (used by the unit tests for an
+ *      InMemoryCheckpointStore injected with pre-seeded data).
+ *   2. The `file` option pointing at a SQLite database —
+ *      instantiates a SqliteCheckpointStore and **opens it
+ *      lazily** so the CLI does not have to be told about
+ *      SQLite upfront.
+ *   3. The in-memory store (per-process). The CLI reports
+ *      "(no checkpoints ...)" on a fresh process because the
+ *      in-memory store is per-process.
+ */
+const resolveStore = async (opts: {
+  readonly store?: BaseCheckpointStore
+  readonly file?: string
+}): Promise<BaseCheckpointStore & { dispose?: () => Promise<void> }> => {
+  if (opts.store) return opts.store
+  if (opts.file) {
+    const { SqliteCheckpointStore } = await import('@lumen/memory')
+    return new SqliteCheckpointStore({ path: opts.file })
+  }
+  return new InMemoryCheckpointStore()
+}
 
 export interface CheckpointListOptions {
   readonly sessionId: string
   /** Override the in-process checkpoint store. */
-  readonly store?: InMemoryCheckpointStore
+  readonly store?: BaseCheckpointStore
+  /** Path to a SQLite-backed store. Overrides the in-memory default. */
+  readonly file?: string
 }
 
 export const checkpointListCommand = async (
   opts: CheckpointListOptions,
 ): Promise<number> => {
-  const store = opts.store ?? new InMemoryCheckpointStore()
-  const list = await store.list(opts.sessionId)
-  if (list.length === 0) {
-    process.stdout.write(`(no checkpoints for session ${opts.sessionId})\n`)
+  const store = await resolveStore(opts)
+  try {
+    const list = await store.list(opts.sessionId)
+    if (list.length === 0) {
+      process.stdout.write(`(no checkpoints for session ${opts.sessionId})\n`)
+      return 0
+    }
+    process.stdout.write(`Checkpoints for session ${opts.sessionId} (${list.length}):\n`)
+    for (const cp of list) {
+      const label = cp.label ? `  label=${JSON.stringify(cp.label)}` : ''
+      process.stdout.write(
+        `  - ${cp.id}  iter=${cp.iterations}  createdAt=${cp.createdAt}${label}\n`,
+      )
+    }
     return 0
+  } finally {
+    await store.dispose?.()
   }
-  process.stdout.write(`Checkpoints for session ${opts.sessionId} (${list.length}):\n`)
-  for (const cp of list) {
-    const label = cp.label ? `  label=${JSON.stringify(cp.label)}` : ''
-    process.stdout.write(
-      `  - ${cp.id}  iter=${cp.iterations}  createdAt=${cp.createdAt}${label}\n`,
-    )
-  }
-  return 0
 }
 
 export interface CheckpointShowOptions {
   readonly id: string
-  readonly store?: InMemoryCheckpointStore
+  readonly store?: BaseCheckpointStore
+  readonly file?: string
 }
 
 export const checkpointShowCommand = async (
   opts: CheckpointShowOptions,
 ): Promise<number> => {
-  const store = opts.store ?? new InMemoryCheckpointStore()
-  const cp = await store.get(opts.id)
-  if (!cp) {
-    process.stderr.write(`lumen checkpoint show: no checkpoint with id "${opts.id}"\n`)
-    return 1
+  const store = await resolveStore(opts)
+  try {
+    const cp = await store.get(opts.id)
+    if (!cp) {
+      process.stderr.write(`lumen checkpoint show: no checkpoint with id "${opts.id}"\n`)
+      return 1
+    }
+    printCheckpoint(cp)
+    return 0
+  } finally {
+    await store.dispose?.()
   }
-  printCheckpoint(cp)
-  return 0
 }
 
 export interface CheckpointDeleteOptions {
   readonly id: string
-  readonly store?: InMemoryCheckpointStore
+  readonly store?: BaseCheckpointStore
+  readonly file?: string
 }
 
 export const checkpointDeleteCommand = async (
   opts: CheckpointDeleteOptions,
 ): Promise<number> => {
-  const store = opts.store ?? new InMemoryCheckpointStore()
-  const removed = await store.delete(opts.id)
-  if (!removed) {
-    process.stderr.write(`lumen checkpoint delete: no checkpoint with id "${opts.id}"\n`)
-    return 1
+  const store = await resolveStore(opts)
+  try {
+    const removed = await store.delete(opts.id)
+    if (!removed) {
+      process.stderr.write(`lumen checkpoint delete: no checkpoint with id "${opts.id}"\n`)
+      return 1
+    }
+    process.stdout.write(`deleted ${opts.id}\n`)
+    return 0
+  } finally {
+    await store.dispose?.()
   }
-  process.stdout.write(`deleted ${opts.id}\n`)
-  return 0
 }
 
 const printCheckpoint = (cp: AgentCheckpoint): void => {

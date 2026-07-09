@@ -174,33 +174,35 @@ program
   .description('Inspect and manage saved agent run checkpoints')
   .argument('<subcommand>', '"list <session-id>", "show <id>", or "delete <id>"')
   .argument('[arg]', 'Session id (for "list") or checkpoint id (for "show"/"delete")')
-  .action(async (subcommand: string, arg: string | undefined) => {
+  .option('--plans-path <path>', 'P20.4.5: path to a SQLite checkpoint database (defaults to in-memory)')
+  .action(async (subcommand: string, arg: string | undefined, opts: Record<string, unknown>) => {
     const {
       checkpointDeleteCommand,
       checkpointListCommand,
       checkpointShowCommand,
     } = await import('./commands/checkpoint.js')
+    const file = opts.plansPath as string | undefined
     let code = 0
     if (subcommand === 'list') {
       if (!arg) {
         process.stderr.write('lumen checkpoint: missing <session-id> for "list"\n')
         code = 1
       } else {
-        code = await checkpointListCommand({ sessionId: arg })
+        code = await checkpointListCommand({ sessionId: arg, file })
       }
     } else if (subcommand === 'show') {
       if (!arg) {
         process.stderr.write('lumen checkpoint: missing <id> for "show"\n')
         code = 1
       } else {
-        code = await checkpointShowCommand({ id: arg })
+        code = await checkpointShowCommand({ id: arg, file })
       }
     } else if (subcommand === 'delete') {
       if (!arg) {
         process.stderr.write('lumen checkpoint: missing <id> for "delete"\n')
         code = 1
       } else {
-        code = await checkpointDeleteCommand({ id: arg })
+        code = await checkpointDeleteCommand({ id: arg, file })
       }
     } else {
       process.stderr.write(`lumen checkpoint: unknown subcommand: ${subcommand}\n`)
