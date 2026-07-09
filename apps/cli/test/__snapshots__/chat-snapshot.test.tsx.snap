@@ -1,83 +1,21 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`Chat snapshot (after typing) > renders the input with typed text 1`] = `
-"
-  ERROR  Cannot read properties of undefined (reading 'agent')
+" lumen · gpt-4o-mini · 0 tools · session (new)
 
- src/components/Chat.tsx:176:12
+ Ask me anything. Slash commands: /clear, /exit, /quit. Up/Down for history.
 
- 173:         setStreamingText('')
- 174:       }
- 175:     },
- 176:     [built.agent, exit, status],
- 177:   )
- 178:
- 179:   // Keyboard input:
-
- - Chat (src/components/Chat.tsx:176:12)
- -renderWithHoo (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2_rea
-  s            ct@18.3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:6659:18)
-
- -mountIndeterminateCom (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.
-  onent                29.2_react@18.3.1/node_modules/react-reconciler/cjs/react-reconciler.develop
-                       ment.js:11276:13)
- -beginWor (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2_react@18
-          .3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:12799:16)
- -beginWork$ (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2_react@
-            18.3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:19608:14)
- -performUnitOfW (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2_re
-  rk            act@18.3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:18742:
-                12)
- -workLoopSyn (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2_react
-             @18.3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:18648:5)
- -renderRootSy (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2_reac
-  c           t@18.3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:18616:7)
- -performSyncWorkOn (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2
-  oot              _react@18.3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:
-                   18232:20)
- -flushSyncCallba (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2_r
-  ks             eact@18.3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:2936
-                 :22)
-"
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │ > hello lumen                                                                                  │
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
 exports[`Chat snapshot (idle state) > renders the idle prompt 1`] = `
-"
-  ERROR  Cannot read properties of undefined (reading 'agent')
+" lumen · gpt-4o-mini · 0 tools · session (new)
 
- src/components/Chat.tsx:176:12
+ Ask me anything. Slash commands: /clear, /exit, /quit. Up/Down for history.
 
- 173:         setStreamingText('')
- 174:       }
- 175:     },
- 176:     [built.agent, exit, status],
- 177:   )
- 178:
- 179:   // Keyboard input:
-
- - Chat (src/components/Chat.tsx:176:12)
- -renderWithHoo (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2_rea
-  s            ct@18.3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:6659:18)
-
- -mountIndeterminateCom (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.
-  onent                29.2_react@18.3.1/node_modules/react-reconciler/cjs/react-reconciler.develop
-                       ment.js:11276:13)
- -beginWor (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2_react@18
-          .3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:12799:16)
- -beginWork$ (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2_react@
-            18.3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:19608:14)
- -performUnitOfW (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2_re
-  rk            act@18.3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:18742:
-                12)
- -workLoopSyn (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2_react
-             @18.3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:18648:5)
- -renderRootSy (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2_reac
-  c           t@18.3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:18616:7)
- -performSyncWorkOn (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2
-  oot              _react@18.3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:
-                   18232:20)
- -flushSyncCallba (/Users/chengpengtao/workspace/lumen/node_modules/.pnpm/react-reconciler@0.29.2_r
-  ks             eact@18.3.1/node_modules/react-reconciler/cjs/react-reconciler.development.js:2936
-                 :22)
-"
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │ > Type a message and press Enter (Ctrl+C to cancel / exit)                                     │
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
