@@ -19,7 +19,7 @@
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { type LumenConfig, loadConfig } from '@lumen/config'
-import { Agent, type BaseProvider, createAgent, createPlanMiddleware, HookRegistry, ToolRegistry } from '@lumen/core'
+import { Agent, type BaseProvider, createAgent, createInterruptMiddleware, createPlanMiddleware, HookRegistry, ToolRegistry } from '@lumen/core'
 import { OpenAICompatibleProvider } from '@lumen/llm'
 import { type DiscoveredMcpServer, closeAllMcpServers, connectAllMcpServers } from '@lumen/mcp'
 import { SqliteStore } from '@lumen/memory'
@@ -85,6 +85,15 @@ export interface CliAgentOptions {
    * a planning turn).
    */
   planMode?: 'plan' | 'act' | 'auto'
+  /**
+   * P20.1.3: when set, wire `createInterruptMiddleware({ toolNames })`
+   * into the agent loop. Each entry in the array is a tool
+   * name whose dispatch will throw `AbortError` so the
+   * P20.4.2 catch path can auto-save a checkpoint. Mirrors
+   * the `lumen run --interrupt-on <tool-name>` CLI flag.
+   * Multiple tools can be listed; an empty array is a no-op.
+   */
+  interruptOn?: ReadonlyArray<string>
 }
 
 export interface BuiltAgent {
@@ -168,20 +177,24 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
     memory = new SqliteStore({ path: dbPath })
     await memory.init()
   }
-
-  // P19.0.3 / P19.1 wire-up: when enablePlanMiddleware is true, the
-  // composition root goes through `createAgent({ ...config, middleware })`
-  // instead of `new Agent({...})`. This is the only documented way to
-  // layer middleware on the agent loop (lumen P19+ rule 11: middleware
-  // > AgentConfig boolean flag). Default is the bare path so existing
-  // CLI commands that have not opted in keep their original behaviour.
-  const planMiddleware = options.enablePlanMiddleware === true
-    ? [
-        createPlanMiddleware({
-          mode: options.planMode ?? 'auto',
-        }),
-      ]
-    : []
+  // P19.0.3 / P19.1 / P20.1.3 wire-up: when an opt-in flag is
+  // set, the composition root goes through `createAgent({ ...config, middleware })`
+  // instead of `new Agent({...})`. This is the only documented
+  // way to layer middleware on the agent loop (lumen P19+ rule
+  // 11: middleware > AgentConfig boolean flag). Default is the
+  // bare path so existing CLI commands that have not opted in
+  // keep their original behaviour exactly.
+  const middleware: import('@lumen/core').AgentMiddleware[] = []
+  if (options.enablePlanMiddleware === true) {
+    middleware.push(
+      createPlanMiddleware({ mode: options.planMode ?? 'auto' }),
+    )
+  }
+  if (options.interruptOn && options.interruptOn.length > 0) {
+    middleware.push(
+      createInterruptMiddleware({ toolNames: [...options.interruptOn] }),
+    )
+  }
 
   const agent = createAgent({
     provider,
@@ -191,7 +204,7 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
     config,
     model,
     cwd,
-    middleware: planMiddleware,
+    middleware,
   })
 
   // MCP server discovery. We connect AFTER the Agent is

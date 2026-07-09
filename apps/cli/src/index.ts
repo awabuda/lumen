@@ -29,8 +29,19 @@ program
   .option('--memory-path <path>', 'Override the SQLite memory database path')
   .option('--no-memory', 'Run without wiring a memory store')
   .option('--no-mcp', 'Skip MCP server discovery and connection')
+  .option('--interrupt-on <names>', 'Comma-separated tool names to interrupt on (HITL)')
+  .option('--plan [mode]', "Wire PlanMiddleware; mode is 'plan' / 'act' / 'auto' (default 'auto')")
+  .option('--checkpoint <path>', 'Path to a SQLite checkpoint database (P20.4)')
   .action(async (prompt: string, opts: Record<string, unknown>) => {
     const { runCommand } = await import('./commands/run.js')
+    const interruptOnRaw = opts.interruptOn as string | undefined
+    const interruptOn = interruptOnRaw
+      ? interruptOnRaw.split(',').map((s) => s.trim()).filter((s) => s.length > 0)
+      : undefined
+    const planRaw = opts.plan as string | boolean | undefined
+    const planMode = planRaw === true || planRaw === undefined
+      ? undefined
+      : (planRaw as 'plan' | 'act' | 'auto')
     const code = await runCommand({
       prompt,
       model: opts.model as string | undefined,
@@ -42,6 +53,10 @@ program
       memoryPath: opts.memoryPath as string | undefined,
       noMemory: opts.memory === false,
       noMcp: opts.mcp === false,
+      interruptOn,
+      enablePlanMiddleware: planRaw !== undefined,
+      planMode,
+      checkpointPath: opts.checkpoint as string | undefined,
     })
     process.exit(code)
   })

@@ -208,4 +208,44 @@ describe('buildAgent', () => {
       }
     })
   })
+
+  // P20.1.3: interruptOn wires createInterruptMiddleware into
+  // the agent loop. We exercise both the empty-array no-op
+  // path and a populated path.
+  describe('P20.1.3 interrupt-on wire-up', () => {
+    it('accepts an empty interruptOn array as a no-op', async () => {
+      const built = await buildAgent({
+        apiKey: 'test-key',
+        baseUrl: 'http://127.0.0.1:1',
+        noTools: true,
+        noMemory: true,
+        interruptOn: [],
+      })
+      expect(built.agent).toBeDefined()
+    })
+
+    it('accepts a populated interruptOn list', async () => {
+      const built = await buildAgent({
+        apiKey: 'test-key',
+        baseUrl: 'http://127.0.0.1:1',
+        noTools: true,
+        noMemory: true,
+        interruptOn: ['write_file', 'terminal'],
+      })
+      expect(built.agent).toBeDefined()
+    })
+
+    it('combines enablePlanMiddleware + interruptOn in one agent', async () => {
+      const built = await buildAgent({
+        apiKey: 'test-key',
+        baseUrl: 'http://127.0.0.1:1',
+        noTools: true,
+        noMemory: true,
+        enablePlanMiddleware: true,
+        planMode: 'auto',
+        interruptOn: ['write_file'],
+      })
+      expect(built.agent).toBeDefined()
+    })
+  })
 })

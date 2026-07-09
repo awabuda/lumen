@@ -27,6 +27,24 @@ export interface RunCommandOptions {
   noMemory?: boolean
   /** Skip MCP server discovery + connection. */
   noMcp?: boolean
+  /**
+   * P20.1.3: tool names whose dispatch throws AbortError.
+   * Forwarded to `buildAgent({ interruptOn })`; empty array is
+   * a no-op. Multiple names allowed.
+   */
+  interruptOn?: ReadonlyArray<string>
+  /**
+   * P19.0.3 follow-up: when true, buildAgent wires the
+   * PlanMiddleware with `planMode ?? 'auto'`.
+   */
+  enablePlanMiddleware?: boolean
+  /** Plan mode. Only meaningful when `enablePlanMiddleware` is true. */
+  planMode?: 'plan' | 'act' | 'auto'
+  /**
+   * P20.4 follow-up: SQLite path for the checkpoint store.
+   * Forwarded to `buildAgent`. Omit to skip checkpoint wiring.
+   */
+  checkpointPath?: string
 }
 
 export const runCommand = async (options: RunCommandOptions): Promise<number> => {
@@ -48,19 +66,37 @@ export const runCommand = async (options: RunCommandOptions): Promise<number> =>
   let built: Awaited<ReturnType<typeof buildAgent>> | undefined
   try {
     built = await buildAgent(options)
-    const result = await built.agent.run({ userMessage: options.prompt })
-    if (result.finalMessage.content) {
-      process.stdout.write(result.finalMessage.content)
-      if (!result.finalMessage.content.endsWith('\n')) {
-        process.stdout.write('\n')
+    // P20.4: when --checkpoint is given, wire a persistent
+    // checkpoint store so the run auto-saves on throw and
+    // becomes resumable via `lumen checkpoint show` / a
+    // follow-up `lumen run --resume-from` call.
+    const { SqliteCheckpointStore } = await import('@lumen/memory')
+    const checkpointStore = options.checkpointPath
+      ? new SqliteCheckpointStore({ path: options.checkpointPath })
+      : undefined
+    try {
+      const result = await built.agent.run({
+        userMessage: options.prompt,
+        ...(checkpointStore ? { checkpointStore } : {}),
+      })
+      if (result.finalMessage.content) {
+        process.stdout.write(result.finalMessage.content)
+        if (!result.finalMessage.content.endsWith('\n')) {
+          process.stdout.write('\n')
+        }
+      } else if (result.finalMessage.toolCalls.length > 0) {
+        // The model called tools but never produced text. Surface what it did.
+        process.stdout.write(
+          `[lumen] agent stopped after ${result.iterations} iteration(s) with ${result.finalMessage.toolCalls.length} tool call(s) and no final text.\n`,
+        )
       }
-    } else if (result.finalMessage.toolCalls.length > 0) {
-      // The model called tools but never produced text. Surface what it did.
-      process.stdout.write(
-        `[lumen] agent stopped after ${result.iterations} iteration(s) with ${result.finalMessage.toolCalls.length} tool call(s) and no final text.\n`,
-      )
+      return 0
+    } finally {
+      // P20.4: tear down the SQLite checkpoint store so the
+      // WAL gets checkpointed and the file handle is closed.
+      // No-op when the caller did not pass --checkpoint.
+      await checkpointStore?.dispose()
     }
-    return 0
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     process.stderr.write(`lumen: ${message}\n`)
