@@ -45,6 +45,18 @@ export interface RunCommandOptions {
    * Forwarded to `buildAgent`. Omit to skip checkpoint wiring.
    */
   checkpointPath?: string
+  /**
+   * P20.6.2: wire `createSkillTriggerMiddleware` into the
+   * agent loop. Forwarded to `buildAgent({ enableSkillTrigger })`.
+   * Off by default.
+   */
+  enableSkillTrigger?: boolean
+  /**
+   * P20.6.2: override the skill root directory. Forwarded to
+   * `buildAgent({ skillsPath })`. Has no effect when
+   * `enableSkillTrigger` is false.
+   */
+  skillsPath?: string
 }
 
 export const runCommand = async (options: RunCommandOptions): Promise<number> => {

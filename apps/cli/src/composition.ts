@@ -19,11 +19,14 @@
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { type LumenConfig, loadConfig } from '@lumen/config'
-import { Agent, type BaseProvider, createAgent, createInterruptMiddleware, createPlanMiddleware, HookRegistry, ToolRegistry } from '@lumen/core'
+import { Agent, type BaseProvider, createAgent, createInterruptMiddleware, createPlanMiddleware, createSkillTriggerMiddleware, HookRegistry, ToolRegistry } from '@lumen/core'
 import { OpenAICompatibleProvider } from '@lumen/llm'
 import { type DiscoveredMcpServer, closeAllMcpServers, connectAllMcpServers } from '@lumen/mcp'
 import { SqliteStore } from '@lumen/memory'
 import { createFilesystemTools } from '@lumen/tools'
+import { defaultSkillsPath } from '@lumen/skills'
+import { buildKeywordTriggerFn } from './skill-trigger-adapter.js'
+import { loadSkillRegistry } from './commands/skills.js'
 
 export interface CliAgentOptions {
   /** Path to a config file (overrides lookup). */
@@ -94,6 +97,29 @@ export interface CliAgentOptions {
    * Multiple tools can be listed; an empty array is a no-op.
    */
   interruptOn?: ReadonlyArray<string>
+  /**
+   * P20.6.2: when true, wire `createSkillTriggerMiddleware`
+   * into the agent loop. The trigger function is built from
+   * the discovered `SkillRegistry` (see {@link CliAgentOptions.skillsPath})
+   * via `buildKeywordTriggerFn`, so skill activation is
+   * driven by the registry's default keyword scoring
+   * (`BaseSkill.shouldActivate` walks each skill's declared
+   * `triggers`). Mirrors the `lumen run --enable-skill-trigger`
+   * CLI flag.
+   *
+   * Default: false. Bare `lumen run` sessions that have not
+   * opted in keep the pre-P20.6.2 behaviour (no skill
+   * activation, no extra system-prompt augmentation).
+   */
+  enableSkillTrigger?: boolean
+  /**
+   * P20.6.2: override the skill root directory used when
+   * `enableSkillTrigger` is true. Defaults to
+   * `defaultSkillsPath()` (`~/.lumen/skills`). Mirrors the
+   * `lumen run --skills-path <path>` CLI flag. Has no effect
+   * when `enableSkillTrigger` is false.
+   */
+  skillsPath?: string
 }
 
 export interface BuiltAgent {
@@ -194,6 +220,28 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
     middleware.push(
       createInterruptMiddleware({ toolNames: [...options.interruptOn] }),
     )
+  }
+  // P20.6.2: skill-trigger wiring. Opt-in via
+  // `enableSkillTrigger: true` so a bare `lumen run` keeps
+  // the pre-P20.6.2 behaviour (no skill activation, no
+  // system-prompt augmentation). The adapter bridges the
+  // `@lumen/skills` registry shape into the middleware's
+  // `SkillTriggerFn` shape; see `skill-trigger-adapter.ts`
+  // for the contract. Skill discovery is async and may
+  // fail on a misconfigured path; we log and proceed
+  // without the middleware rather than aborting the run,
+  // so a broken skills directory never blocks the agent.
+  if (options.enableSkillTrigger === true) {
+    try {
+      const skillsRoot = options.skillsPath ?? defaultSkillsPath()
+      const registry = await loadSkillRegistry(skillsRoot)
+      const triggerFn = buildKeywordTriggerFn({ registry, cwd })
+      middleware.push(createSkillTriggerMiddleware({ trigger: triggerFn }))
+    } catch (err) {
+      process.stderr.write(
+        `lumen: skill trigger wiring skipped: ${err instanceof Error ? err.message : String(err)}\n`,
+      )
+    }
   }
 
   const agent = createAgent({

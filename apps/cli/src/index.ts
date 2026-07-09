@@ -32,6 +32,14 @@ program
   .option('--interrupt-on <names>', 'Comma-separated tool names to interrupt on (HITL)')
   .option('--plan [mode]', "Wire PlanMiddleware; mode is 'plan' / 'act' / 'auto' (default 'auto')")
   .option('--checkpoint <path>', 'Path to a SQLite checkpoint database (P20.4)')
+  .option(
+    '--enable-skill-trigger',
+    'Wire SkillTriggerMiddleware (P20.6.2). Activates skills from the local skill registry (default ~/.lumen/skills) by keyword-matching each user message and injects active skill descriptions into the system prompt. Off by default to preserve the pre-P20.6.2 behaviour.',
+  )
+  .option(
+    '--skills-path <path>',
+    'Override the skill root directory used with --enable-skill-trigger (defaults to the LUMEN_SKILLS_PATH env var or ~/.lumen/skills).',
+  )
   .action(async (prompt: string, opts: Record<string, unknown>) => {
     const { runCommand } = await import('./commands/run.js')
     const interruptOnRaw = opts.interruptOn as string | undefined
@@ -57,6 +65,8 @@ program
       enablePlanMiddleware: planRaw !== undefined,
       planMode,
       checkpointPath: opts.checkpoint as string | undefined,
+      enableSkillTrigger: opts.enableSkillTrigger === true,
+      skillsPath: opts.skillsPath as string | undefined,
     })
     process.exit(code)
   })
