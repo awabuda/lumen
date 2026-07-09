@@ -392,12 +392,14 @@ export {
 } from './agent/middleware/context-compression.js'
 
 // Skill trigger middleware (P20.6) — lazy skill activation.
-// The trigger function is supplied by the caller (typically
-// composed with @lumen/skills' KeywordTrigger or
-// EmbeddingTrigger); the middleware just runs it on the
-// latest user message and prepends a system-prompt
-// augmentation listing the active skills. The core package
-// does not import @lumen/skills to keep tier isolation.
+// The trigger function is supplied by the caller. The
+// middleware just runs it on the latest user message and
+// prepends a system-prompt augmentation listing the active
+// skills. The core package does not import @lumen/skills
+// to keep tier isolation; the caller typically uses the
+// SkillRegistry's default shouldActivate scoring (see
+// apps/cli/src/skill-trigger-adapter.ts for the CLI
+// composition root).
 export {
   ActiveSkillSchema,
   SkillTriggerOptionsSchema,
