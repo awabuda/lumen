@@ -29,6 +29,7 @@ import Spinner from 'ink-spinner'
 import TextInput from 'ink-text-input'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BuiltAgent } from '../composition.js'
+import { classifyChatError } from './chat-error.js'
 
 /** A single turn (user + assistant) in the conversation log. */
 interface Turn {
@@ -158,12 +159,29 @@ export function Chat({ built }: ChatProps): JSX.Element {
         }
         setStatus('done')
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        if (err instanceof Error && err.name === 'AbortError') {
+        // Classifier lives in `chat-error.ts` so the TUI render
+        // path stays one-liner thin and the rule is unit-testable.
+        // Three routes:
+        //   - `user-abort`: Ctrl+C, pre-aborted, or any other
+        //     AbortError not carrying the `interrupt:` prefix.
+        //     Silently reset to idle (pre-P20.1.2 behaviour).
+        //   - `interrupt`: `createInterruptMiddleware` abort.
+        //     Surface the message in the turn log so the user
+        //     can see which tool tripped the rule and decide
+        //     to retry with a different --interrupt-on list.
+        //   - `error`: any non-AbortError. Surface the message
+        //     in the turn log (also pre-P20.1.2 behaviour).
+        const route = classifyChatError(err)
+        if (route.kind === 'user-abort') {
           setStatus('idle')
           setStreamingText('')
           setActiveTool(undefined)
         } else {
+          // `interrupt` and `error` share the same render path:
+          // a red `lumen: <message>` line in the turn log + a
+          // red border on the input box (driven by `status ===
+          // 'error'` below).
+          const message = route.message
           setTurns((prev) => prev.map((t) => (t.key === myKey ? { ...t, error: message } : t)))
           setStatus('error')
         }

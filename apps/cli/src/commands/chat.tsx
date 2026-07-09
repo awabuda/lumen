@@ -17,10 +17,28 @@
 
 import { type BuiltAgent, buildAgent } from '../composition.js'
 
+/**
+ * Options for {@link chatCommand}.
+ *
+ * `interruptOn` mirrors the `lumen run --interrupt-on` flag: when set,
+ * `buildAgent` wires `createInterruptMiddleware({ toolNames: [...] })` so
+ * the agent loop throws `AbortError` the moment a matching tool is about
+ * to dispatch. The TUI surfaces the resulting `AbortError.message`
+ * (which starts with "interrupt: ...") in the turn log instead of
+ * silently resetting to idle, so the user can see *why* the run was
+ * interrupted and decide to retry with a different tool list.
+ */
 export interface ChatCommandOptions {
   model?: string
   configPath?: string
   cwd?: string
+  /**
+   * Tool names whose dispatch should trigger an `AbortError` from
+   * `createInterruptMiddleware`. Forwarded to
+   * `buildAgent({ interruptOn })`; empty / undefined means no
+   * interrupt rules are wired (backwards-compatible default).
+   */
+  interruptOn?: ReadonlyArray<string>
 }
 
 export const chatCommand = async (options: ChatCommandOptions): Promise<number> => {

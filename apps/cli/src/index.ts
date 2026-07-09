@@ -67,13 +67,25 @@ program
   .option('-m, --model <model>', 'Override the LLM model')
   .option('-c, --config <path>', 'Path to a Lumen config file')
   .option('--cwd <path>', 'Working directory for tool execution')
+  .option(
+    '--interrupt-on <names>',
+    'Comma-separated tool names to interrupt on (HITL). When a tool in this list is about to dispatch, the run aborts and the TUI surfaces the AbortError message.',
+  )
   .action(async (opts: Record<string, unknown>) => {
     // Lazy-load Ink only when actually entering the TUI.
     const { chatCommand } = await import('./commands/chat.js')
+    // Parse --interrupt-on the same way as `lumen run`: comma split,
+    // trim, drop empties. Empty / missing list = no interrupt rules,
+    // matching the pre-P20.1.2 chat behaviour.
+    const interruptOnRaw = opts.interruptOn as string | undefined
+    const interruptOn = interruptOnRaw
+      ? interruptOnRaw.split(',').map((s) => s.trim()).filter((s) => s.length > 0)
+      : undefined
     const code = await chatCommand({
       model: opts.model as string | undefined,
       configPath: opts.config as string | undefined,
       cwd: opts.cwd as string | undefined,
+      interruptOn,
     })
     process.exit(code)
   })
