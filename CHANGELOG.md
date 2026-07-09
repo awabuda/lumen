@@ -94,6 +94,183 @@ Test counts are point-in-time totals across the monorepo. The pre-1.0 series
   experiment that did not land on `main`); P19-DESIGN.md and
   PITFALLS.md live under the existing `docs/` directory.
 
+## [0.13.0] — 2026-07-07 — P19 + P20 implementation pass
+
+> **Bead-surface pass.** This release implements the P19+ middleware
+> 范式 (design-only in 0.12.0) and ships the P20 backlog (checkpoints,
+> heartbeat, observability, skill trigger, context compression,
+> dataset + scoring). The version is bumped to 0.13.0 because every
+> public surface in `@lumen/core` has a new `export { ... }` — pre-1.0
+> series does not promise API stability (see the "Test counts" line at
+> the top of this file), so minor-version is the right call.
+
+**Totals:** 41 feature commits (from `5106481` P19.0.1 AgentMiddleware
+through `7c2de26` P20.10 dataset + scoring, plus the `3110f73` TASKS.md
+sync), 67 new files / ~24 modified, ~+11,000 lines, +280 tests
+(680 → 960). 0 type errors across the 11-package workspace.
+
+### Added — P19 middleware 范式
+
+- **`AgentMiddleware` abstraction (P19.0.1, `5106481`).** Plain-object
+  middleware with `name`, `stateSchema`, `initialState`, and 5 hooks
+  (`beforeModel` / `afterModel` / `wrapModelCall` / `wrapToolCall` /
+  `afterRun`). `parseMiddleware` validates name uniqueness at
+  construction time. `MiddlewareError` carries the offending
+  middleware name. P19+ rule 11 in enforced form: any extension to
+  the agent loop is a middleware, never an `AgentConfig` boolean.
+- **`Agent.run` middleware wire-up (P19.0.2, `d6918a2`).** Step
+  boundary: `beforeModel` → `wrapModelCall` → `afterModel` →
+  `wrapToolCall` (per call) → `afterRun`. Bare `new Agent({...})` is
+  unchanged behaviour (no middleware = old loop exactly).
+- **`createAgent` factory (P19.0.3, `815afca`).** The composition
+  root's documented entry point. P19.0.3 follow-up `e363f9d` wired
+  the CLI's `composition.ts` to it: `--plan` flag opts into
+  `createPlanMiddleware({ mode: 'auto' })`.
+- **Plan / Act / Auto middleware (P19.1, `9d8735e`).**
+  `createPlanMiddleware({ mode, planner?, planStore? })`. The
+  `auto` mode uses `MiddlewareControl.continueAfterModel` to chain
+  planning → acting within a single run. P19.1.4 refactor
+  (`8c37857`) replaced the abstract `BasePlanner` with an
+  interface + `LLMPlanner` / `StaticPlanner` helper functions
+  (P19+ rule 15).
+- **Reflection middleware (P19.2, `433daae`).** Three modes:
+  inline (`[confidence: 0.XX]` suffix per assistant message),
+  step-level (rule-based heuristic every N steps), run-end
+  (persists a `reflection-*` fact to `BaseMemoryStore`). 5 e2e
+  cover the three modes. P19.2.5 refactor (`9042601`) replaced
+  the abstract `BaseReflector` with `LLMReflector` /
+  `RuleBasedReflector` helpers.
+- **Sub-agent orchestration (P19.3 + P19.4, `bb07060`, `2e29907`,
+  `e3f6c1f`).** Sequential + Parallel (`Promise.all` + 60s
+  timeout), Handoff (OpenAI Swarm style — sub-agent emits a
+  `handoff` tool call, payload surfaces in the parent context),
+  Supervisor (per-step judge with `continue | redo | abort`).
+  9 e2e across the four modes. P19.3.1-2 (`fa24bf4`) deleted the
+  abstract `BaseSubAgent` (one-impl wrapper class) per P19+ rule
+  14. `SubAgentMiddleware` (P19.3.3, `f22ffcd`) exposes a
+  `task` tool; the P19.4.3 follow-up `2e29907` added
+  `enableHandoff: boolean` so callers can route through either
+  the plain runner or `createHandoffSubAgent` transparently.
+- **Meta-reflector (P19.5, `c58585c`).** `BaseMetaReflector` +
+  `createClusteringMetaReflector` factory. Jaccard-token clusterer
+  on `(kind, tag-set)` partitions, with a `±0.1` log-decay
+  `applyTrustDelta` helper. The P19.5 design basis
+  (`docs/p19.5-meta-reflector-design-basis.md`, 273 lines) records
+  the 4-framework comparison that informed the choice: the only
+  upstream model that has a true trust-delta mechanism is Hermes
+  Agent's `fact_feedback` (asymmetric +0.05 / -0.10). OpenClaw's
+  "daily→long-term distillation" cited in the P19-DESIGN doc is
+  **unverified** — the 1d00a81 commit marks the prior claims as
+  "未验证" and the public P19.5 implementation aligns with the
+  verifiable Hermes pattern.
+- **CLI surfaces (P19.6, `8656952`, `ab69d7e`).** `lumen plan
+  list / approve / reject` and `lumen reflect run / meta`. CLI
+  storage is JSON-on-disk for plans (`~/.lumen/plans.json`) and
+  SQLite for memory (existing). 12 CLI integration tests.
+- **Bench harness (P19.7, `5641199`, `4e28a46`, `ad81dff`,
+  `9f9550e`).** Four perf scenarios under `LUMEN_BENCH=1`:
+  sequential sub-agent, parallel sub-agent, 4-mode reflection
+  overhead, 10-run meta reflection. P19.7.5 (`9edf2a4`) adds
+  rule-based quality score helpers (`planCoverageScore`,
+  `reflectionConfidenceScore`, `subagentCoordinationScore`,
+  `computeQualityScores`) for the LangSmith-style second axis.
+
+### Added — P20 backend hardening
+
+- **Checkpoint / Resume (P20.4, `291a943`, `33149a6`, `5154b99`,
+  `564ea1e`).** `AgentCheckpoint` interface + Zod schema +
+  `BaseCheckpointStore` interface + `InMemoryCheckpointStore`
+  (in-process) + `SqliteCheckpointStore` (cross-process,
+  better-sqlite3, WAL). `Agent.run` accepts `resumeFrom?` and
+  `checkpointStore?`; aborts auto-save the current state. The
+  `lumen checkpoint list / show / delete` CLI surface
+  (P20.4.3) lives entirely on the in-memory store today; the
+  CLI's SQLite integration is a future P20.4.x.
+- **Provider pool fallback + auto-checkpoint (P20.5, `b6cb0d1`).**
+  The fallback chain contract: when the pool falls back
+  successfully, Agent.run never throws and no checkpoint is
+  saved; when every provider exhausts, `PoolExhaustedError` is
+  caught by the P20.4.2 path and the run snapshot is preserved.
+- **HITL interrupt middleware (P20.1.1, `6b55ac9`).**
+  `createInterruptMiddleware({ toolNames?, maxIterations?,
+  onError? })`. Throws `AbortError` when a configured rule
+  fires; the existing P20.4.2 catch path takes over
+  (auto-save + re-throw). 6 e2e cover rule validation,
+  tool-name + maxIterations trigger paths, and the
+  not-in-list pass-through.
+- **Heartbeat / long-running supervisor (P20.2, `4feda2c`).**
+  `startHeartbeat({ intervalMs, timeoutMs?, onPing?, onTimeout? })`
+  + `runWithHeartbeat(runner, options)`. The supervisor is an
+  outer wrapper, **not** a middleware: the agent loop has no
+  "last activity" hook, and P19+ rule 11 says middleware > config
+  flag for loop extensions. Default 30 000 ms interval.
+- **Context compression middleware (P20.3, `4cff9f1`).**
+  `createContextCompressionMiddleware({ maxMessages?, keepLastN?,
+  summaryFn? })`. When the history grows past `maxMessages`, the
+  oldest `length - keepLastN` messages are replaced with a
+  single system-role summary; the tail is preserved verbatim.
+  The default `summaryFn` is a deterministic 200-char truncation
+  (no LLM, no API call). Callers compose their own `summaryFn`
+  for LLM-backed summarisation.
+- **Skill trigger middleware (P20.6, `0969118`).**
+  `createSkillTriggerMiddleware({ trigger, maxActive?,
+  formatActive? })`. The trigger function is supplied by the
+  caller — the core package does not import `@lumen/skills`,
+  preserving tier isolation. The `apps/cli` layer composes the
+  trigger with `KeywordTrigger` or `EmbeddingTrigger` from
+  `@lumen/skills` in a future P20.6.x.
+- **Observability — trace context (P20.8, `8015520`).**
+  `createTrace({ traceId?, spanId?, parentSpanId?, name? })` +
+  `runWithTrace(trace, runner)` + `formatTrace(trace)`. 16-hex-char
+  identifiers (8 random bytes each); forward-compatible with W3C
+  / OpenTelemetry bridges via a future `toOtelContext` adapter.
+- **Dataset + scoring (P20.10, `7c2de26`).**
+  `BenchmarkCase<TInput, TExpected>` + `BenchmarkScore` +
+  `BenchmarkScoreSchema` (Zod, strict) + `runDatasetBench({ name,
+  cases, runner })` + `reportTableRow(report)`. Per-case errors
+  are caught and recorded as `passed: false` rows; the helper
+  never throws. 11 e2e. A future P20.10.2 can rewrite the
+  existing per-scenario bench files in terms of
+  `runDatasetBench` without changing the bench output format.
+
+### Docs
+
+- **`docs/P19-DESIGN.md`** (already in 0.12.0) — unchanged; the
+  P19+ implementation in 0.13.0 is a faithful transcription of
+  the design.
+- **`docs/p19.5-meta-reflector-design-basis.md`** (273 lines,
+  `64c0a29`). The 4-framework comparison that informed P19.5;
+  records the OpenClaw unverified-claim correction.
+- **`docs/P20.7-agent-team.md`** (108 lines, `be21f65`). Agent
+  team design baseline: documents how P19.3 + P19.4 compose via
+  shared PlanStore to support multi-agent workflows. The future
+  P20.7.x sub-tickets are scoped to `apps/cli`; core is not
+  modified.
+- **`docs/GETTING-STARTED.md`** (251 lines, `4669a34`). The
+  user-facing entry point. Eight sections: install, first run,
+  config, 5 providers, 5 use cases in 60 s, next steps, CLI map,
+  pinned design commitments (the four lumen rules: middleware
+  > config flag, helper > abstract class, tier isolation,
+  no SaaS).
+
+### Compatibility
+
+- The 0.13.0 line is source-compatible with the bare-`Agent`
+  0.10-0.12 constructor: every new public export is an
+  `export { ... }` addition, no signature change. Operators
+  who instantiate `new Agent({...})` see no behavioural change
+  unless they explicitly add a `middleware: [...]` array.
+- Tier isolation is preserved: `@lumen/core` does not import
+  `@lumen/memory`, `@lumen/skills`, `@lumen/tools`,
+  `@lumen/mcp`, or `@lumen/llm`. SQLite-backed checkpoint
+  store lives in `@lumen/memory` (downstream of core). Skill
+  trigger middleware accepts a caller-supplied trigger
+  function rather than importing `@lumen/skills`.
+- No external SaaS: no LangSmith, no OpenClaw hosted, no
+  OpenTelemetry collector. The trace context (P20.8) is the
+  local-only observability hook; a future `toOtelContext`
+  adapter is the only sanctioned bridge to external systems.
+
 ## [0.10.0] — 2026-06-16 — P9 Hardening (errors, safety, failure fallback)
 
 **Totals:** 4 feature commits (2108a00, f65973a, 56f6333, 53e65c3), 4 new
