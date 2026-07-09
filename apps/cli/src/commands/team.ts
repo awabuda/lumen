@@ -287,16 +287,16 @@ export const listTeamAgents = (team: Team): ReadonlyArray<SubAgentSpec> => team.
 // ---------------------------------------------------------------------------
 
 /** Action the user asked `lumen team` to perform. */
-export type TeamAction = 'list' | 'validate' | 'show'
+export type TeamAction = 'list' | 'validate' | 'show' | 'run'
 
 /** Options for {@link teamCommand}. */
 export interface TeamCommandOptions {
   /** Which action to run. */
   readonly action: TeamAction
   /**
-   * Path to a team.json file. Required for `validate` and
-   * `show`; ignored by `list` (which scans the search dir
-   * instead).
+   * Path to a team.json file. Required for `validate`,
+   * `show`, and `run`; ignored by `list` (which scans the
+   * search dir instead).
    */
   readonly path?: string
   /**
@@ -306,6 +306,17 @@ export interface TeamCommandOptions {
    * `team.json` it finds, plus a one-line summary.
    */
   readonly listDir?: string
+  /**
+   * `run` action only: the parent context the orchestrator
+   * will dispatch sub-agents against. Callers in production
+   * build this via `buildAgent({ ... })` from
+   * `apps/cli/src/composition.ts`; tests inject a fake.
+   * The teamCommand does not import `buildAgent` directly
+   * (dependency-injection keeps the module testable without
+   * hitting a real provider) — the caller is responsible
+   * for the wire-up.
+   */
+  readonly runParent?: TeamParent
 }
 
 /**
@@ -327,6 +338,77 @@ export const formatTeam = (team: Team, sourcePath?: string): string => {
     lines.push(`  - ${a.name}: ${a.description}`)
   }
   return lines.join('\n')
+}
+
+/**
+ * Pretty-print the per-task results of a team run. Each
+ * orchestrator mode returns a slightly different shape
+ * (sequential/parallel return per-task AgentRunResult;
+ * handoff returns HandoffResult; supervisor returns a single
+ * AgentRunResult wrapped in a 1-element array). We project
+ * the most useful field — the final assistant message
+ * content — out of whatever shape we got, falling back to a
+ * JSON dump for shapes the teamCommand does not recognise.
+ *
+ * Pure function (no I/O) so the rendering can be unit-tested
+ * by feeding hand-rolled result arrays.
+ */
+export const formatTeamResult = (result: unknown): string => {
+  // The most common shape: AgentRunResult, with a `finalMessage`
+  // carrying `content` (a string) and `toolCalls` (an array).
+  if (
+    typeof result === 'object' &&
+    result !== null &&
+    'finalMessage' in result &&
+    typeof (result as { finalMessage: unknown }).finalMessage === 'object' &&
+    (result as { finalMessage: { content?: unknown } }).finalMessage !== null
+  ) {
+    const fm = (result as { finalMessage: { content?: unknown; toolCalls?: unknown[] } })
+      .finalMessage
+    const content = typeof fm.content === 'string' ? fm.content : ''
+    return content
+  }
+  // HandoffResult: { task, result, handoff? }
+  if (typeof result === 'object' && result !== null && 'task' in result && 'result' in result) {
+    const inner = (result as { result: unknown }).result
+    const handoff = (result as { handoff?: { to: string; reason: string } }).handoff
+    const base = formatTeamResult(inner)
+    if (handoff) {
+      return `${base}\n  [handoff → ${handoff.to}: ${handoff.reason}]`
+    }
+    return base
+  }
+  // Fallback: dump as JSON. Keeps the output useful for
+  // shape mismatches (a future orchestrator mode we did not
+  // anticipate) and for debugging.
+  try {
+    return JSON.stringify(result, null, 2)
+  } catch {
+    return '(unserializable result)'
+  }
+}
+
+/**
+ * Print every per-task result in declaration order, prefixed
+ * by the task number + agent name + prompt. Used by the
+ * `run` action so the operator sees one block per task.
+ */
+export const printTeamResults = (team: Team, results: ReadonlyArray<unknown>): void => {
+  // Fall back to the implicit task list when the team did
+  // not declare one — same shape as orchestrateTeam uses.
+  const tasks = team.tasks ?? team.agents.map((a) => ({ agentName: a.name, prompt: a.description }))
+  results.forEach((r, i) => {
+    const task = tasks[i] ?? { agentName: '?', prompt: '?' }
+    process.stdout.write(`[${i + 1}/${results.length}] ${task.agentName}  ${task.prompt}\n`)
+    const body = formatTeamResult(r)
+    // Indent every line of the body by two spaces so the
+    // result visually nests under the task header.
+    const indented = body
+      .split('\n')
+      .map((l) => `  ${l}`)
+      .join('\n')
+    process.stdout.write(`${indented}\n\n`)
+  })
 }
 
 /**
@@ -421,6 +503,27 @@ export const teamCommand = async (options: TeamCommandOptions): Promise<number> 
         team.tasks ? `, tasks=${team.tasks.length}` : ''
       })\n`,
     )
+    return 0
+  }
+
+  if (action === 'run') {
+    if (!options.runParent) {
+      process.stderr.write(
+        'lumen team run: internal error — no runParent provided. The CLI dispatcher is responsible for building it via buildAgent().\n',
+      )
+      return 2
+    }
+    const runner = orchestrateTeam(team, options.runParent)
+    process.stdout.write(`Running team "${team.name}" (mode=${resolveTeamMode(team)})\n\n`)
+    let results: ReadonlyArray<unknown>
+    try {
+      results = await runner.run()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      process.stderr.write(`lumen team run: ${team.name} failed: ${msg}\n`)
+      return 1
+    }
+    printTeamResults(team, results)
     return 0
   }
 

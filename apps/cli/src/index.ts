@@ -385,9 +385,13 @@ program
 
 program
   .command('team')
-  .description('Inspect agent team files (team.json)')
-  .argument('[subcommand]', '"list" (default), "validate <path>", or "show <path>"', 'list')
-  .argument('[path]', 'Path to a team.json file (for "validate" and "show")')
+  .description('Inspect and run agent team files (team.json)')
+  .argument(
+    '[subcommand]',
+    '"list" (default), "validate <path>", "show <path>", or "run <path>"',
+    'list',
+  )
+  .argument('[path]', 'Path to a team.json file (for "validate", "show", and "run")')
   .option('--list-dir <dir>', 'list: directory to scan for team.json files (defaults to ./teams)')
   .action(
     async (subcommand: string, filePath: string | undefined, opts: Record<string, unknown>) => {
@@ -411,6 +415,45 @@ program
           code = 2
         } else {
           code = await teamCommand({ action: 'show', path: filePath })
+        }
+      } else if (subcommand === 'run') {
+        if (!filePath) {
+          process.stderr.write('lumen team: missing <path> for "run"\n')
+          code = 2
+        } else {
+          // P20.7.3: build the parent context via the same
+          // composition root that `lumen run` uses, so a team
+          // run gets the same provider / tools / memory /
+          // hooks / MCP wiring the user has already configured.
+          // The pre-flight API-key check lives in buildAgent,
+          // so we don't have to duplicate it here.
+          const { buildAgent } = await import('./composition.js')
+          let built: Awaited<ReturnType<typeof buildAgent>> | undefined
+          try {
+            built = await buildAgent({
+              noMcp: false,
+              noMemory: false,
+              memoryPath: ':memory:',
+            })
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            process.stderr.write(`lumen team run: failed to build agent: ${msg}\n`)
+            process.exit(1)
+          }
+          code = await teamCommand({
+            action: 'run',
+            path: filePath,
+            runParent: {
+              provider: built.provider,
+              tools: built.tools,
+              model: built.model,
+              // Agent.cwd is private; buildAgent already
+              // resolved cwd via the same fallback, so we
+              // re-derive it here to keep runParent in sync
+              // with the agent's actual working directory.
+              cwd: process.cwd(),
+            },
+          })
         }
       } else {
         process.stderr.write(`lumen team: unknown subcommand: ${subcommand}\n`)
