@@ -33,6 +33,7 @@
  */
 
 import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import {
   type SubAgentSpec,
   SubAgentSpecSchema,
@@ -280,3 +281,156 @@ export const resolveTeamMode = (team: Team): TeamMode => team.mode ?? 'sequentia
  * behaviour without going through `loadTeam`.
  */
 export const listTeamAgents = (team: Team): ReadonlyArray<SubAgentSpec> => team.agents
+
+// ---------------------------------------------------------------------------
+// CLI command surface (P20.7.2)
+// ---------------------------------------------------------------------------
+
+/** Action the user asked `lumen team` to perform. */
+export type TeamAction = 'list' | 'validate' | 'show'
+
+/** Options for {@link teamCommand}. */
+export interface TeamCommandOptions {
+  /** Which action to run. */
+  readonly action: TeamAction
+  /**
+   * Path to a team.json file. Required for `validate` and
+   * `show`; ignored by `list` (which scans the search dir
+   * instead).
+   */
+  readonly path?: string
+  /**
+   * Directory to scan for `lumen team list`. Defaults to
+   * `./teams` (relative to cwd) and `./fixtures/teams` in
+   * the working tree. The list action reports every
+   * `team.json` it finds, plus a one-line summary.
+   */
+  readonly listDir?: string
+}
+
+/**
+ * Pretty-print a parsed team. Single source of truth for the
+ * `lumen team show` and `lumen team list` output formats so
+ * the two subcommands stay consistent.
+ */
+export const formatTeam = (team: Team, sourcePath?: string): string => {
+  const lines: string[] = []
+  const header = sourcePath ? `${team.name}  (${sourcePath})` : team.name
+  lines.push(header)
+  if (team.description) lines.push(`  ${team.description}`)
+  lines.push(
+    `  mode: ${resolveTeamMode(team)} · ${team.agents.length} agent${team.agents.length === 1 ? '' : 's'}${
+      team.tasks ? ` · ${team.tasks.length} task${team.tasks.length === 1 ? '' : 's'}` : ''
+    }`,
+  )
+  for (const a of team.agents) {
+    lines.push(`  - ${a.name}: ${a.description}`)
+  }
+  return lines.join('\n')
+}
+
+/**
+ * Read a directory and return every `team.json` it contains
+ * (one level deep, non-recursive by design — operators with
+ * deeply-nested team rosters can pass a more specific
+ * `--list-dir`).
+ */
+const discoverTeamFiles = async (dir: string): Promise<ReadonlyArray<string>> => {
+  const { readdir, stat } = await import('node:fs/promises')
+  let entries: import('node:fs').Dirent[]
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw err
+  }
+  const out: string[] = []
+  for (const e of entries) {
+    if (!e.isFile()) continue
+    if (e.name !== 'team.json' && !e.name.endsWith('.team.json')) continue
+    const full = join(dir, e.name)
+    // stat to confirm it's a regular file (skip symlinks
+    // pointing at directories etc.).
+    try {
+      const s = await stat(full)
+      if (s.isFile()) out.push(full)
+    } catch {
+      // ignore — caller will surface the load error if they
+      // try to read this file.
+    }
+  }
+  return out.sort()
+}
+
+/**
+ * CLI command for `lumen team list|validate|show`. Returns
+ * an exit code; 0 on success, 1 on user error, 2 on
+ * configuration error (consistent with the other CLI
+ * commands — see `apps/cli/src/commands/chat.tsx`).
+ */
+export const teamCommand = async (options: TeamCommandOptions): Promise<number> => {
+  const { action } = options
+
+  if (action === 'list') {
+    const dir = options.listDir ?? './teams'
+    const files = await discoverTeamFiles(dir)
+    if (files.length === 0) {
+      process.stdout.write(`No team.json files found under ${dir}\n`)
+      return 0
+    }
+    process.stdout.write(`Lumen teams under ${dir}\n\n`)
+    for (const f of files) {
+      try {
+        const team = await loadTeam(f)
+        process.stdout.write(`${formatTeam(team, f)}\n\n`)
+      } catch (err) {
+        // Surface the validation error inline so a single
+        // broken team file does not mask the others. The
+        // error is prefixed with the file path so the
+        // operator can fix it without re-running with
+        // verbose mode.
+        const msg = err instanceof Error ? err.message : String(err)
+        process.stdout.write(`! ${f}\n  ${msg}\n\n`)
+      }
+    }
+    return 0
+  }
+
+  // validate + show both need a path
+  if (!options.path) {
+    process.stderr.write(`lumen team ${action}: missing <path> to a team.json file\n`)
+    return 2
+  }
+
+  let team: Team
+  try {
+    team = await loadTeam(options.path)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    process.stderr.write(`lumen team ${action}: ${msg}\n`)
+    return 1
+  }
+
+  if (action === 'validate') {
+    // loadTeam already ran the full Zod parse + superRefine,
+    // so reaching here means the file is valid. We still
+    // print a confirmation line so the operator can see
+    // what was checked.
+    process.stdout.write(
+      `ok: ${options.path}  (name=${team.name}, mode=${resolveTeamMode(team)}, agents=${team.agents.length}${
+        team.tasks ? `, tasks=${team.tasks.length}` : ''
+      })\n`,
+    )
+    return 0
+  }
+
+  // action === 'show'
+  process.stdout.write(`${formatTeam(team, options.path)}\n`)
+  if (team.tasks && team.tasks.length > 0) {
+    process.stdout.write('\n  tasks:\n')
+    for (const t of team.tasks) {
+      process.stdout.write(`  - ${t.agentName}: ${t.prompt}\n`)
+    }
+  }
+  return 0
+}

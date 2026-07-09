@@ -44,12 +44,14 @@ program
     const { runCommand } = await import('./commands/run.js')
     const interruptOnRaw = opts.interruptOn as string | undefined
     const interruptOn = interruptOnRaw
-      ? interruptOnRaw.split(',').map((s) => s.trim()).filter((s) => s.length > 0)
+      ? interruptOnRaw
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0)
       : undefined
     const planRaw = opts.plan as string | boolean | undefined
-    const planMode = planRaw === true || planRaw === undefined
-      ? undefined
-      : (planRaw as 'plan' | 'act' | 'auto')
+    const planMode =
+      planRaw === true || planRaw === undefined ? undefined : (planRaw as 'plan' | 'act' | 'auto')
     const code = await runCommand({
       prompt,
       model: opts.model as string | undefined,
@@ -89,7 +91,10 @@ program
     // matching the pre-P20.1.2 chat behaviour.
     const interruptOnRaw = opts.interruptOn as string | undefined
     const interruptOn = interruptOnRaw
-      ? interruptOnRaw.split(',').map((s) => s.trim()).filter((s) => s.length > 0)
+      ? interruptOnRaw
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0)
       : undefined
     const code = await chatCommand({
       model: opts.model as string | undefined,
@@ -196,13 +201,14 @@ program
   .description('Inspect and manage saved agent run checkpoints')
   .argument('<subcommand>', '"list <session-id>", "show <id>", or "delete <id>"')
   .argument('[arg]', 'Session id (for "list") or checkpoint id (for "show"/"delete")')
-  .option('--plans-path <path>', 'P20.4.5: path to a SQLite checkpoint database (defaults to in-memory)')
+  .option(
+    '--plans-path <path>',
+    'P20.4.5: path to a SQLite checkpoint database (defaults to in-memory)',
+  )
   .action(async (subcommand: string, arg: string | undefined, opts: Record<string, unknown>) => {
-    const {
-      checkpointDeleteCommand,
-      checkpointListCommand,
-      checkpointShowCommand,
-    } = await import('./commands/checkpoint.js')
+    const { checkpointDeleteCommand, checkpointListCommand, checkpointShowCommand } = await import(
+      './commands/checkpoint.js'
+    )
     const file = opts.plansPath as string | undefined
     let code = 0
     if (subcommand === 'list') {
@@ -236,7 +242,11 @@ program
 program
   .command('reflect')
   .description('Manually trigger reflection (rule-based or cross-run meta)')
-  .argument('[subcommand]', '"run" (per-session rule-based) or "meta" (cross-run trust delta)', 'run')
+  .argument(
+    '[subcommand]',
+    '"run" (per-session rule-based) or "meta" (cross-run trust delta)',
+    'run',
+  )
   .option('--memory-path <path>', 'Override the SQLite memory database path')
   .option('--session-id <id>', 'reflect run: explicit session id (default: most recent)')
   .option('--interval <n>', 'reflect meta: trust-delta interval (default 10)')
@@ -255,9 +265,7 @@ program
       const similarityRaw = opts.similarity
       code = await reflectMetaCommand({
         ...(memoryPath !== undefined ? { memoryPath } : {}),
-        ...(typeof intervalRaw === 'string'
-          ? { interval: Number.parseInt(intervalRaw, 10) }
-          : {}),
+        ...(typeof intervalRaw === 'string' ? { interval: Number.parseInt(intervalRaw, 10) } : {}),
         ...(typeof similarityRaw === 'string'
           ? { similarityThreshold: Number.parseFloat(similarityRaw) }
           : {}),
@@ -374,6 +382,43 @@ program
     }
     process.exit(code)
   })
+
+program
+  .command('team')
+  .description('Inspect agent team files (team.json)')
+  .argument('[subcommand]', '"list" (default), "validate <path>", or "show <path>"', 'list')
+  .argument('[path]', 'Path to a team.json file (for "validate" and "show")')
+  .option('--list-dir <dir>', 'list: directory to scan for team.json files (defaults to ./teams)')
+  .action(
+    async (subcommand: string, filePath: string | undefined, opts: Record<string, unknown>) => {
+      const { teamCommand } = await import('./commands/team.js')
+      let code = 0
+      if (subcommand === 'list') {
+        code = await teamCommand({
+          action: 'list',
+          listDir: opts.listDir as string | undefined,
+        })
+      } else if (subcommand === 'validate') {
+        if (!filePath) {
+          process.stderr.write('lumen team: missing <path> for "validate"\n')
+          code = 2
+        } else {
+          code = await teamCommand({ action: 'validate', path: filePath })
+        }
+      } else if (subcommand === 'show') {
+        if (!filePath) {
+          process.stderr.write('lumen team: missing <path> for "show"\n')
+          code = 2
+        } else {
+          code = await teamCommand({ action: 'show', path: filePath })
+        }
+      } else {
+        process.stderr.write(`lumen team: unknown subcommand: ${subcommand}\n`)
+        code = 1
+      }
+      process.exit(code)
+    },
+  )
 
 program
   .command('skills')

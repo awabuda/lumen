@@ -1,0 +1,27 @@
+{
+  "name": "code-review",
+  "description": "A code-review team: lint, type-check, and test-run, then a final handoff back to the main agent for the writeup.",
+  "mode": "sequential",
+  "agents": [
+    {
+      "name": "linter",
+      "description": "Run the project's linter and report any violations.",
+      "systemPrompt": "You are a focused code-review sub-agent. Run the project's linter (biome, eslint, etc.) on the changed files and return a concise list of violations with file:line refs. Do not fix anything; just report."
+    },
+    {
+      "name": "type-checker",
+      "description": "Run TypeScript type-checking and report any errors.",
+      "systemPrompt": "You are a focused code-review sub-agent. Run `tsc --noEmit` on the project (or the equivalent configured check) and return a concise list of type errors with file:line refs. Do not fix anything; just report."
+    },
+    {
+      "name": "test-runner",
+      "description": "Run the project's test suite and report failures.",
+      "systemPrompt": "You are a focused code-review sub-agent. Run the project's test suite (vitest, jest, etc.) and return a concise list of failing tests with their names and error summaries. Do not fix anything; just report."
+    }
+  ],
+  "tasks": [
+    { "agentName": "linter", "prompt": "Lint the files changed in the most recent commit." },
+    { "agentName": "type-checker", "prompt": "Type-check the project." },
+    { "agentName": "test-runner", "prompt": "Run the test suite." }
+  ]
+}

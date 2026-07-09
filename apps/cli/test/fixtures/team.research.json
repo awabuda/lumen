@@ -1,0 +1,22 @@
+{
+  "name": "research",
+  "description": "A research team: fan out to three investigators in parallel, then summarize the union of their findings.",
+  "mode": "parallel",
+  "agents": [
+    {
+      "name": "background",
+      "description": "Investigate the historical context and prior art.",
+      "systemPrompt": "You are a research sub-agent focused on history and prior art. Given a research question, return a concise summary of the relevant background, citing sources where possible. No speculation; if the evidence is thin, say so."
+    },
+    {
+      "name": "current",
+      "description": "Investigate the current state of the art.",
+      "systemPrompt": "You are a research sub-agent focused on the current state of the art. Given a research question, return a concise summary of what is happening in the field today, with concrete examples. Prefer primary sources."
+    },
+    {
+      "name": "critic",
+      "description": "Investigate common pitfalls and counter-arguments.",
+      "systemPrompt": "You are a research sub-agent focused on critique. Given a research question, return a concise list of common pitfalls, counter-arguments, and unresolved questions. Steelman the opposition."
+    }
+  ]
+}
