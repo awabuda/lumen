@@ -871,3 +871,118 @@ cd packages/memory && pnpm rebuild better-sqlite3   # 若改了 memory 抽象
 - [x] **P20.8** — Observability 深度（trace ID + span；commit `8015520`；`createTrace` + `runWithTrace` + `formatTrace` outer helper，14 个 e2e，forward-compatible with W3C / OpenTelemetry bridges）
 - [x] **P20.9** — Tutorial 入口（`docs/GETTING-STARTED.md` 8 节：install / first run / config / 5 providers / 5 use cases in 60s / next steps / CLI map / pinned design commitments；commit `4669a34`）
 - [x] **P20.10** — Dataset + scoring（commit `7c2de26`；`BenchmarkCase` + `BenchmarkScore` + `BenchmarkScoreSchema` + `runDatasetBench` + `reportTableRow` + 11 个 e2e）
+
+
+---
+
+## P21 — Durable execution + long-running agents (target: P21 之后)
+
+> **P21 是 lumen 在 P19+ middleware 范式落地之后的"应用层范式"扩展。** P19–P20 解决了 "agent loop + middleware + 编排 + 反思 + 工具"；P21 解决 "agent loop 跨**时间**的**可恢复性**" — 一个跑了 30 分钟的 agent 在第 100 步因网络崩溃挂掉，重启后能**无缝**从第 100 步继续，不是从第 1 步重跑。完整设计见 `docs/P21-DESIGN.md`（4-framework fetch 验证 + 关键决策 + 任务依赖图都在那一份）。本节是 commit-by-commit 的 task list。
+>
+> **核心决策（2026-07-10 收口）：**
+> 1. P21 范围 = durable execution（不是 memories / observability / permission modes — 4-framework fetch 后唯一明显 gap）
+> 2. **Step-level checkpoint default**（沿用 LangGraph 1.0；`checkpointInterval=1` 默认，caller 调成 N 压 IO）
+> 3. **TTL-based stale 防护**（lumen 自己的设计 — 4 框架都没有，10min TTL）
+> 4. **不**改 public API surface（`AgentRunOptions.resumeFrom` 已有；P21 改 `Agent.run` 内部 auto-detect 行为）
+> 5. **不**进 4 框架 race（不抽象"通用 durable backend" — P19+ rule 15 helper > abstract）
+> 6. **P21 整体不依赖 LLM call**（纯 IO + 状态机）
+
+### P21.0 — `Agent.run` 默认 step-level checkpoint
+
+- [ ] **P21.0.1** — `AgentRunOptions` 加 `checkpointInterval?: number`（默认 1 = 每 step save；P20.4 默认只在 throw path save，P21 覆盖默认）
+- [ ] **P21.0.2** — `Agent.run` 内部在每个 `step:end` 时自动 save checkpoint（不只 throw path）；save 失败 swallow，不影响 run（best-effort）
+- [ ] **P21.0.3** — `AgentCheckpoint` 加 `outcome: 'in_progress' | 'success' | 'error'`（Zod schema `.optional()`，back-compat；P20.4 老 checkpoint 缺这字段视为 `'in_progress'`）
+- [ ] **P21.0.4** — `packages/core/test/agent-durable.test.ts` — 5 个 e2e：(a) 每 step save (b) checkpointInterval=N 跳步 (c) throw 时也 save（已有 P20.4 行为保留） (d) save 失败不中断 run (e) middleware order 不被 step checkpoint 破坏
+
+### P21.1 — `lumen run` 启动时 auto-resume
+
+- [ ] **P21.1.1** — `lumen run` 启动时检查 `--checkpoint <path>` 指向的 sqlite file，查询 `outcome='in_progress'` 的最近 checkpoint
+- [ ] **P21.1.2** — TTL 检查：`Date.now() - checkpoint.createdAt < 10min` 才 auto-resume（`--no-resume` flag 强制 fresh start；`--resume-ttl <ms>` 自定义 TTL）
+- [ ] **P21.1.3** — `lumen_chat` TUI 同样行为（chat startup auto-resume from `--checkpoint <path>` if available）
+- [ ] **P21.1.4** — `apps/cli/test/run-resume.test.ts` — 4 个 e2e：(a) fresh checkpoint 不 auto-resume (b) 5min 前 checkpoint auto-resume (c) 30min 前 checkpoint fresh start (d) `--no-resume` 总是 fresh
+
+### P21.2 — `runWithHeartbeat` + checkpoint 集成
+
+- [ ] **P21.2.1** — `runWithHeartbeat({ heartbeatMs: 30000, checkpointStore, checkpointIntervalMs: 60000 })` — 30s heartbeat + 60s checkpoint（已 ship P20.2 heartbeat；P21 加 checkpoint hook）
+- [ ] **P21.2.2** — `apps/cli/cron.ts` 集成 P21.2.1（`lumen cron run <job>` 默认走 heartbeat + checkpoint；长跑任务不丢 state）
+- [ ] **P21.2.3** — 3 个 e2e：heartbeat 不打断 step checkpoint / checkpoint 失败 heartbeat 继续 / 60s 间隔精确性
+
+### P21.3 — Durable execution bench + 4-framework 对比
+
+- [ ] **P21.3.1** — `packages/core/test/perf/09-durable-step-checkpoint.test.ts` — 100-step agent 的 step checkpoint wall-clock 成本（默认 `checkpointInterval=1`）
+- [ ] **P21.3.2** — `packages/core/test/perf/10-durable-resume-latency.test.ts` — 中断后 resume 延迟（step 50 中断 vs step 100 中断）
+- [ ] **P21.3.3** — `packages/core/test/perf/11-durable-concurrent.test.ts` — 100 concurrent durable runs 的 sqlite WAL write throughput
+- [ ] **P21.3.4** — `packages/core/test/perf/12-durable-checkpoint-size.test.ts` — checkpoint file size growth（per step）+ 滚动策略（保留最近 N 个）
+- [ ] **P21.3.5** — `packages/core/test/perf/13-durable-stale-resume.test.ts` — resume-from-stale-checkpoint 失败路径（vi.useFakeTimers 控制时间）
+
+### P21 关键决策（2026-07-10）
+
+1. P21 = durable execution（不是 memories / observability / permission modes）
+2. Step-level checkpoint default（沿用 LangGraph 1.0 — `langgraph 1.0` 主页 "durable execution, streaming, human-in-the-loop, persistence"）
+3. TTL-based stale 防护 = lumen 自己的设计（4 框架都没有）
+4. 不改 public API surface（`AgentRunOptions.resumeFrom` 已有；P21 改 `Agent.run` 内部 auto-detect）
+5. 不进 4 框架 race（不抽象"通用 durable backend"）
+6. P21 整体不依赖 LLM call（纯 IO + 状态机；bench 用 mock provider 沿用 P19.7.5）
+
+### P21 上下游对比（完整 4 框架 fetch 验证见 `docs/P21-DESIGN.md` §3）
+
+| 维度 | LangGraph 1.0 | Claude Code | OpenClaw | Lumen P21 |
+|---|---|---|---|---|
+| durable execution | ✅ checkpointer + thread_id | ⚠️ CLI session 持久化（不是 step-level） | ❌ 未公开 | ✅ Agent.run step checkpoint + auto-resume |
+| checkpoint trigger | 每个 super-step | session end | ❌ | 每个 step（`checkpointInterval=1`） + 显式 |
+| stale 防护 | 显式 thread_id 区分（无 TTL） | 无 | 无 | TTL=10min（lumen 独有） |
+| long-running pattern | durable execution | permission mode "auto-accept" | ❌ | runWithHeartbeat + checkpoint interval |
+| bench | LangSmith trace replay | ❌ | ❌ | 5 scenario bench |
+
+### P21 Lumen 差异化（vs 4 框架）
+
+1. **TTL-based stale checkpoint 防护**（Claude Code / LangGraph 都没有）
+2. **5-scenario durable bench**（验证 "durable" 声称可重现）
+3. **Auto-resume with session continuity**（operator 不感知中断）
+4. **tier 隔离保留**（core 不 import memory；P21 沿用 P20.4 BaseCheckpointStore 抽象）
+
+### P21 总预算
+
+- 4 P-ticket × 平均 2-3 commit = **~10 commit**
+- 5 bench scenario + integration test
+- +500~+800 行代码（durable execution 范式 + bench harness）
+- +400~+600 行测试
+- +500 行 docs（本文件 11.4K + VitePress 同步）
+
+### Verification
+
+每个 P21.x ticket 完成后跑：
+```bash
+pnpm -r typecheck
+pnpm -r test
+LUMEN_BENCH=1 pnpm --filter @lumen/core exec vitest run test/perf/  # bench scenario
+```
+
+### Commits
+- [x] **P21 design lock** — `docs: P21 design lock — durable execution + long-running agents` *(commit `2249aca`)* — Added `docs/P21-DESIGN.md` (206 lines). 4-framework fetch 验证 + 关键决策 + P21.0–P21.3 ticket 列表. Design-only pass; no package API change.
+- [ ] **P21 task list** — `docs: TASKS.md — P21 段 commit-by-commit 任务清单`（pending；本 commit 是其中一部分）
+- [ ] **P21.0.1** — `feat(core): P21.0.1 — AgentRunOptions.checkpointInterval + step-level save` *(pending)*
+- [ ] **P21.0.2** — `feat(core): P21.0.2 — Agent.run step-level checkpoint save in step:end` *(pending)*
+- [ ] **P21.0.3** — `feat(core): P21.0.3 — AgentCheckpoint.outcome field` *(pending)*
+- [ ] **P21.0.4** — `test(core): P21.0.4 — durable execution e2e` *(pending)*
+- [ ] **P21.1.1–P21.1.4** — `feat(cli): P21.1 — lumen run/chart auto-resume from in-progress checkpoint` *(pending)*
+- [ ] **P21.2.1–P21.2.3** — `feat(core+cli): P21.2 — runWithHeartbeat + cron integration` *(pending)*
+- [ ] **P21.3.1–P21.3.5** — `test(core): P21.3 — durable execution bench (5 scenarios)` *(pending)*
+
+### Push status
+
+P19–P20 + P21 design lock 共 63 commits ahead of origin/main。需 push 后再开 P21.0 code ticket；本机 sandbox 无 GH PAT。
+
+### Backlog (P22+ candidates)
+### P22 候选方向（4-framework fetch 2026-07-10 后，按对齐度排序）
+
+| 方向 | 4-framework 主线? | Lumen 现状 | 选? |
+|---|---|---|---|
+| Memories（long-term）| Claude Code | SqliteStore 事实层 | 候选 |
+| Observability + Eval | LangSmith | P20.8 + P20.10 已 ship |  |
+| Multi-agent deep agents | NemoClaw | P19.3/4 + P20.7 已 ship |  |
+| Permission modes | Claude Code | P20.1 interrupt 基础 | 候选 |
+| Computer use / browser | OpenAI Operator | ❌ | 候选 |
+| Audio / video | — | vision 已 ship | 候选 |
+
+P22 方向待 P21 完成后再 fetch 4 框架 + 决定。
