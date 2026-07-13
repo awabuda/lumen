@@ -1,12 +1,12 @@
 /** Tests for the agent checkpoint module (P20.4). */
 
 import { describe, expect, it } from 'vitest'
-import type { AgentRunResult, AssistantMessage, Message } from '../src/index.js'
 import {
   AgentCheckpointSchema,
   InMemoryCheckpointStore,
   checkpointFromRun,
 } from '../src/agent/checkpoint.js'
+import type { AgentRunResult, AssistantMessage, Message } from '../src/index.js'
 
 const fakeResult = (overrides: Partial<AgentRunResult> = {}): AgentRunResult => {
   const messages: Message[] = [
@@ -72,6 +72,27 @@ describe('InMemoryCheckpointStore', () => {
     const store = new InMemoryCheckpointStore()
     const list = await store.list('no-such-session')
     expect(list).toEqual([])
+  })
+
+  it('filters resumable checkpoints by recency and session', async () => {
+    const store = new InMemoryCheckpointStore()
+    await store.save({
+      ...checkpointFromRun(fakeResult({ sessionId: 'a', iterations: 1 })),
+      createdAt: 100,
+    })
+    await store.save({
+      ...checkpointFromRun(fakeResult({ sessionId: 'b', iterations: 2 })),
+      createdAt: 200,
+      outcome: 'in_progress',
+    })
+    await store.save({
+      ...checkpointFromRun(fakeResult({ sessionId: 'b', iterations: 3 })),
+      createdAt: 300,
+      outcome: 'success',
+    })
+    expect((await store.latestInProgress())?.id).toBe('b-2')
+    expect((await store.latestInProgress({ sessionId: 'a' }))?.id).toBe('a-1')
+    expect(await store.latestInProgress({ minCreatedAt: 250 })).toBeUndefined()
   })
 
   it('returns true on delete when the checkpoint existed', async () => {

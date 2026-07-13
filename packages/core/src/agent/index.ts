@@ -520,7 +520,8 @@ export class Agent {
   public async *streamRun(
     options: AgentRunOptions,
   ): AsyncGenerator<RunEvent, AgentRunResult, void> {
-    const sessionId = options.sessionId ?? newSessionId()
+    const checkpoint = options.resumeFrom
+    const sessionId = options.sessionId ?? checkpoint?.sessionId ?? newSessionId()
     const signal = options.signal
     const maxIterations = options.maxIterations ?? 50
     const oneTurnGrace = options.oneTurnGraceCall ?? true
@@ -533,10 +534,12 @@ export class Agent {
       throw new AbortError('pre-aborted')
     }
 
-    const messages: Message[] = [
-      { role: 'system', content: this.systemPrompt },
-      { role: 'user', content: options.userMessage },
-    ]
+    const messages: Message[] = checkpoint
+      ? [...checkpoint.messages]
+      : [
+          { role: 'system', content: this.systemPrompt },
+          { role: 'user', content: options.userMessage },
+        ]
     const budget = new Budget({ tokens: this.provider.capabilities.maxContextTokens })
 
     yield { type: 'run:start', sessionId, userMessage: options.userMessage }

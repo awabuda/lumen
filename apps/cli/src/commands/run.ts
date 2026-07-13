@@ -10,6 +10,7 @@
  *   130 — interrupted (SIGINT)
  */
 
+import { findResumeCheckpoint } from '../checkpoint-resume.js'
 import { loadCliConfig } from '../composition.js'
 
 export interface RunCommandOptions {
@@ -57,6 +58,14 @@ export interface RunCommandOptions {
    * `enableSkillTrigger` is false.
    */
   skillsPath?: string
+  /** Disable automatic resume from a fresh in-progress checkpoint. */
+  noResume?: boolean
+  /** Maximum age in milliseconds for automatic resume. Defaults to 10 minutes. */
+  resumeTtlMs?: number
+  /** Optional session scope for automatic resume discovery. */
+  sessionId?: string
+  /** Checkpoint cadence forwarded to Agent.run. */
+  checkpointInterval?: number
 }
 
 export const runCommand = async (options: RunCommandOptions): Promise<number> => {
@@ -87,9 +96,22 @@ export const runCommand = async (options: RunCommandOptions): Promise<number> =>
       ? new SqliteCheckpointStore({ path: options.checkpointPath })
       : undefined
     try {
+      const resumeFrom = checkpointStore
+        ? await findResumeCheckpoint({
+            store: checkpointStore,
+            enabled: options.noResume !== true,
+            ...(options.resumeTtlMs !== undefined ? { ttlMs: options.resumeTtlMs } : {}),
+            ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+          })
+        : undefined
       const result = await built.agent.run({
         userMessage: options.prompt,
+        ...(options.sessionId ? { sessionId: options.sessionId } : {}),
         ...(checkpointStore ? { checkpointStore } : {}),
+        ...(resumeFrom ? { resumeFrom } : {}),
+        ...(options.checkpointInterval !== undefined
+          ? { checkpointInterval: options.checkpointInterval }
+          : {}),
       })
       if (result.finalMessage.content) {
         process.stdout.write(result.finalMessage.content)

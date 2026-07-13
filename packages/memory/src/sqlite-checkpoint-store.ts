@@ -91,6 +91,8 @@ interface PreparedCheckpointStatements {
   insert: Statement
   get: Statement
   listBySession: Statement
+  latestInProgress: Statement
+  latestInProgressBySession: Statement
   delete: Statement
 }
 
@@ -109,6 +111,12 @@ const prepareStatements = (db: Database): PreparedCheckpointStatements => ({
   get: db.prepare('SELECT * FROM checkpoints WHERE id = ?'),
   listBySession: db.prepare(
     'SELECT * FROM checkpoints WHERE session_id = ? ORDER BY created_at DESC',
+  ),
+  latestInProgress: db.prepare(
+    "SELECT * FROM checkpoints WHERE (outcome = 'in_progress' OR outcome IS NULL) AND created_at >= ? ORDER BY created_at DESC LIMIT 1",
+  ),
+  latestInProgressBySession: db.prepare(
+    "SELECT * FROM checkpoints WHERE session_id = ? AND (outcome = 'in_progress' OR outcome IS NULL) AND created_at >= ? ORDER BY created_at DESC LIMIT 1",
   ),
   delete: db.prepare('DELETE FROM checkpoints WHERE id = ?'),
 })
@@ -158,6 +166,21 @@ export class SqliteCheckpointStore implements BaseCheckpointStore {
   public async list(sessionId: string): Promise<ReadonlyArray<AgentCheckpoint>> {
     const rows = this.stmts.listBySession.all(sessionId) as CheckpointRow[]
     return rows.map(rowToCheckpoint)
+  }
+
+  public async latestInProgress(
+    options: {
+      readonly sessionId?: string
+      readonly minCreatedAt?: number
+    } = {},
+  ): Promise<AgentCheckpoint | undefined> {
+    const minCreatedAt = options.minCreatedAt ?? 0
+    const row = options.sessionId
+      ? (this.stmts.latestInProgressBySession.get(options.sessionId, minCreatedAt) as
+          | CheckpointRow
+          | undefined)
+      : (this.stmts.latestInProgress.get(minCreatedAt) as CheckpointRow | undefined)
+    return row ? rowToCheckpoint(row) : undefined
   }
 
   public async delete(id: string): Promise<boolean> {

@@ -236,7 +236,12 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
       const skillsRoot = options.skillsPath ?? defaultSkillsPath()
       const registry = await loadSkillRegistry(skillsRoot)
       const triggerFn = buildKeywordTriggerFn({ registry, cwd })
-      middleware.push(createSkillTriggerMiddleware({ trigger: triggerFn }))
+      // The adapter's return type is ReadonlyArray<ActiveSkill> but
+      // Zod's z.function().returns() infers a mutable array; spread
+      // through a fresh array so the type is assignable and we never
+      // hand the registry a typed mutable view.
+      const zodCompatTrigger = async (userMessage: string) => [...(await triggerFn(userMessage))]
+      middleware.push(createSkillTriggerMiddleware({ trigger: zodCompatTrigger }))
     } catch (err) {
       process.stderr.write(
         `lumen: skill trigger wiring skipped: ${err instanceof Error ? err.message : String(err)}\n`,

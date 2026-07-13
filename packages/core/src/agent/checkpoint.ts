@@ -101,6 +101,11 @@ export interface BaseCheckpointStore {
   get(id: string): Promise<AgentCheckpoint | undefined>
   /** List all checkpoints for a session, newest first. */
   list(sessionId: string): Promise<ReadonlyArray<AgentCheckpoint>>
+  /** Return the newest resumable checkpoint, optionally scoped to one session. */
+  latestInProgress(options?: {
+    readonly sessionId?: string
+    readonly minCreatedAt?: number
+  }): Promise<AgentCheckpoint | undefined>
   /** Delete a checkpoint by id. Returns true if a checkpoint was removed. */
   delete(id: string): Promise<boolean>
 }
@@ -128,6 +133,23 @@ export class InMemoryCheckpointStore implements BaseCheckpointStore {
     return [...this.byId.values()]
       .filter((c) => c.sessionId === sessionId)
       .sort((a, b) => b.createdAt - a.createdAt)
+  }
+
+  public async latestInProgress(
+    options: {
+      readonly sessionId?: string
+      readonly minCreatedAt?: number
+    } = {},
+  ): Promise<AgentCheckpoint | undefined> {
+    return [...this.byId.values()]
+      .filter(
+        (checkpoint) =>
+          (options.sessionId === undefined || checkpoint.sessionId === options.sessionId) &&
+          checkpoint.outcome !== 'success' &&
+          checkpoint.outcome !== 'error' &&
+          (options.minCreatedAt === undefined || checkpoint.createdAt >= options.minCreatedAt),
+      )
+      .sort((a, b) => b.createdAt - a.createdAt)[0]
   }
 
   public async delete(id: string): Promise<boolean> {

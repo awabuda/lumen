@@ -88,6 +88,14 @@ describe('SqliteCheckpointStore', () => {
     expect((await store.get('s1-1'))?.outcome).toBe('in_progress')
   })
 
+  it('returns the newest in-progress checkpoint and ignores terminal outcomes', async () => {
+    await store.save(cp({ id: 'legacy', createdAt: 100, outcome: undefined }))
+    await store.save(cp({ id: 'progress', createdAt: 200, outcome: 'in_progress' }))
+    await store.save(cp({ id: 'done', createdAt: 300, outcome: 'success' }))
+    expect((await store.latestInProgress())?.id).toBe('progress')
+    expect(await store.latestInProgress({ minCreatedAt: 250 })).toBeUndefined()
+  })
+
   it('omits the label when not set', async () => {
     await store.save(cp())
     const got = await store.get('s1-1')

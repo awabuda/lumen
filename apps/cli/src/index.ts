@@ -32,6 +32,10 @@ program
   .option('--interrupt-on <names>', 'Comma-separated tool names to interrupt on (HITL)')
   .option('--plan [mode]', "Wire PlanMiddleware; mode is 'plan' / 'act' / 'auto' (default 'auto')")
   .option('--checkpoint <path>', 'Path to a SQLite checkpoint database (P20.4)')
+  .option('--session-id <id>', 'Scope durable checkpoints and auto-resume to one session')
+  .option('--no-resume', 'Do not resume a fresh in-progress checkpoint')
+  .option('--resume-ttl <ms>', 'Maximum checkpoint age for auto-resume (default 600000)')
+  .option('--checkpoint-interval <steps>', 'Save every N completed steps (default 1)')
   .option(
     '--enable-skill-trigger',
     'Wire SkillTriggerMiddleware (P20.6.2). Activates skills from the local skill registry (default ~/.lumen/skills) by keyword-matching each user message and injects active skill descriptions into the system prompt. Off by default to preserve the pre-P20.6.2 behaviour.',
@@ -67,6 +71,14 @@ program
       enablePlanMiddleware: planRaw !== undefined,
       planMode,
       checkpointPath: opts.checkpoint as string | undefined,
+      sessionId: opts.sessionId as string | undefined,
+      noResume: opts.resume === false,
+      resumeTtlMs:
+        typeof opts.resumeTtl === 'string' ? Number.parseInt(opts.resumeTtl, 10) : undefined,
+      checkpointInterval:
+        typeof opts.checkpointInterval === 'string'
+          ? Number.parseInt(opts.checkpointInterval, 10)
+          : undefined,
       enableSkillTrigger: opts.enableSkillTrigger === true,
       skillsPath: opts.skillsPath as string | undefined,
     })
@@ -79,6 +91,10 @@ program
   .option('-m, --model <model>', 'Override the LLM model')
   .option('-c, --config <path>', 'Path to a Lumen config file')
   .option('--cwd <path>', 'Working directory for tool execution')
+  .option('--checkpoint <path>', 'Path to a SQLite checkpoint database')
+  .option('--no-resume', 'Do not resume a fresh in-progress checkpoint')
+  .option('--resume-ttl <ms>', 'Maximum checkpoint age for auto-resume (default 600000)')
+  .option('--checkpoint-interval <steps>', 'Save every N completed steps (default 1)')
   .option(
     '--interrupt-on <names>',
     'Comma-separated tool names to interrupt on (HITL). When a tool in this list is about to dispatch, the run aborts and the TUI surfaces the AbortError message.',
@@ -101,6 +117,14 @@ program
       configPath: opts.config as string | undefined,
       cwd: opts.cwd as string | undefined,
       interruptOn,
+      checkpointPath: opts.checkpoint as string | undefined,
+      noResume: opts.resume === false,
+      resumeTtlMs:
+        typeof opts.resumeTtl === 'string' ? Number.parseInt(opts.resumeTtl, 10) : undefined,
+      checkpointInterval:
+        typeof opts.checkpointInterval === 'string'
+          ? Number.parseInt(opts.checkpointInterval, 10)
+          : undefined,
     })
     process.exit(code)
   })

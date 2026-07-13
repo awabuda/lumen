@@ -15,6 +15,8 @@
  * the JSX in a separate file so this file can stay pure TypeScript.
  */
 
+import type { AgentCheckpoint } from '@lumen/core'
+import { findResumeCheckpoint } from '../checkpoint-resume.js'
 import { type BuiltAgent, buildAgent } from '../composition.js'
 
 /**
@@ -39,6 +41,14 @@ export interface ChatCommandOptions {
    * interrupt rules are wired (backwards-compatible default).
    */
   interruptOn?: ReadonlyArray<string>
+  /** SQLite checkpoint database used for durable TUI turns. */
+  checkpointPath?: string
+  /** Disable startup auto-resume. */
+  noResume?: boolean
+  /** Maximum checkpoint age for startup auto-resume. */
+  resumeTtlMs?: number
+  /** Checkpoint cadence for each streamed turn. */
+  checkpointInterval?: number
 }
 
 export const chatCommand = async (options: ChatCommandOptions): Promise<number> => {
@@ -65,8 +75,37 @@ export const chatCommand = async (options: ChatCommandOptions): Promise<number> 
   const React = await import('react')
   const { render } = await import('ink')
   const { Chat } = await import('../components/Chat.js')
+  const { SqliteCheckpointStore } = await import('@lumen/memory')
+  const checkpointStore = options.checkpointPath
+    ? new SqliteCheckpointStore({ path: options.checkpointPath })
+    : undefined
+  let initialResumeFrom: AgentCheckpoint | undefined
+  try {
+    initialResumeFrom = checkpointStore
+      ? await findResumeCheckpoint({
+          store: checkpointStore,
+          enabled: options.noResume !== true,
+          ...(options.resumeTtlMs !== undefined ? { ttlMs: options.resumeTtlMs } : {}),
+        })
+      : undefined
+  } catch (err) {
+    await checkpointStore?.dispose()
+    process.stderr.write(
+      `lumen chat: checkpoint setup failed: ${err instanceof Error ? err.message : String(err)}\n`,
+    )
+    return 1
+  }
 
-  const app = render(React.createElement(Chat, { built }))
+  const app = render(
+    React.createElement(Chat, {
+      built,
+      checkpointStore,
+      initialResumeFrom,
+      ...(options.checkpointInterval !== undefined
+        ? { checkpointInterval: options.checkpointInterval }
+        : {}),
+    }),
+  )
   return new Promise<number>((resolve) => {
     app
       .waitUntilExit()
@@ -81,6 +120,7 @@ export const chatCommand = async (options: ChatCommandOptions): Promise<number> 
       // the WAL gets checkpointed and the next `lumen run`
       // sees the most recent state.
       .finally(() => {
+        checkpointStore?.dispose().catch(() => {})
         built.memory?.dispose().catch(() => {
           // The TUI is already exiting; an error here
           // would just confuse the user. We swallow.

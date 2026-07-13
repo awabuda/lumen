@@ -23,7 +23,13 @@
  *     the TUI cleanly.
  */
 
-import type { AssistantMessage, ToolCall, ToolResult } from '@lumen/core'
+import type {
+  AgentCheckpoint,
+  AssistantMessage,
+  BaseCheckpointStore,
+  ToolCall,
+  ToolResult,
+} from '@lumen/core'
 import { Box, Text, useApp, useInput } from 'ink'
 import Spinner from 'ink-spinner'
 import TextInput from 'ink-text-input'
@@ -44,9 +50,20 @@ type Status = 'idle' | 'thinking' | 'done' | 'error'
 interface ChatProps {
   /** The fully-built agent (provider, tools, hooks, memory). */
   readonly built: BuiltAgent
+  /** Persistent checkpoint store shared across TUI turns. */
+  readonly checkpointStore?: BaseCheckpointStore
+  /** Fresh in-progress snapshot discovered before mounting. Consumed once. */
+  readonly initialResumeFrom?: AgentCheckpoint
+  /** Step checkpoint cadence for each turn. */
+  readonly checkpointInterval?: number
 }
 
-export function Chat({ built }: ChatProps): JSX.Element {
+export function Chat({
+  built,
+  checkpointStore,
+  initialResumeFrom,
+  checkpointInterval,
+}: ChatProps): JSX.Element {
   const { exit } = useApp()
   const [turns, setTurns] = useState<readonly Turn[]>([])
   const [input, setInput] = useState<string>('')
@@ -55,6 +72,7 @@ export function Chat({ built }: ChatProps): JSX.Element {
   const [activeTool, setActiveTool] = useState<ToolCall | undefined>(undefined)
   const [activeSessionId, setActiveSessionId] = useState<string>('')
   const turnCounter = useRef<number>(0)
+  const resumeRef = useRef<AgentCheckpoint | undefined>(initialResumeFrom)
 
   // Per-run AbortController so Ctrl+C can cancel an in-flight run.
   const abortRef = useRef<AbortController | null>(null)
@@ -113,9 +131,14 @@ export function Chat({ built }: ChatProps): JSX.Element {
       // state in real time. Each event mutates React state; Ink will
       // re-render the affected subtree.
       try {
+        const resumeFrom = resumeRef.current
+        resumeRef.current = undefined
         for await (const ev of built.agent.streamRun({
           userMessage: trimmed,
           signal: ctrl.signal,
+          ...(checkpointStore ? { checkpointStore } : {}),
+          ...(resumeFrom ? { resumeFrom } : {}),
+          ...(checkpointInterval !== undefined ? { checkpointInterval } : {}),
         })) {
           switch (ev.type) {
             case 'run:start':
@@ -191,7 +214,7 @@ export function Chat({ built }: ChatProps): JSX.Element {
         setStreamingText('')
       }
     },
-    [built.agent, exit, status],
+    [built.agent, checkpointInterval, checkpointStore, exit, status],
   )
 
   // Keyboard input:
