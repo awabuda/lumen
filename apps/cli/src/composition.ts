@@ -19,14 +19,23 @@
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { type LumenConfig, loadConfig } from '@lumen/config'
-import { Agent, type BaseProvider, createAgent, createInterruptMiddleware, createPlanMiddleware, createSkillTriggerMiddleware, HookRegistry, ToolRegistry } from '@lumen/core'
+import {
+  type Agent,
+  type BaseProvider,
+  HookRegistry,
+  ToolRegistry,
+  createAgent,
+  createInterruptMiddleware,
+  createPlanMiddleware,
+  createSkillTriggerMiddleware,
+} from '@lumen/core'
 import { OpenAICompatibleProvider } from '@lumen/llm'
 import { type DiscoveredMcpServer, closeAllMcpServers, connectAllMcpServers } from '@lumen/mcp'
 import { SqliteStore } from '@lumen/memory'
-import { createFilesystemTools } from '@lumen/tools'
 import { defaultSkillsPath } from '@lumen/skills'
-import { buildKeywordTriggerFn } from './skill-trigger-adapter.js'
+import { createFilesystemTools } from '@lumen/tools'
 import { loadSkillRegistry } from './commands/skills.js'
+import { buildKeywordTriggerFn } from './skill-trigger-adapter.js'
 
 export interface CliAgentOptions {
   /** Path to a config file (overrides lookup). */
@@ -212,14 +221,10 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
   // keep their original behaviour exactly.
   const middleware: import('@lumen/core').AgentMiddleware[] = []
   if (options.enablePlanMiddleware === true) {
-    middleware.push(
-      createPlanMiddleware({ mode: options.planMode ?? 'auto' }),
-    )
+    middleware.push(createPlanMiddleware({ mode: options.planMode ?? 'auto' }))
   }
   if (options.interruptOn && options.interruptOn.length > 0) {
-    middleware.push(
-      createInterruptMiddleware({ toolNames: [...options.interruptOn] }),
-    )
+    middleware.push(createInterruptMiddleware({ toolNames: [...options.interruptOn] }))
   }
   // P20.6.2: skill-trigger wiring. Opt-in via
   // `enableSkillTrigger: true` so a bare `lumen run` keeps
