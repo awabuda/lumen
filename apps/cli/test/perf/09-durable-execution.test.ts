@@ -8,26 +8,31 @@
  * Scenarios:
  *   1. `09-durable-step-checkpoint` — cost of writing one
  *      InMemoryCheckpointStore save per step for a 100-step
- *      agent. The default interval is 1, so the bench keeps
- *      the I/O cost visible.
+ *      agent.
  *   2. `10-durable-resume-latency` — time to find the
- *      freshest in-progress checkpoint and synthesise a
- *      resumed run from it.
+ *      freshest in-progress checkpoint.
  *   3. `11-durable-concurrent` — 50 concurrent saves into one
- *      store. Detects lock contention regressions in the
- *      checkpoint implementation.
+ *      store. Detects lock contention regressions.
  *   4. `12-durable-checkpoint-size` — bytes per checkpoint as
- *      a function of `messages.length`; surfaces a sizing
- *      regression in the JSON layout.
+ *      a function of `messages.length`.
  *   5. `13-durable-stale-resume` — resume-from-stale-checkpoint
  *      path: a checkpoint older than the TTL must NOT be
  *      picked up by `findResumeCheckpoint`.
  */
 
-import { Agent, InMemoryCheckpointStore, ToolRegistry } from '@lumen/core'
+import {
+  Agent,
+  InMemoryCheckpointStore,
+  ToolRegistry,
+} from '@lumen/core'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_RESUME_TTL_MS, findResumeCheckpoint } from '../../src/checkpoint-resume.js'
-import { benchEnabled, benchTableRow, summariseLatency, timeAsync } from './helpers.js'
+import {
+  benchEnabled,
+  benchTableRow,
+  summariseLatency,
+  timeAsync,
+} from './helpers.js'
+import { findResumeCheckpoint, DEFAULT_RESUME_TTL_MS } from '../../src/checkpoint-resume.js'
 
 interface BenchAgent {
   agent: Agent
@@ -47,17 +52,12 @@ class BenchProvider {
     maxContextTokens: 8000,
   } as const
   public calls = 0
-  public async chat(): Promise<{
-    message: { role: 'assistant'; content: string; toolCalls: never[] }
-  }> {
+  public async chat(): Promise<{ message: { role: 'assistant'; content: string; toolCalls: never[] } }> {
     this.calls += 1
     return { message: { role: 'assistant' as const, content: `ok ${this.calls}`, toolCalls: [] } }
   }
   public async *stream(): AsyncGenerator<never, void, never> {
-    yield {
-      type: 'message_start',
-      message: { role: 'assistant', content: '', toolCalls: [] },
-    } as never
+    yield { type: 'message_start', message: { role: 'assistant', content: '', toolCalls: [] } } as never
   }
 }
 
@@ -71,30 +71,29 @@ const newAgent = (): BenchAgent => {
   return { agent, provider }
 }
 
-describe.skipIf(!benchEnabled(), 'P21.3 durable execution bench', () => {
-  it('1. step-level save cost is bounded for 100 steps', async () => {
+describe('P21.3 durable execution bench', () => {
+  it.runIf(benchEnabled())('1. step-level save cost is bounded for 100 steps', async () => {
     const store = new InMemoryCheckpointStore()
     const { agent } = newAgent()
     const maxIterations = 100
     const samples: number[] = []
     for (let i = 0; i < 5; i++) {
-      samples.push(
-        await timeAsync(async () => {
-          await agent.run({
-            userMessage: 'go',
-            sessionId: `bench-step-${i}`,
-            checkpointStore: store,
-            maxIterations,
-          })
-        }),
-      )
+      const timed = await timeAsync(async () => {
+        await agent.run({
+          userMessage: 'go',
+          sessionId: `bench-step-${i}`,
+          checkpointStore: store,
+          maxIterations,
+        })
+      })
+      samples.push(timed.durationMs)
     }
     const summary = summariseLatency(samples)
     console.log(benchTableRow('09-durable-step-checkpoint', `${maxIterations} steps`, summary))
-    expect(summary.max).toBeLessThan(10_000)
+    expect(summary.maxMs).toBeLessThan(10_000)
   }, 30_000)
 
-  it('2. resume latency for a 50-step snapshot', async () => {
+  it.runIf(benchEnabled())('2. resume latency for a 50-step snapshot', async () => {
     const store = new InMemoryCheckpointStore()
     await store.save({
       id: 'resume-50',
@@ -106,46 +105,44 @@ describe.skipIf(!benchEnabled(), 'P21.3 durable execution bench', () => {
     } as never)
     const samples: number[] = []
     for (let i = 0; i < 20; i++) {
-      samples.push(
-        await timeAsync(async () => {
-          const found = await findResumeCheckpoint({ store, ttlMs: 60_000 })
-          expect(found?.id).toBe('resume-50')
-        }),
-      )
+      const timed = await timeAsync(async () => {
+        const found = await findResumeCheckpoint({ store, ttlMs: 60_000 })
+        expect(found?.id).toBe('resume-50')
+      })
+      samples.push(timed.durationMs)
     }
     const summary = summariseLatency(samples)
     console.log(benchTableRow('10-durable-resume-latency', '20 lookups', summary))
-    expect(summary.max).toBeLessThan(500)
+    expect(summary.maxMs).toBeLessThan(500)
   }, 15_000)
 
-  it('3. 50 concurrent saves complete without contention', async () => {
+  it.runIf(benchEnabled())('3. 50 concurrent saves complete without contention', async () => {
     const store = new InMemoryCheckpointStore()
     const samples: number[] = []
     for (let batch = 0; batch < 3; batch++) {
-      samples.push(
-        await timeAsync(async () => {
-          await Promise.all(
-            Array.from({ length: 50 }, (_, i) => {
-              const sessionId = `bench-conc-${batch}-${i}`
-              return store.save({
-                id: `${sessionId}-1`,
-                sessionId,
-                messages: [{ role: 'user', content: 'go' }],
-                iterations: 1,
-                createdAt: Date.now(),
-                outcome: 'in_progress',
-              } as never)
-            }),
-          )
-        }),
-      )
+      const timed = await timeAsync(async () => {
+        await Promise.all(
+          Array.from({ length: 50 }, (_, i) => {
+            const sessionId = `bench-conc-${batch}-${i}`
+            return store.save({
+              id: `${sessionId}-1`,
+              sessionId,
+              messages: [{ role: 'user', content: 'go' }],
+              iterations: 1,
+              createdAt: Date.now(),
+              outcome: 'in_progress',
+            } as never)
+          }),
+        )
+      })
+      samples.push(timed.durationMs)
     }
     const summary = summariseLatency(samples)
     console.log(benchTableRow('11-durable-concurrent', '50 parallel saves', summary))
-    expect(summary.max).toBeLessThan(5_000)
+    expect(summary.maxMs).toBeLessThan(5_000)
   }, 20_000)
 
-  it('4. checkpoint size grows linearly with messages', () => {
+  it('4. checkpoint JSON layout fits the documented budget', () => {
     const messageCount = 50
     const sample = {
       id: 'size-1',
