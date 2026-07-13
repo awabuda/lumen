@@ -2,10 +2,12 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import {
+  AgentCheckpointSchema,
   HEARTBEAT_DEFAULT_INTERVAL_MS,
+  InMemoryCheckpointStore,
   runWithHeartbeat,
   startHeartbeat,
-} from '../src/heartbeat.js'
+} from '../src/index.js'
 
 describe('startHeartbeat', () => {
   it('exposes a signal and a stop method', () => {
@@ -161,5 +163,73 @@ describe('runWithHeartbeat', () => {
 describe('HEARTBEAT_DEFAULT_INTERVAL_MS', () => {
   it('is 30 000 ms (matches the P20.2 spec)', () => {
     expect(HEARTBEAT_DEFAULT_INTERVAL_MS).toBe(30_000)
+  })
+})
+
+describe('runWithHeartbeat checkpoint poll (P21.2)', () => {
+  it('rejects a non-positive checkpointIntervalMs', async () => {
+    const store = new InMemoryCheckpointStore()
+    await expect(
+      runWithHeartbeat(async () => 0, { checkpointStore: store, checkpointIntervalMs: 0 }),
+    ).rejects.toThrow(/checkpointIntervalMs must be a positive integer/)
+  })
+
+  it('rejects a store that does not implement latestInProgress', async () => {
+    const brokenStore = {
+      id: 'broken',
+      save: () => Promise.resolve(),
+      get: () => Promise.resolve(undefined),
+      list: () => Promise.resolve([]),
+      delete: () => Promise.resolve(false),
+    } as unknown as { id: string }
+    await expect(
+      runWithHeartbeat(async () => 0, {
+        checkpointStore: brokenStore as never,
+        checkpointIntervalMs: 10,
+      }),
+    ).rejects.toThrow(/latestInProgress/)
+  })
+
+  it('polls the store on a wall-clock interval and forwards snapshots to onCheckpoint', async () => {
+    const store = new InMemoryCheckpointStore()
+    const observed: number[] = []
+    let release!: () => void
+    const pending = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const promise = runWithHeartbeat(
+      async () => {
+        await pending
+      },
+      {
+        intervalMs: 1_000_000,
+        timeoutMs: 1_000_000,
+        checkpointStore: store,
+        checkpointIntervalMs: 25,
+        onCheckpoint: (snapshot) => observed.push(snapshot.iterations),
+      },
+    )
+    await store.save({
+      id: 'poll-1',
+      sessionId: 'poll-1',
+      messages: [{ role: 'user', content: 'go' }],
+      iterations: 7,
+      createdAt: Date.now(),
+      outcome: 'in_progress' as const,
+    })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    await store.save({
+      id: 'poll-2',
+      sessionId: 'poll-1',
+      messages: [{ role: 'user', content: 'go' }],
+      iterations: 9,
+      createdAt: Date.now(),
+      outcome: 'in_progress' as const,
+    })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect(observed.length).toBeGreaterThan(0)
+    expect(observed[observed.length - 1]).toBe(9)
+    release()
+    await promise
   })
 })

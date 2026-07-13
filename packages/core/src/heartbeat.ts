@@ -77,6 +77,24 @@ export interface HeartbeatOptions {
    * to log, increment a metric, or surface a UI message.
    */
   readonly onTimeout?: (now: number) => void
+  /**
+   * P21.2: optional second timer that periodically reads the
+   * newest fresh checkpoint from a store that implements
+   * `latestInProgress`. The reader is fed to `onCheckpoint`
+   * so the operator (or a CLI) can mirror the latest
+   * snapshot — e.g. copy the SQLite file, log a JSON
+   * progress line, or push a `wal checkpoint` call. Mutually
+   * independent of the heartbeat (the heartbeat enforces
+   * `timeoutMs`; this reader is just a periodic poll). The
+   * store must implement `BaseCheckpointStore.latestInProgress`.
+   */
+  readonly checkpointStore?: import('./agent/checkpoint.js').BaseCheckpointStore
+  /** Wall-clock interval for the checkpoint poll (ms). Required when `checkpointStore` is set. */
+  readonly checkpointIntervalMs?: number
+  /** Optional session scope for the checkpoint poll. */
+  readonly checkpointSessionId?: string
+  /** Per-tick observer fired with the latest fresh checkpoint. */
+  readonly onCheckpoint?: (checkpoint: import('./agent/checkpoint.js').AgentCheckpoint) => void
 }
 
 /**
@@ -178,6 +196,18 @@ export const startHeartbeat = (options: HeartbeatOptions = {}): HeartbeatHandle 
  *   - When the run settles (success or failure), the
  *     supervisor is stopped so the timer doesn't keep the
  *     process alive.
+ *   - When `checkpointStore` + `checkpointIntervalMs` are
+ *     provided, the helper also bridges the two timers: the
+ *     heartbeat continues to enforce `timeoutMs`, while a
+ *     separate wall-clock interval calls
+ *     `checkpointStore.latestInProgress({ sessionId, minCreatedAt })`
+ *     and forwards the snapshot to a caller-supplied
+ *     `onCheckpoint` observer. The agent loop's own step-level
+ *     `saveCheckpointBestEffort` continues to run on every
+ *     completed step inside the loop; the heartbeat hook is
+ *     the **second** timer, useful for surfaces that want a
+ *     deterministic wall-clock cadence independent of how
+ *     many model turns fit in a window.
  *
  * The runner is the only thing that should call `bump()`.
  * Inside the runner, `bump()` is a no-op unless the caller
@@ -190,9 +220,49 @@ export const runWithHeartbeat = async <T>(
   options: HeartbeatOptions = {},
 ): Promise<T> => {
   const handle = startHeartbeat(options)
+  let checkpointTimer: ReturnType<typeof setInterval> | null = null
+  let checkpointMinCreatedAt = 0
+  if (options.checkpointStore && options.checkpointIntervalMs !== undefined) {
+    const interval = options.checkpointIntervalMs
+    if (!Number.isInteger(interval) || interval < 1) {
+      handle.stop()
+      throw new Error('runWithHeartbeat: checkpointIntervalMs must be a positive integer')
+    }
+    if (typeof options.checkpointStore.latestInProgress !== 'function') {
+      handle.stop()
+      throw new Error('runWithHeartbeat: checkpointStore must implement latestInProgress')
+    }
+    const store = options.checkpointStore
+    const sessionId = options.checkpointSessionId
+    const onCheckpoint = options.onCheckpoint
+    const checkpointTick = (): void => {
+      if (!handle.isAlive()) return
+      void store
+        .latestInProgress({
+          ...(sessionId ? { sessionId } : {}),
+          minCreatedAt: checkpointMinCreatedAt,
+        })
+        .then((snapshot) => {
+          if (snapshot) onCheckpoint?.(snapshot)
+        })
+        .catch(() => {
+          // best-effort: never replace the runner result
+        })
+    }
+    checkpointTimer = setInterval(checkpointTick, interval)
+    if (
+      typeof checkpointTimer === 'object' &&
+      checkpointTimer !== null &&
+      'unref' in checkpointTimer
+    ) {
+      ;(checkpointTimer as { unref?: () => void }).unref?.()
+    }
+    checkpointMinCreatedAt = Date.now() - interval
+  }
   try {
     return await runner(handle.signal)
   } finally {
     handle.stop()
+    if (checkpointTimer !== null) clearInterval(checkpointTimer)
   }
 }
