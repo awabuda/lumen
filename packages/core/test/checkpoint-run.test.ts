@@ -1,19 +1,19 @@
 /** P20.4.2 e2e: Agent.run resumeFrom + auto-save on abort. */
 
 import { describe, expect, it } from 'vitest'
+import { ProviderPool } from '../src/agent/pool.js'
+import { ProviderError } from '../src/errors/index.js'
 import {
   Agent,
   BaseProvider,
   type ChatRequest,
   type ChatResponse,
-  type ProviderCapabilities,
   InMemoryCheckpointStore,
+  type ProviderCapabilities,
   type StreamEvent,
   type StreamOptions,
   ToolRegistry,
 } from '../src/index.js'
-import { ProviderError } from '../src/errors/index.js'
-import { ProviderPool } from '../src/agent/pool.js'
 import { FakeProvider } from './fake-provider.js'
 
 describe('Agent.run checkpoint integration (P20.4.2)', () => {
@@ -28,9 +28,7 @@ describe('Agent.run checkpoint integration (P20.4.2)', () => {
         message: {
           role: 'assistant',
           content: '',
-          toolCalls: [
-            { id: 't1', name: 'unknown_tool', arguments: {} },
-          ],
+          toolCalls: [{ id: 't1', name: 'unknown_tool', arguments: {} }],
         },
       },
     ])
@@ -46,13 +44,11 @@ describe('Agent.run checkpoint integration (P20.4.2)', () => {
         checkpointStore: store,
       }),
     ).rejects.toThrow()
-    // The store must have at least one checkpoint saved, and
-    // that checkpoint's messages should include the original
-    // user turn ("go") — i.e. the snapshot was taken BEFORE
-    // the throw.
+    // The interrupted step is persisted as in-progress, followed by an error marker.
     const list = await store.list('test-abort')
-    expect(list.length).toBe(1)
-    const cp = list[0]
+    expect(list.length).toBe(2)
+    const cp = list.find((item) => item.outcome === 'error')
+    expect(cp?.outcome).toBe('error')
     expect(cp?.messages.some((m) => m.role === 'user' && m.content === 'go')).toBe(true)
   })
 
@@ -166,11 +162,14 @@ describe('Agent.run + ProviderPool checkpoint (P20.5)', () => {
     }
     public override async *stream(): AsyncGenerator<StreamEvent, void, void> {
       this.callCount += 1
-      throw new ProviderError(`Provider '${this.id}' simulated outage`, {
-        providerId: this.id,
-        statusCode: 503,
-        retryable: true,
-      })
+      yield {
+        type: 'error',
+        error: new ProviderError(`Provider '${this.id}' simulated outage`, {
+          providerId: this.id,
+          statusCode: 503,
+          retryable: true,
+        }),
+      }
     }
   }
 
@@ -198,9 +197,10 @@ describe('Agent.run + ProviderPool checkpoint (P20.5)', () => {
     })
     expect(result.finalMessage.content).toBe('fallback ok')
     expect(failing.callCount).toBeGreaterThanOrEqual(1)
-    // Run succeeded -> no checkpoint saved.
+    // P21 records both the completed step and the terminal success marker.
     const list = await store.list('fallback-success')
-    expect(list).toHaveLength(0)
+    expect(list).toHaveLength(1)
+    expect(list[0]?.outcome).toBe('success')
   })
 
   it('saves a checkpoint when the pool exhausts every provider', async () => {

@@ -33,8 +33,8 @@
 
 import { z } from 'zod'
 
-import type { AgentRunResult } from './index.js'
 import type { Message } from '../message/index.js'
+import type { AgentRunResult } from './index.js'
 
 /**
  * A serialisable snapshot of an agent run's progress.
@@ -58,6 +58,11 @@ export interface AgentCheckpoint {
   readonly createdAt: number
   /** Optional human-readable label. */
   readonly label?: string
+  /**
+   * P21 outcome marker. Legacy P20.4 checkpoints omit this field and are
+   * treated as `in_progress` by resume discovery.
+   */
+  readonly outcome?: 'in_progress' | 'success' | 'error'
 }
 
 export const AgentCheckpointSchema = z
@@ -68,6 +73,7 @@ export const AgentCheckpointSchema = z
     iterations: z.number().int().nonnegative(),
     createdAt: z.number().int().nonnegative(),
     label: z.string().min(1).optional(),
+    outcome: z.enum(['in_progress', 'success', 'error']).optional(),
   })
   .strict()
 
@@ -76,7 +82,7 @@ export const checkpointFromRun = (result: AgentRunResult, label?: string): Agent
   const base: AgentCheckpoint = {
     id: `${result.sessionId}-${result.iterations}`,
     sessionId: result.sessionId,
-    messages: result.messages,
+    messages: [...result.messages],
     iterations: result.iterations,
     createdAt: Date.now(),
   }

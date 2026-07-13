@@ -107,6 +107,14 @@ export interface AgentRunOptions {
    * `resumeFrom` for that.
    */
   readonly checkpointStore?: import('./checkpoint.js').BaseCheckpointStore
+  /**
+   * P21.0.1: how often to save an in-progress checkpoint during
+   * the run. Defaults to 1 (every step). Must be a positive integer.
+   * The terminal success/error snapshot is always attempted.
+   *
+   * Only takes effect when `checkpointStore` is also set.
+   */
+  readonly checkpointInterval?: number
 }
 
 export interface AgentRunResult {
@@ -185,6 +193,53 @@ const newSessionId = (): string => {
   return (globalThis as { crypto: { randomUUID: () => string } }).crypto.randomUUID()
 }
 
+/**
+ * Persist one checkpoint without letting storage failure change the run result.
+ *
+ * Step saves respect `interval`; terminal saves (`success` / `error`) pass
+ * `force: true`. Error snapshots use a distinct id so the last completed
+ * `in_progress` checkpoint remains available for auto-resume.
+ */
+const saveCheckpointBestEffort = async (input: {
+  readonly store?: import('./checkpoint.js').BaseCheckpointStore
+  readonly sessionId: string
+  readonly finalMessage: AssistantMessage
+  readonly iterations: number
+  readonly messages: ReadonlyArray<Message>
+  readonly interval: number
+  readonly outcome: 'in_progress' | 'success' | 'error'
+  readonly force?: boolean
+}): Promise<void> => {
+  if (!input.store) return
+  if (!input.force) {
+    if (!Number.isInteger(input.interval) || input.interval < 1) return
+    if (input.iterations % input.interval !== 0) return
+  }
+
+  try {
+    const { checkpointFromRun } = await import('./checkpoint.js')
+    const checkpoint = checkpointFromRun({
+      sessionId: input.sessionId,
+      finalMessage: input.finalMessage,
+      iterations: input.iterations,
+      messages: input.messages,
+    })
+    const terminalError = input.outcome === 'error'
+    await input.store.save({
+      ...checkpoint,
+      ...(terminalError
+        ? {
+            id: `${checkpoint.id}-error-${checkpoint.createdAt}`,
+          }
+        : {}),
+      outcome: input.outcome,
+    })
+  } catch {
+    // Checkpoint persistence is best-effort. A storage outage must never
+    // replace the agent result or the original run error.
+  }
+}
+
 export class Agent {
   private readonly provider: BaseProvider
   private readonly tools: ToolRegistry
@@ -220,6 +275,10 @@ export class Agent {
     const signal = options.signal
     const maxIterations = options.maxIterations ?? 50
     const oneTurnGrace = options.oneTurnGraceCall ?? true
+    const checkpointInterval = options.checkpointInterval ?? 1
+    if (!Number.isInteger(checkpointInterval) || checkpointInterval < 1) {
+      throw new RangeError('checkpointInterval must be a positive integer')
+    }
 
     // Wire signal -> our abort tracking. The agent checks signal.aborted
     // at every loop boundary.
@@ -314,6 +373,20 @@ export class Agent {
           { sessionId, iteration: iterations, startedAt: Date.now() },
         )
 
+        // If the model didn't ask for tools, the step is complete. Persist
+        // its full message prefix before either returning or continuing.
+        if (responseMessage.toolCalls.length === 0) {
+          await saveCheckpointBestEffort({
+            store: options.checkpointStore,
+            sessionId,
+            finalMessage: lastMessage,
+            iterations,
+            messages,
+            interval: checkpointInterval,
+            outcome: 'in_progress',
+          })
+        }
+
         // If the model didn't ask for tools, we're done unless a middleware
         // explicitly asked the loop to continue (P19.1 auto plan -> act).
         if (responseMessage.toolCalls.length === 0 && !middlewareControl.continueAfterModel) {
@@ -353,6 +426,15 @@ export class Agent {
         if (this.memory) {
           await this.persistMessage(sessionId, toolMessage)
         }
+        await saveCheckpointBestEffort({
+          store: options.checkpointStore,
+          sessionId,
+          finalMessage: lastMessage,
+          iterations,
+          messages,
+          interval: checkpointInterval,
+          outcome: 'in_progress',
+        })
       }
 
       await this.hooks.dispatch(
@@ -379,6 +461,17 @@ export class Agent {
         }),
       )
 
+      await saveCheckpointBestEffort({
+        store: options.checkpointStore,
+        sessionId,
+        finalMessage: lastMessage,
+        iterations,
+        messages,
+        interval: checkpointInterval,
+        outcome: 'success',
+        force: true,
+      })
+
       return result
     } catch (err) {
       const recoverable = err instanceof AbortError
@@ -390,28 +483,16 @@ export class Agent {
         },
         { sessionId, iteration: iterations, startedAt: Date.now() },
       )
-      // P20.4.2: when a checkpointStore is provided, snapshot the
-      // current message history so the caller can resume later. We
-      // save BEFORE the throw so a caller wrapping the run in
-      // `try { ... } catch { await store.get(...) }` finds the
-      // snapshot ready. We use a dynamic import to avoid a
-      // top-level cycle (checkpoint.ts imports from this file).
-      if (options.checkpointStore) {
-        try {
-          const { checkpointFromRun: toCheckpoint } = await import('./checkpoint.js')
-          await options.checkpointStore.save(
-            toCheckpoint({
-              sessionId,
-              finalMessage: lastMessage,
-              iterations,
-              messages,
-            }),
-          )
-        } catch {
-          // Checkpoint save is best-effort; the original error
-          // is the one the caller asked us to throw.
-        }
-      }
+      await saveCheckpointBestEffort({
+        store: options.checkpointStore,
+        sessionId,
+        finalMessage: lastMessage,
+        iterations,
+        messages,
+        interval: checkpointInterval,
+        outcome: 'error',
+        force: true,
+      })
       throw err
     }
   }
@@ -443,6 +524,10 @@ export class Agent {
     const signal = options.signal
     const maxIterations = options.maxIterations ?? 50
     const oneTurnGrace = options.oneTurnGraceCall ?? true
+    const checkpointInterval = options.checkpointInterval ?? 1
+    if (!Number.isInteger(checkpointInterval) || checkpointInterval < 1) {
+      throw new RangeError('checkpointInterval must be a positive integer')
+    }
 
     if (signal?.aborted) {
       throw new AbortError('pre-aborted')
@@ -586,6 +671,18 @@ export class Agent {
           // exit the loop. The `step:end` here is the last one of the
           // run.
           yield { type: 'step:end', iteration: iterations, message: assembled }
+          // P21.0.2: in-progress checkpoint after step:end so a
+          // subsequent resume can re-enter the loop with the
+          // full message prefix.
+          await saveCheckpointBestEffort({
+            store: options.checkpointStore,
+            sessionId,
+            finalMessage: lastMessage,
+            iterations,
+            messages,
+            interval: checkpointInterval,
+            outcome: 'in_progress',
+          })
           break
         }
 
@@ -611,6 +708,18 @@ export class Agent {
         // step:end comes after tool dispatch so the UI can show the
         // full "thought → action → result" cycle in one screen frame.
         yield { type: 'step:end', iteration: iterations, message: assembled }
+        // P21.0.2: in-progress checkpoint after every step:end
+        // (when tool dispatch happened). The throw-path save
+        // (P20.4.2) is preserved; this is a new write per step.
+        await saveCheckpointBestEffort({
+          store: options.checkpointStore,
+          sessionId,
+          finalMessage: lastMessage,
+          iterations,
+          messages,
+          interval: checkpointInterval,
+          outcome: 'in_progress',
+        })
       }
 
       const finalResult: AgentRunResult = {
@@ -620,10 +729,30 @@ export class Agent {
         messages,
       }
       yield { type: 'run:end', finalMessage: lastMessage, iterations }
+      await saveCheckpointBestEffort({
+        store: options.checkpointStore,
+        sessionId,
+        finalMessage: lastMessage,
+        iterations,
+        messages,
+        interval: checkpointInterval,
+        outcome: 'success',
+        force: true,
+      })
       return finalResult
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
       yield { type: 'error', error }
+      await saveCheckpointBestEffort({
+        store: options.checkpointStore,
+        sessionId,
+        finalMessage: lastMessage,
+        iterations,
+        messages,
+        interval: checkpointInterval,
+        outcome: 'error',
+        force: true,
+      })
       throw err
     }
   }

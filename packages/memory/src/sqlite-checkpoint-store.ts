@@ -32,9 +32,9 @@
  *   - `session_id` is indexed for the list-by-session query.
  */
 
+import * as path from 'node:path'
 import BetterSqlite3 from 'better-sqlite3'
 import type { Database, Statement } from 'better-sqlite3'
-import * as path from 'node:path'
 
 import type { AgentCheckpoint, BaseCheckpointStore, Message } from '@lumen/core'
 
@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS checkpoints (
   iterations    INTEGER NOT NULL,
   created_at    INTEGER NOT NULL,
   label         TEXT,
+  outcome       TEXT,
   messages_json TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS checkpoints_session_idx ON checkpoints(session_id, created_at);
@@ -56,6 +57,7 @@ interface CheckpointRow {
   iterations: number
   created_at: number
   label: string | null
+  outcome: 'in_progress' | 'success' | 'error' | null
   messages_json: string
 }
 
@@ -68,7 +70,11 @@ const rowToCheckpoint = (row: CheckpointRow): AgentCheckpoint => {
     createdAt: row.created_at,
     messages,
   }
-  return row.label ? { ...base, label: row.label } : base
+  return {
+    ...base,
+    ...(row.label ? { label: row.label } : {}),
+    ...(row.outcome ? { outcome: row.outcome } : {}),
+  }
 }
 
 const checkpointToRow = (cp: AgentCheckpoint): CheckpointRow => ({
@@ -77,6 +83,7 @@ const checkpointToRow = (cp: AgentCheckpoint): CheckpointRow => ({
   iterations: cp.iterations,
   created_at: cp.createdAt,
   label: cp.label ?? null,
+  outcome: cp.outcome ?? null,
   messages_json: JSON.stringify(cp.messages),
 })
 
@@ -89,20 +96,21 @@ interface PreparedCheckpointStatements {
 
 const prepareStatements = (db: Database): PreparedCheckpointStatements => ({
   insert: db.prepare(
-    `INSERT INTO checkpoints (id, session_id, iterations, created_at, label, messages_json)
-     VALUES (@id, @session_id, @iterations, @created_at, @label, @messages_json)
+    `INSERT INTO checkpoints (id, session_id, iterations, created_at, label, outcome, messages_json)
+     VALUES (@id, @session_id, @iterations, @created_at, @label, @outcome, @messages_json)
      ON CONFLICT(id) DO UPDATE SET
        session_id    = excluded.session_id,
        iterations    = excluded.iterations,
        created_at    = excluded.created_at,
        label         = excluded.label,
+       outcome       = excluded.outcome,
        messages_json = excluded.messages_json`,
   ),
-  get: db.prepare(`SELECT * FROM checkpoints WHERE id = ?`),
+  get: db.prepare('SELECT * FROM checkpoints WHERE id = ?'),
   listBySession: db.prepare(
-    `SELECT * FROM checkpoints WHERE session_id = ? ORDER BY created_at DESC`,
+    'SELECT * FROM checkpoints WHERE session_id = ? ORDER BY created_at DESC',
   ),
-  delete: db.prepare(`DELETE FROM checkpoints WHERE id = ?`),
+  delete: db.prepare('DELETE FROM checkpoints WHERE id = ?'),
 })
 
 export interface SqliteCheckpointStoreOptions {
@@ -130,6 +138,10 @@ export class SqliteCheckpointStore implements BaseCheckpointStore {
     this.db.pragma('synchronous = NORMAL')
     this.db.pragma('foreign_keys = ON')
     this.db.exec(CHECKPOINTS_DDL)
+    const columns = this.db.pragma('table_info(checkpoints)') as Array<{ name: string }>
+    if (!columns.some((column) => column.name === 'outcome')) {
+      this.db.exec('ALTER TABLE checkpoints ADD COLUMN outcome TEXT')
+    }
     this.stmts = prepareStatements(this.db)
   }
 

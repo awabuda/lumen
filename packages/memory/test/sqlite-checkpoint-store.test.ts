@@ -83,6 +83,11 @@ describe('SqliteCheckpointStore', () => {
     expect(got?.label).toBe('after step 1')
   })
 
+  it('roundtrips the optional outcome marker', async () => {
+    await store.save(cp({ outcome: 'in_progress' }))
+    expect((await store.get('s1-1'))?.outcome).toBe('in_progress')
+  })
+
   it('omits the label when not set', async () => {
     await store.save(cp())
     const got = await store.get('s1-1')
@@ -97,15 +102,11 @@ describe('SqliteCheckpointStore', () => {
         {
           role: 'assistant',
           content: 'doing it',
-          toolCalls: [
-            { id: 't1', name: 'search', arguments: { q: 'lumen' } },
-          ],
+          toolCalls: [{ id: 't1', name: 'search', arguments: { q: 'lumen' } }],
         },
         {
           role: 'tool',
-          results: [
-            { toolCallId: 't1', isError: false, content: 'ok' },
-          ],
+          results: [{ toolCallId: 't1', isError: false, content: 'ok' }],
         },
       ],
     })
