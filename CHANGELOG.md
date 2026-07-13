@@ -94,6 +94,64 @@ Test counts are point-in-time totals across the monorepo. The pre-1.0 series
   experiment that did not land on `main`); P19-DESIGN.md and
   PITFALLS.md live under the existing `docs/` directory.
 
+## [0.14.0] — 2026-07-13 — P21 durable execution pass
+
+> **Durable-execution pass.** Closes the Q5 "failure recovery" gap from
+> the 2026-06-25 six-question audit. The agent loop now saves an
+> in-progress checkpoint on every completed step, `lumen run` /
+> `lumen chat` auto-resume a fresh checkpoint inside a 10-minute TTL,
+> and `runWithHeartbeat` exposes a second wall-clock checkpoint poll
+> so long-running agents can be observed independently of how many
+> model turns fit in a window. P21.0 also lands a bench suite under
+> `apps/cli/test/perf/09-durable-execution.test.ts` (opt-in via
+> `LUMEN_BENCH=1`).
+
+### Added
+- **`packages/core/src/agent/checkpoint.ts` — `AgentCheckpoint.outcome`**
+  (`'in_progress' | 'success' | 'error'`) plus the helper
+  `saveCheckpointBestEffort` that `Agent.run` and `Agent.streamRun`
+  share. Step-level saves are governed by
+  `AgentRunOptions.checkpointInterval` (default 1; must be a positive
+  integer). The run-end save is always attempted and tagged with
+  `outcome: 'success'`. A throw path saves one last snapshot with
+  `outcome: 'error'` and a distinct id so auto-resume can keep the
+  last in-progress snapshot available.
+- **`packages/core/src/agent/checkpoint.ts` — `BaseCheckpointStore.latestInProgress({ sessionId?, minCreatedAt? })`**
+  contract. `InMemoryCheckpointStore` and `SqliteCheckpointStore`
+  both implement it. The `SqliteCheckpointStore` schema adds an
+  `outcome TEXT` column with a backward-compatible
+  `ALTER TABLE ... ADD COLUMN` migration for databases created
+  before P21.
+- **`apps/cli/src/checkpoint-resume.ts` — `findResumeCheckpoint`**
+  helper with a 10-minute default TTL (`DEFAULT_RESUME_TTL_MS`).
+  Returns `undefined` for stale, terminal, or absent checkpoints
+  and validates the TTL is a positive integer.
+- **`runWithHeartbeat` (P20.2) gains a checkpoint poll** that, given
+  a `BaseCheckpointStore` and a `checkpointIntervalMs`, fires
+  `onCheckpoint(snapshot)` with the freshest in-progress snapshot at
+  a deterministic wall-clock interval. Independent of the agent
+  loop's step-level save.
+- **`lumen run` and `lumen chat` flags** for durable execution:
+  `--checkpoint <path>`, `--session-id <id>`, `--no-resume`,
+  `--resume-ttl <ms>` (default 600 000), and
+  `--checkpoint-interval <steps>` (default 1). `lumen chat` mounts
+  the SQLite-backed checkpoint store for the entire TUI session and
+  threads the recovered snapshot into the first `streamRun` call.
+- **P21.3 bench suite** at `apps/cli/test/perf/09-durable-execution.test.ts`
+  (opt-in `LUMEN_BENCH=1`): step-checkpoint cost over 100 steps,
+  resume lookup latency, 50 concurrent saves, checkpoint JSON size,
+  and the stale-resume rejection path.
+
+### Changed
+- **`Agent.streamRun` now respects `resumeFrom` the same way `Agent.run` does.**
+  The first TUI turn after a crash picks up where the previous
+  session left off, with the full message prefix restored.
+- **Composition wraps the skill-trigger adapter** so the
+  Zod-validated middleware accepts the adapter's
+  `ReadonlyArray<ActiveSkill>` return type without losing the
+  readonly contract. Unblocks `pnpm -r typecheck` after the core
+  rebuild.
+
 ## [0.13.0] — 2026-07-07 — P19 + P20 implementation pass
 
 > **Bead-surface pass.** This release implements the P19+ middleware

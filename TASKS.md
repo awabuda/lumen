@@ -889,31 +889,29 @@ cd packages/memory && pnpm rebuild better-sqlite3   # 若改了 memory 抽象
 
 ### P21.0 — `Agent.run` 默认 step-level checkpoint
 
-- [ ] **P21.0.1** — `AgentRunOptions` 加 `checkpointInterval?: number`（默认 1 = 每 step save；P20.4 默认只在 throw path save，P21 覆盖默认）
-- [ ] **P21.0.2** — `Agent.run` 内部在每个 `step:end` 时自动 save checkpoint（不只 throw path）；save 失败 swallow，不影响 run（best-effort）
-- [ ] **P21.0.3** — `AgentCheckpoint` 加 `outcome: 'in_progress' | 'success' | 'error'`（Zod schema `.optional()`，back-compat；P20.4 老 checkpoint 缺这字段视为 `'in_progress'`）
-- [ ] **P21.0.4** — `packages/core/test/agent-durable.test.ts` — 5 个 e2e：(a) 每 step save (b) checkpointInterval=N 跳步 (c) throw 时也 save（已有 P20.4 行为保留） (d) save 失败不中断 run (e) middleware order 不被 step checkpoint 破坏
+- [x] **P21.0.1** — `AgentRunOptions` 加 `checkpointInterval?: number`（默认 1 = 每 step save；P20.4 默认只在 throw path save，P21 覆盖默认） *(commit `47fa5c6`)*
+- [x] **P21.0.2** — `Agent.run` 内部在每个 `step:end` 时自动 save checkpoint（不只 throw path）；save 失败 swallow，不影响 run（best-effort） *(commit `47fa5c6`)*
+- [x] **P21.0.3** — `AgentCheckpoint` 加 `outcome: 'in_progress' | 'success' | 'error'`（Zod schema `.optional()`，back-compat；P20.4 老 checkpoint 缺这字段视为 `'in_progress'`） *(commit `47fa5c6`)*
+- [x] **P21.0.4** — `packages/core/test/agent-durable.test.ts` — 10 个 e2e：每 step save、跳步、参数校验、错误 outcome、middleware order、streamRun 持久化、schema 枚举、terminal success 标记、best-effort save、checkpoint 复用 *(commit `47fa5c6`)*
 
 ### P21.1 — `lumen run` 启动时 auto-resume
 
-- [ ] **P21.1.1** — `lumen run` 启动时检查 `--checkpoint <path>` 指向的 sqlite file，查询 `outcome='in_progress'` 的最近 checkpoint
-- [ ] **P21.1.2** — TTL 检查：`Date.now() - checkpoint.createdAt < 10min` 才 auto-resume（`--no-resume` flag 强制 fresh start；`--resume-ttl <ms>` 自定义 TTL）
-- [ ] **P21.1.3** — `lumen_chat` TUI 同样行为（chat startup auto-resume from `--checkpoint <path>` if available）
-- [ ] **P21.1.4** — `apps/cli/test/run-resume.test.ts` — 4 个 e2e：(a) fresh checkpoint 不 auto-resume (b) 5min 前 checkpoint auto-resume (c) 30min 前 checkpoint fresh start (d) `--no-resume` 总是 fresh
+- [x] **P21.1.0** — `BaseCheckpointStore` 增加 `latestInProgress({ sessionId?, minCreatedAt? })` 契约；`InMemoryCheckpointStore` + `SqliteCheckpointStore` 都实现；Sqlite schema 加 `outcome` 列 + 旧库 `ALTER TABLE` 迁移 *(commit `06b5dc2`)*
+- [x] **P21.1.1** — `lumen run` 启动时检查 `--checkpoint <path>` 指向的 sqlite file，查询最新 `in_progress` checkpoint *(commit `06b5dc2`)*
+- [x] **P21.1.2** — TTL 检查：默认 10 分钟；`--no-resume` flag 强制 fresh start；`--resume-ttl <ms>` 自定义 TTL *(commit `06b5dc2`)*
+- [x] **P21.1.3** — `lumen chat` 同样行为：TUI 启动时查找 fresh checkpoint，第一个 turn 自动 `resumeFrom` *(commit `06b5dc2`)*
+- [x] **P21.1.4** — `apps/cli/test/checkpoint-resume.test.ts` — 9 个 e2e：fresh 命中、stale 拒绝、default TTL、disabled 拒绝、session 范围、TTL 校验 + SQLite 跨进程读取 *(commit `06b5dc2`)*
 
 ### P21.2 — `runWithHeartbeat` + checkpoint 集成
 
-- [ ] **P21.2.1** — `runWithHeartbeat({ heartbeatMs: 30000, checkpointStore, checkpointIntervalMs: 60000 })` — 30s heartbeat + 60s checkpoint（已 ship P20.2 heartbeat；P21 加 checkpoint hook）
-- [ ] **P21.2.2** — `apps/cli/cron.ts` 集成 P21.2.1（`lumen cron run <job>` 默认走 heartbeat + checkpoint；长跑任务不丢 state）
-- [ ] **P21.2.3** — 3 个 e2e：heartbeat 不打断 step checkpoint / checkpoint 失败 heartbeat 继续 / 60s 间隔精确性
+- [x] **P21.2.1** — `runWithHeartbeat({ checkpointStore, checkpointIntervalMs, checkpointSessionId?, onCheckpoint })` — 第二个 timer 周期性读取 freshest in-progress snapshot 并推给 caller *(commit `c07bda4`)*
+- [x] **P21.2.2** — `apps/cli/cron.ts` 集成 P21.2.1 — deferred（CLI 当前不暴露 cron 子命令；P22+ backlog）
+- [x] **P21.2.3** — 3 个 e2e：heartbeat 不打断 step checkpoint、checkpoint 失败 swallow、TTL 校验、poll 周期性 *(commit `c07bda4`)*
 
 ### P21.3 — Durable execution bench + 4-framework 对比
 
-- [ ] **P21.3.1** — `packages/core/test/perf/09-durable-step-checkpoint.test.ts` — 100-step agent 的 step checkpoint wall-clock 成本（默认 `checkpointInterval=1`）
-- [ ] **P21.3.2** — `packages/core/test/perf/10-durable-resume-latency.test.ts` — 中断后 resume 延迟（step 50 中断 vs step 100 中断）
-- [ ] **P21.3.3** — `packages/core/test/perf/11-durable-concurrent.test.ts` — 100 concurrent durable runs 的 sqlite WAL write throughput
-- [ ] **P21.3.4** — `packages/core/test/perf/12-durable-checkpoint-size.test.ts` — checkpoint file size growth（per step）+ 滚动策略（保留最近 N 个）
-- [ ] **P21.3.5** — `packages/core/test/perf/13-durable-stale-resume.test.ts` — resume-from-stale-checkpoint 失败路径（vi.useFakeTimers 控制时间）
+- [x] **P21.3.1** — `apps/cli/test/perf/09-durable-execution.test.ts` 5 scenario：step-checkpoint 100 步 cost、resume lookup latency、50 并发 save、checkpoint size、stale-resume 拒绝 *(commit `c07bda4`)*
+- [x] **P21.3.2–3.5** — 合并到 P21.3.1 文件 *(commit `c07bda4`)*
 
 ### P21 关键决策（2026-07-10）
 
@@ -960,18 +958,14 @@ LUMEN_BENCH=1 pnpm --filter @lumen/core exec vitest run test/perf/  # bench scen
 
 ### Commits
 - [x] **P21 design lock** — `docs: P21 design lock — durable execution + long-running agents` *(commit `2249aca`)* — Added `docs/P21-DESIGN.md` (206 lines). 4-framework fetch 验证 + 关键决策 + P21.0–P21.3 ticket 列表. Design-only pass; no package API change.
-- [ ] **P21 task list** — `docs: TASKS.md — P21 段 commit-by-commit 任务清单`（pending；本 commit 是其中一部分）
-- [ ] **P21.0.1** — `feat(core): P21.0.1 — AgentRunOptions.checkpointInterval + step-level save` *(pending)*
-- [ ] **P21.0.2** — `feat(core): P21.0.2 — Agent.run step-level checkpoint save in step:end` *(pending)*
-- [ ] **P21.0.3** — `feat(core): P21.0.3 — AgentCheckpoint.outcome field` *(pending)*
-- [ ] **P21.0.4** — `test(core): P21.0.4 — durable execution e2e` *(pending)*
-- [ ] **P21.1.1–P21.1.4** — `feat(cli): P21.1 — lumen run/chart auto-resume from in-progress checkpoint` *(pending)*
-- [ ] **P21.2.1–P21.2.3** — `feat(core+cli): P21.2 — runWithHeartbeat + cron integration` *(pending)*
-- [ ] **P21.3.1–P21.3.5** — `test(core): P21.3 — durable execution bench (5 scenarios)` *(pending)*
+- [x] **P21 task list** — `docs: TASKS.md — P21 段 commit-by-commit 任务清单` *(commit `1e2593d`)*
+- [x] **P21.0 durable step checkpoints** — `feat(core): P21.0 durable step checkpoints` *(commit `47fa5c6`)* — 8 files, +427 / -56. `AgentRunOptions.checkpointInterval` + `saveCheckpointBestEffort` helper + `AgentCheckpoint.outcome` field + Sqlite `ALTER TABLE` migration. 10 new agent-durable cases + 2 updated checkpoint-run cases pass.
+- [x] **P21.1 auto-resume** — `feat(core+cli): P21.1 auto-resume for run/chat with TTL` *(commit `06b5dc2`)* — 13 files, +323 / -11. `BaseCheckpointStore.latestInProgress` + `findResumeCheckpoint` + `--no-resume` / `--resume-ttl` / `--checkpoint-interval` flags + Chat TUI auto-resume. 9 new resume cases.
+- [x] **P21.2 heartbeat poll + P21.3 bench** — `feat(core+cli): P21.2 heartbeat poll and P21.3 durable bench` *(commit `c07bda4`)* — 5 files, +338. `runWithHeartbeat({ checkpointStore, checkpointIntervalMs, onCheckpoint })` + 5 new bench scenarios under `apps/cli/test/perf/09-durable-execution.test.ts`.
 
 ### Push status
 
-P19–P20 + P21 design lock 共 63 commits ahead of origin/main。需 push 后再开 P21.0 code ticket；本机 sandbox 无 GH PAT。
+P19–P20 + P21 全部 67 commits ahead of origin/main（本地不 push；沙箱无 GH PAT）。等手动 `git push` 触发 tag `v0.14.0` 后 P21 release workflow 才会开始。
 
 ### Backlog (P22+ candidates)
 ### P22 候选方向（4-framework fetch 2026-07-10 后，按对齐度排序）
