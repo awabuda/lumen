@@ -965,18 +965,38 @@ LUMEN_BENCH=1 pnpm --filter @lumen/core exec vitest run test/perf/  # bench scen
 
 ### Push status
 
-P19–P20 + P21 全部 67 commits ahead of origin/main（本地不 push；沙箱无 GH PAT）。等手动 `git push` 触发 tag `v0.14.0` 后 P21 release workflow 才会开始。
+P19–P20 + P21 全部已 push 到 `origin/main`（v0.14.0 tag 已发布，72 commits ahead of pre-P19 起点；commit `62004ec` 完成 v0.14.0 release）。`v0.14.0` 触发 `.github/workflows/release.yml` 的 tag-triggered release path（`pnpm changeset version` + `pnpm -r build` + `pnpm publish`）。需要 GitHub Actions secrets 的 `NPM_TOKEN` 才能完成 npm publish。
 
 ### Backlog (P22+ candidates)
-### P22 候选方向（4-framework fetch 2026-07-10 后，按对齐度排序）
+### P22 — Permission modes for HITL tool dispatch (design lock landed 2026-07-13)
 
-| 方向 | 4-framework 主线? | Lumen 现状 | 选? |
-|---|---|---|---|
-| Memories（long-term）| Claude Code | SqliteStore 事实层 | 候选 |
-| Observability + Eval | LangSmith | P20.8 + P20.10 已 ship |  |
-| Multi-agent deep agents | NemoClaw | P19.3/4 + P20.7 已 ship |  |
-| Permission modes | Claude Code | P20.1 interrupt 基础 | 候选 |
-| Computer use / browser | OpenAI Operator | ❌ | 候选 |
-| Audio / video | — | vision 已 ship | 候选 |
+- [x] **P22 design lock** — `docs: P22 design lock — permission modes for HITL tool dispatch` *(this commit)* — Added `docs/P22-DESIGN.md` (~280 lines). 4-framework fetch (LangGraph 1.0 interrupt / Claude Code permissions / OpenClaw exec approval / Hermes Agent unverified) + 6-question audit + 5 P-ticket scope. Decision list: 3-way decision (`allow` / `deny` / `ask` falling through to interrupt) + `default: 'ask'` + composition-ordered by name + deny-checkpoint deferred to P22.0.
+- [ ] **P22.0** — `packages/core/src/agent/middleware/permission.ts` — `BasePermissionPolicy` interface + `PermissionPolicySchema` (Zod, `.strict()`) + `FilePermissionPolicy` helper + `createPermissionMiddleware({ policy })` + 6 unit tests
+- [ ] **P22.1** — `createPermissionMiddleware` + interrupt coexistence — 4 e2e: deny short-circuits, allow skips, ask chains, deny persists the P20.4.2 checkpoint
+- [ ] **P22.2** — `lumen run --permissions <path>` flag + `ChatCommandOptions.permissionsPath` + `defaultPermissionsPath()` (env: `LUMEN_PERMISSIONS_PATH`, default `~/.lumen/permissions.yaml`)
+- [ ] **P22.3** — `lumen init [--force]` writes a starter `~/.lumen/permissions.yaml` (default `ask` + commented examples) + `lumen permissions show` prints the resolved policy
+- [ ] **P22.4** — `lumen permissions preset` (starter bundle print) + `docs/PERMISSIONS.md` (operator guide with single-dev / CI / enterprise examples)
 
-P22 方向待 P21 完成后再 fetch 4 框架 + 决定。
+### P22 deferred (backlog, not in P22 commit window)
+
+- [ ] **P22.5** — `auto mode` (Lumen's analogue of OpenClaw's "Safer Than YOLO" auto-mode for low-risk calls) — deferred; needs its own 4-framework fetch + decision list
+- [ ] **P22.6** — cross-policy composition (multiple files via `imports:`) — deferred; no other framework has a public surface for it
+
+### P22 declined (3-framework 主线, no alignment)
+
+- Memories（long-term）— 6-question audit shows Q4 (context) is full; next gap is operator ergonomics, not new storage
+- Computer use / browser — no Lumen internal precedent; defer to P23+ as a standalone track
+- Audio / video — vision already ships; the audio track is a content-type extension, not a framework gap
+- Observability + Eval — P20.8 + P20.10 already cover the LangSmith-style surface
+
+### P22 关键决策 (2026-07-13)
+
+1. P22 = permission modes (not memory, not observability, not computer use)
+2. Three-way decision: `allow` short-circuits / `deny` aborts without human input / `ask` falls through to `createInterruptMiddleware` (P20.1.2 follow-up)
+3. Static YAML, no LLM / no fuzzy matching — every decision is auditable from a `git log` of the policy file
+4. Composition order: permission (by name `permission`) → interrupt (by name `interrupt`) → skill-trigger → plan
+5. `default: 'ask'` hard-coded in the starter bundle; operators opt into `default: 'allow'` only after reviewing the rule list
+6. `deny` outcome does NOT checkpoint by default (preserves the P20.4.2 contract); an opt-in `--permissions-checkpoint-deny` flag ships in P22.0 if a user reports the audit gap
+7. Hermes public surface for permission modes is **unverified** at the link level (the nav item exists; the destination page 404s); the same caveat as P19.5 and P21 design bases
+
+### P22 4-framework comparison（完整表见 `docs/P22-DESIGN.md` §3）

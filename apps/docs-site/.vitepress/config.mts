@@ -70,6 +70,7 @@ export default defineConfig({
       { text: 'Security', link: '/security' },
       { text: 'L1 Audit', link: '/l1-audit' },
       { text: 'P19 Design', link: '/p19-design' },
+      { text: 'P22 Design', link: '/p22-design' },
     ],
     sidebar: [
       {
@@ -93,7 +94,10 @@ export default defineConfig({
       },
       {
         text: 'Roadmap',
-        items: [{ text: 'P19+ design', link: '/p19-design' }],
+        items: [
+          { text: 'P19+ design', link: '/p19-design' },
+          { text: 'P22 design', link: '/p22-design' },
+        ],
       },
     ],
     socialLinks: [{ icon: 'github', link: 'https://github.com/lumen/lumen' }],
