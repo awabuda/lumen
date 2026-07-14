@@ -976,6 +976,15 @@ P19–P20 + P21 全部已 push 到 `origin/main`（v0.14.0 tag 已发布，72 co
 - [x] **P22.3** — `lumen init [--force] [--path <file>]` writes a starter `~/.lumen/permissions.yaml` (default `ask` + 3 allow + 1 deny) + `lumen permissions show [--path <file>] [--json]` prints the resolved policy + 7 cli tests *(commit `50004f3`)*
 - [x] **P22.4** — `lumen permissions preset` (pipable starter print) *(commit `9725357`)* + `docs/PERMISSIONS.md` operator guide (~190 lines) *(commit `5f04420`)*
 
+### P22.5 — Auto-mode classifier (heuristic, opt-in, opt-out-by-name)
+
+- [x] **P22.5 design lock** — `docs: P22.5 design lock — auto-mode classifier for low-risk tool calls` *(this commit)* — Added `docs/P22.5-DESIGN.md` (~280 lines). 4-framework fetch (Claude Code `autoMode` prose classifier / OpenClaw "Safer Than YOLO" blurb with the post itself 404s / LangGraph no auto-mode / Hermes unverified) + 7-question audit (P19.0 6 + new **risk** axis) + 5 P-ticket scope. Decision list: **heuristic rule engine** (NOT LLM — preserves P22.0's "every decision is auditable from `git log`" invariant) + risk table core-shipped + never-allow opt-out + composition order `permission → permission-auto → interrupt → skill-trigger → plan` + classifier-`allow` short-circuits interrupt.
+- [ ] **P22.5.0** — `packages/core/src/agent/middleware/auto-mode.ts` — `BaseRiskClassifier` interface + `createHeuristicRiskClassifier({ rules, riskTable })` + core-shipped risk table (read_file/list_dir/search_files = low, write_file = medium, terminal = high) + 6 unit tests
+- [ ] **P22.5.1** — `createAutoModeMiddleware({ classifier, staticPolicy })` composition wiring + 4 e2e (classifier-allow skips interrupt, classifier-ask chains, never-allow-tool still chains, high-risk still chains)
+- [ ] **P22.5.2** — `autoMode: { enabled, allowPatterns, softDenyPatterns, hardDenyPatterns, neverAllowTools }` block in the policy file (Zod discriminated union) + `lumen permissions show` `autoMode:` section
+- [ ] **P22.5.3** — `lumen run --auto-mode` flag (mirrors the operator's intent; composition wires the heuristic engine with `enabled: true`)
+- [ ] **P22.5.4** — `docs/AUTO-MODE.md` operator guide (3 worked examples + risk-tier reference)
+
 ### P22 deferred (backlog, not in P22 commit window)
 
 - [ ] **P22.5** — `auto mode` (Lumen's analogue of OpenClaw's "Safer Than YOLO" auto-mode for low-risk calls) — deferred; needs its own 4-framework fetch + decision list

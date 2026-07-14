@@ -71,6 +71,7 @@ export default defineConfig({
       { text: 'L1 Audit', link: '/l1-audit' },
       { text: 'P19 Design', link: '/p19-design' },
       { text: 'P22 Design', link: '/p22-design' },
+      { text: 'P22.5 Design', link: '/p22-5-design' },
     ],
     sidebar: [
       {
@@ -97,6 +98,7 @@ export default defineConfig({
         items: [
           { text: 'P19+ design', link: '/p19-design' },
           { text: 'P22 design', link: '/p22-design' },
+          { text: 'P22.5 design', link: '/p22-5-design' },
         ],
       },
     ],
