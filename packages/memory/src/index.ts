@@ -76,12 +76,15 @@ export {
   type ExtractedFact,
 } from './reflector.js'
 export {
+  applyAsymmetricTrustDelta,
   applyTrustDelta,
   clusterFactsBySimilarity,
   createClusteringMetaReflector,
   META_REFLECTOR_DEFAULT_INTERVAL,
   META_REFLECTOR_DEFAULT_SIMILARITY,
   META_REFLECTOR_MAX_DELTA,
+  META_REFLECTOR_NEGATIVE_MAX_DELTA,
+  META_REFLECTOR_POSITIVE_MAX_DELTA,
   type BaseMetaReflector,
   type ClusterOptions,
   type FactCluster,

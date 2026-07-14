@@ -52,8 +52,26 @@ export const META_REFLECTOR_DEFAULT_INTERVAL = 10
 /** Default similarity threshold for Jaccard clustering (0-1). */
 export const META_REFLECTOR_DEFAULT_SIMILARITY = 0.5
 
-/** Maximum absolute trust delta per MetaReflector pass. */
+/** Maximum absolute trust delta per MetaReflector pass (symmetric default). */
 export const META_REFLECTOR_MAX_DELTA = 0.1
+
+/**
+ * P19.5.5 — asymmetric trust delta caps (Hermes mirror).
+ *
+ * Hermes `fact_feedback` (the only public trust-delta shape, see
+ * `docs/P19.5.5-asymmetric-trust-delta-design-basis.md` §1.1) uses
+ * `+0.05` on helpful and `-0.10` on unhelpful — a 2x weight on the
+ * negative side. Lumen's symmetric `META_REFLECTOR_MAX_DELTA` keeps the
+ * old default; `applyAsymmetricTrustDelta` (opt-in) uses these two
+ * constants instead. Defaults are picked so the positive side is
+ * strictly smaller than the negative magnitude, but `applyAsymmetricTrustDelta`
+ * still accepts custom overrides via its `positiveMax` / `negativeMax`
+ * arguments for callers who want different shapes.
+ */
+export const META_REFLECTOR_POSITIVE_MAX_DELTA = 0.05
+
+/** Negative-side magnitude cap for asymmetric trust adjustment (Hermes mirror). */
+export const META_REFLECTOR_NEGATIVE_MAX_DELTA = 0.1
 
 /** Options for {@link clusterFactsBySimilarity}. */
 export interface ClusterOptions {
@@ -150,7 +168,11 @@ export const clusterFactsBySimilarity = async (
       const candidateTags = new Set(candidate.tags)
       if (candidateTags.size !== seedTags.size) continue
       let tagMatch = true
-      for (const t of seedTags) if (!candidateTags.has(t)) { tagMatch = false; break }
+      for (const t of seedTags)
+        if (!candidateTags.has(t)) {
+          tagMatch = false
+          break
+        }
       if (!tagMatch) continue
 
       const candidateTokens = tokens.get(candidate.id) ?? new Set<string>()
@@ -215,10 +237,67 @@ export const applyTrustDelta = (
   // cluster of 10 (full interval) gives the full +0.1.
   const ratio = Math.min(1, cluster.factIds.length / interval)
   const raw = META_REFLECTOR_MAX_DELTA * Math.log(1 + ratio * (Math.E - 1))
-  const delta = Number(Math.max(-META_REFLECTOR_MAX_DELTA, Math.min(META_REFLECTOR_MAX_DELTA, raw)).toFixed(4))
-  const nextTrust = Number(
-    Math.max(0, Math.min(1, representative.trust + delta)).toFixed(4),
+  const delta = Number(
+    Math.max(-META_REFLECTOR_MAX_DELTA, Math.min(META_REFLECTOR_MAX_DELTA, raw)).toFixed(4),
   )
+  const nextTrust = Number(Math.max(0, Math.min(1, representative.trust + delta)).toFixed(4))
+  return {
+    recordId: representative.id,
+    delta,
+    nextTrust,
+    clusterSize: cluster.factIds.length,
+  }
+}
+
+/**
+ * P19.5.5 — asymmetric trust delta (Hermes mirror).
+ *
+ * Same logarithmic fall-off as `applyTrustDelta`, but the positive-side
+ * cap and negative-side magnitude cap are independent. Defaults:
+ *
+ *   positiveMax = META_REFLECTOR_POSITIVE_MAX_DELTA  (0.05)
+ *   negativeMax = META_REFLECTOR_NEGATIVE_MAX_DELTA  (0.10)
+ *
+ * The negative side is strictly heavier than the positive side (2x by
+ * default), which encodes "trust decays faster than it grows" — the same
+ * asymmetry Hermes `fact_feedback` uses.
+ *
+ * The sign is determined by the caller-supplied `sign` argument, NOT
+ * inferred from the representative's existing trust. Jaccard clustering
+ * (the only cluster source in `clusterFactsBySimilarity`) groups content
+ * that is "similar"; whether the cluster is "corroborating" or
+ * "contradicting" is a caller-level judgement. Lumen's MetaReflector
+ * returns the symmetric delta; this helper lets the caller pick the
+ * heavier negative side when the cluster represents a contradiction or
+ * decay signal.
+ *
+ * Pure function — no I/O. Same back-compat contract as
+ * `applyTrustDelta`: callers wire the patch back via
+ * `store.put({ ...record, trust: patch.nextTrust })`.
+ */
+export const applyAsymmetricTrustDelta = (
+  cluster: FactCluster,
+  representative: MemoryRecord,
+  interval: number = META_REFLECTOR_DEFAULT_INTERVAL,
+  sign: 'positive' | 'negative' = 'positive',
+  positiveMax: number = META_REFLECTOR_POSITIVE_MAX_DELTA,
+  negativeMax: number = META_REFLECTOR_NEGATIVE_MAX_DELTA,
+): TrustDeltaPatch => {
+  if (cluster.factIds.length < 2) {
+    return {
+      recordId: representative.id,
+      delta: 0,
+      nextTrust: representative.trust,
+      clusterSize: cluster.factIds.length,
+    }
+  }
+  // Logarithmic diminishing returns on the magnitude (cluster-size signal).
+  const ratio = Math.min(1, cluster.factIds.length / interval)
+  const cap = sign === 'negative' ? negativeMax : positiveMax
+  const magnitude = cap * Math.log(1 + ratio * (Math.E - 1))
+  const signedMagnitude = sign === 'negative' ? -magnitude : magnitude
+  const delta = Number(Math.max(-cap, Math.min(cap, signedMagnitude)).toFixed(4))
+  const nextTrust = Number(Math.max(0, Math.min(1, representative.trust + delta)).toFixed(4))
   return {
     recordId: representative.id,
     delta,
@@ -241,12 +320,32 @@ export interface BaseMetaReflector {
 
 /** Default meta-reflector built on `clusterFactsBySimilarity` + `applyTrustDelta`. */
 export const createClusteringMetaReflector = (
-  options: { interval?: number; similarityThreshold?: number; kind?: string } = {},
+  options: {
+    interval?: number
+    similarityThreshold?: number
+    kind?: string
+    /**
+     * P19.5.5 — opt-in asymmetric trust delta (Hermes mirror).
+     *
+     * When `true`, the reflector dispatches each cluster through
+     * `applyAsymmetricTrustDelta({ sign: 'positive' })` instead of
+     * `applyTrustDelta`. Same cluster-size signal; the per-pass cap is
+     * `META_REFLECTOR_POSITIVE_MAX_DELTA = 0.05` (instead of `±0.1`).
+     * Defaults to `false` for back-compat — callers opt in explicitly.
+     *
+     * Note: Jaccard clustering alone cannot distinguish "corroborating
+     * cluster" from "contradicting cluster" (see
+     * `docs/P19.5.5-asymmetric-trust-delta-design-basis.md` §6). To
+     * exercise the negative side, callers must invoke
+     * `applyAsymmetricTrustDelta` directly with `sign: 'negative'`.
+     */
+    asymmetric?: boolean
+  } = {},
 ): BaseMetaReflector => {
   const interval = options.interval ?? META_REFLECTOR_DEFAULT_INTERVAL
-  const similarityThreshold =
-    options.similarityThreshold ?? META_REFLECTOR_DEFAULT_SIMILARITY
+  const similarityThreshold = options.similarityThreshold ?? META_REFLECTOR_DEFAULT_SIMILARITY
   const kind = options.kind ?? 'fact'
+  const asymmetric = options.asymmetric ?? false
 
   return {
     id: 'clustering',
@@ -259,7 +358,11 @@ export const createClusteringMetaReflector = (
       for (const cluster of clusters) {
         const representative = await store.get(cluster.representativeId)
         if (!representative) continue
-        patches.push(applyTrustDelta(cluster, representative, interval))
+        patches.push(
+          asymmetric
+            ? applyAsymmetricTrustDelta(cluster, representative, interval, 'positive')
+            : applyTrustDelta(cluster, representative, interval),
+        )
       }
       return patches
     },
