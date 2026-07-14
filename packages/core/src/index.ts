@@ -378,7 +378,32 @@ export {
   type InterruptOptions,
   type InterruptReason,
   type InterruptState,
+  type InterruptApproveContext,
+  type ApproveDecision,
 } from './agent/middleware/interrupt.js'
+
+// Permission policy middleware (P22) — static, deterministic
+// tool-call gating. Three outcomes: `allow` short-circuits,
+// `deny` throws a typed AbortError, `ask` falls through to
+// the interrupt middleware. Sits in front of the interrupt
+// layer in the composition order (alphabetical by `name`).
+export {
+  ToolPermissionDecisionSchema,
+  ToolPermissionWhenSchema,
+  ToolPermissionRuleSchema,
+  ToolPermissionPolicySchema,
+  ToolPermissionMiddlewareOptionsSchema,
+  TOOL_PERMISSION_MAX_RULES,
+  createStaticToolPermissionPolicy,
+  createToolPermissionMiddleware,
+  type ToolPermissionRule,
+  type ToolPermissionPolicy,
+  type ToolPermissionDecision,
+  type BaseToolPermissionPolicy,
+  type ToolPermissionDecisionRecord,
+  type ToolPermissionState,
+  type ToolPermissionMiddlewareOptions,
+} from './agent/middleware/tool-permission.js'
 
 // Context compression middleware (P20.3) — collapse long
 // message histories into a rolling summary before the model
