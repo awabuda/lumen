@@ -970,12 +970,11 @@ P19–P20 + P21 全部已 push 到 `origin/main`（v0.14.0 tag 已发布，72 co
 ### Backlog (P22+ candidates)
 ### P22 — Permission modes for HITL tool dispatch (design lock landed 2026-07-13)
 
-- [x] **P22 design lock** — `docs: P22 design lock — permission modes for HITL tool dispatch` *(this commit)* — Added `docs/P22-DESIGN.md` (~280 lines). 4-framework fetch (LangGraph 1.0 interrupt / Claude Code permissions / OpenClaw exec approval / Hermes Agent unverified) + 6-question audit + 5 P-ticket scope. Decision list: 3-way decision (`allow` / `deny` / `ask` falling through to interrupt) + `default: 'ask'` + composition-ordered by name + deny-checkpoint deferred to P22.0.
-- [ ] **P22.0** — `packages/core/src/agent/middleware/permission.ts` — `BasePermissionPolicy` interface + `PermissionPolicySchema` (Zod, `.strict()`) + `FilePermissionPolicy` helper + `createPermissionMiddleware({ policy })` + 6 unit tests
-- [ ] **P22.1** — `createPermissionMiddleware` + interrupt coexistence — 4 e2e: deny short-circuits, allow skips, ask chains, deny persists the P20.4.2 checkpoint
-- [ ] **P22.2** — `lumen run --permissions <path>` flag + `ChatCommandOptions.permissionsPath` + `defaultPermissionsPath()` (env: `LUMEN_PERMISSIONS_PATH`, default `~/.lumen/permissions.yaml`)
-- [ ] **P22.3** — `lumen init [--force]` writes a starter `~/.lumen/permissions.yaml` (default `ask` + commented examples) + `lumen permissions show` prints the resolved policy
-- [ ] **P22.4** — `lumen permissions preset` (starter bundle print) + `docs/PERMISSIONS.md` (operator guide with single-dev / CI / enterprise examples)
+- [x] **P22 design lock** — `docs: P22 design lock — permission modes for HITL tool dispatch` *(commit `f1e7998`)* — Added `docs/P22-DESIGN.md` (~280 lines). 4-framework fetch (LangGraph 1.0 interrupt / Claude Code permissions / OpenClaw exec approval / Hermes Agent unverified) + 6-question audit + 5 P-ticket scope. Decision list: 3-way decision (`allow` / `deny` / `ask` falling through to interrupt) + `default: 'ask'` + composition-ordered by name + deny-checkpoint deferred to P22.0.
+- [x] **P22.0 + P22.1** — `packages/core/src/agent/middleware/tool-permission.ts` — `BaseToolPermissionPolicy` interface + `ToolPermissionPolicySchema` (Zod, `.strict()`) + `createStaticToolPermissionPolicy` + `createToolPermissionMiddleware({ policy })` + 15 core tests (deny/allow/ask paths, strict-schema rejection, argMatches regex, JSON-coerced arg values, over-cap rejection, and 3 coexistence cases with the interrupt middleware) *(commit `ec73339`)*
+- [x] **P22.2** — `lumen run --permissions <path>` flag + `ChatCommandOptions.permissionsPath` + `defaultPermissionsPath()` (env: `LUMEN_PERMISSIONS_PATH`, default `~/.lumen/permissions.yaml`) + hand-rolled YAML subset parser in `apps/cli/src/permissions-loader.ts` + 8 unit tests *(commit `03756c1`)*
+- [x] **P22.3** — `lumen init [--force] [--path <file>]` writes a starter `~/.lumen/permissions.yaml` (default `ask` + 3 allow + 1 deny) + `lumen permissions show [--path <file>] [--json]` prints the resolved policy + 7 cli tests *(commit `50004f3`)*
+- [x] **P22.4** — `lumen permissions preset` (pipable starter print) *(commit `9725357`)* + `docs/PERMISSIONS.md` operator guide (~190 lines) *(commit `5f04420`)*
 
 ### P22 deferred (backlog, not in P22 commit window)
 
