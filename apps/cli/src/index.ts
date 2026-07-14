@@ -579,17 +579,21 @@ program
 program
   .command('permissions')
   .description('Inspect the resolved tool-permission policy (P22.3)')
-  .argument('[subcommand]', '"show" (default)', 'show')
+  .argument('[subcommand]', '"show" (default) or "preset"', 'show')
   .option('--path <file>', 'Path to a YAML policy file (default ~/.lumen/permissions.yaml)')
   .option('--json', 'Emit JSON instead of the human-readable form')
   .action(async (subcommand: string, opts: Record<string, unknown>) => {
-    const { permissionsShowCommand } = await import('./commands/permissions.js')
+    const { permissionsPresetCommand, permissionsShowCommand } = await import(
+      './commands/permissions.js'
+    )
     let code = 0
     if (subcommand === 'show') {
       code = await permissionsShowCommand({
         path: opts.path as string | undefined,
         json: opts.json === true,
       })
+    } else if (subcommand === 'preset') {
+      code = await permissionsPresetCommand()
     } else {
       process.stderr.write(`lumen permissions: unknown subcommand: ${subcommand}\n`)
       code = 1

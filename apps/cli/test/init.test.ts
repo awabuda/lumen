@@ -5,7 +5,10 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { initCommand, starterPermissionPolicy } from '../src/commands/init.js'
-import { permissionsShowCommand as show } from '../src/commands/permissions.js'
+import {
+  permissionsPresetCommand as preset,
+  permissionsShowCommand as show,
+} from '../src/commands/permissions.js'
 
 let workDir = ''
 let stdout = ''
@@ -100,6 +103,14 @@ describe('permissionsShowCommand', () => {
     expect(code).toBe(1)
     expect(stderr).toContain('lumen permissions show: no policy file at')
     expect(stderr).toContain('lumen init')
+  })
+})
+
+describe('permissionsPresetCommand', () => {
+  it('prints the same text that initCommand writes to disk', async () => {
+    const code = await preset()
+    expect(code).toBe(0)
+    expect(stdout).toBe(starterPermissionPolicy())
   })
 })
 

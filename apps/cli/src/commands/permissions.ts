@@ -1,7 +1,7 @@
-/** P22.3 — `lumen permissions show` prints the resolved policy. */
+/** P22.3 — `lumen permissions show` and `lumen permissions preset` commands. */
 
 import { parsePermissionPolicy } from '../permissions-loader.js'
-import { defaultPermissionsPath } from './init.js'
+import { defaultPermissionsPath, starterPermissionPolicy } from './init.js'
 
 /** Options for {@link permissionsShowCommand}. */
 export interface PermissionsShowOptions {
@@ -51,5 +51,18 @@ export const permissionsShowCommand = async (
     }
   }
   process.stdout.write(`${lines.join('\n')}\n`)
+  return 0
+}
+
+/**
+ * Run `lumen permissions preset`. Prints the recommended
+ * starter policy text to stdout. The operator can pipe the
+ * output to a file (e.g. `lumen permissions preset > ~/.lumen/permissions.yaml`)
+ * to bootstrap a new project without writing the YAML by
+ * hand. Same text as `lumen init` writes; the two commands
+ * share the `starterPermissionPolicy()` function.
+ */
+export const permissionsPresetCommand = async (): Promise<number> => {
+  process.stdout.write(starterPermissionPolicy())
   return 0
 }
