@@ -548,6 +548,55 @@ program
     process.exit(code)
   })
 
+// `lumen init [--force] [--path <file>]`
+//
+// P22.3: write a starter `~/.lumen/permissions.yaml` so the
+// operator can `lumen run --permissions` immediately. The starter
+// ships with `default: ask` and a least-privilege rule set
+// (read tools allowed, terminal denied). `--force` overwrites an
+// existing file; without it, the command exits 2 and prints a
+// hint.
+program
+  .command('init')
+  .description('Write a starter `~/.lumen/permissions.yaml` (P22.3)')
+  .option('--force', 'Overwrite an existing file')
+  .option('--path <file>', 'Override the destination (default ~/.lumen/permissions.yaml)')
+  .action(async (opts: Record<string, unknown>) => {
+    const { initCommand } = await import('./commands/init.js')
+    const code = await initCommand({
+      force: opts.force === true,
+      path: opts.path as string | undefined,
+    })
+    process.exit(code)
+  })
+
+// `lumen permissions show [--path <file>] [--json]`
+//
+// P22.3: print the resolved tool-permission policy in
+// human-readable form (default) or as JSON. Reads from the
+// same path the run/chat --permissions flag would, and
+// surfaces the same Zod-validated shape.
+program
+  .command('permissions')
+  .description('Inspect the resolved tool-permission policy (P22.3)')
+  .argument('[subcommand]', '"show" (default)', 'show')
+  .option('--path <file>', 'Path to a YAML policy file (default ~/.lumen/permissions.yaml)')
+  .option('--json', 'Emit JSON instead of the human-readable form')
+  .action(async (subcommand: string, opts: Record<string, unknown>) => {
+    const { permissionsShowCommand } = await import('./commands/permissions.js')
+    let code = 0
+    if (subcommand === 'show') {
+      code = await permissionsShowCommand({
+        path: opts.path as string | undefined,
+        json: opts.json === true,
+      })
+    } else {
+      process.stderr.write(`lumen permissions: unknown subcommand: ${subcommand}\n`)
+      code = 1
+    }
+    process.exit(code)
+  })
+
 // `lumen` (no subcommand) — alias for `lumen chat`. Allows `lumen -m foo`
 // to drop into the TUI without remembering the explicit `chat` keyword.
 // We keep the two entry points wired to the *same* handler so a future
