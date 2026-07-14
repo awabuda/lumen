@@ -405,6 +405,29 @@ export {
   type ToolPermissionMiddlewareOptions,
 } from './agent/middleware/tool-permission.js'
 
+// Auto-mode classifier middleware (P22.5) — heuristic
+// risk-tiered gating for low-risk tool calls. Sits between
+// the static permission layer and the interrupt layer.
+// `allow` short-circuits the interrupt chain (the operator's
+// explicit opt-in via `autoMode: { enabled: true }`).
+export {
+  RiskTierSchema,
+  RiskClassifierDecisionSchema,
+  AutoModeRulesSchema,
+  AutoModeMiddlewareOptionsSchema,
+  DEFAULT_RISK_TABLE,
+  createHeuristicRiskClassifier,
+  createAutoModeMiddleware,
+  type RiskTier,
+  type RiskClassifierDecision,
+  type AutoModeRules,
+  type BaseRiskClassifier,
+  type AutoModeDecisionRecord,
+  type AutoModeState,
+  type HeuristicRiskClassifierOptions,
+  type AutoModeMiddlewareOptions,
+} from './agent/middleware/auto-mode.js'
+
 // Context compression middleware (P20.3) — collapse long
 // message histories into a rolling summary before the model
 // call. Defaults: maxMessages=20, keepLastN=10. Pass a custom
