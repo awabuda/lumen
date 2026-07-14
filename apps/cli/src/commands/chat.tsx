@@ -41,6 +41,8 @@ export interface ChatCommandOptions {
    * interrupt rules are wired (backwards-compatible default).
    */
   interruptOn?: ReadonlyArray<string>
+  /** Pre-approve tool names listed in interruptOn. */
+  approveOn?: ReadonlyArray<string>
   /** SQLite checkpoint database used for durable TUI turns. */
   checkpointPath?: string
   /** Disable startup auto-resume. */

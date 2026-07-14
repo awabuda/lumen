@@ -30,6 +30,10 @@ program
   .option('--no-memory', 'Run without wiring a memory store')
   .option('--no-mcp', 'Skip MCP server discovery and connection')
   .option('--interrupt-on <names>', 'Comma-separated tool names to interrupt on (HITL)')
+  .option(
+    '--approve-on <names>',
+    'Comma-separated tool names to pre-approve when they appear in --interrupt-on. The TUI can also /approve on the fly; this flag is the static allow-list.',
+  )
   .option('--plan [mode]', "Wire PlanMiddleware; mode is 'plan' / 'act' / 'auto' (default 'auto')")
   .option('--checkpoint <path>', 'Path to a SQLite checkpoint database (P20.4)')
   .option('--session-id <id>', 'Scope durable checkpoints and auto-resume to one session')
@@ -46,13 +50,15 @@ program
   )
   .action(async (prompt: string, opts: Record<string, unknown>) => {
     const { runCommand } = await import('./commands/run.js')
-    const interruptOnRaw = opts.interruptOn as string | undefined
-    const interruptOn = interruptOnRaw
-      ? interruptOnRaw
-          .split(',')
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0)
-      : undefined
+    const splitNames = (raw: string | undefined): ReadonlyArray<string> | undefined =>
+      raw === undefined || raw.length === 0
+        ? undefined
+        : raw
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0)
+    const interruptOn = splitNames(opts.interruptOn as string | undefined)
+    const approveOn = splitNames(opts.approveOn as string | undefined)
     const planRaw = opts.plan as string | boolean | undefined
     const planMode =
       planRaw === true || planRaw === undefined ? undefined : (planRaw as 'plan' | 'act' | 'auto')
@@ -68,6 +74,7 @@ program
       noMemory: opts.memory === false,
       noMcp: opts.mcp === false,
       interruptOn,
+      approveOn,
       enablePlanMiddleware: planRaw !== undefined,
       planMode,
       checkpointPath: opts.checkpoint as string | undefined,
@@ -99,24 +106,32 @@ program
     '--interrupt-on <names>',
     'Comma-separated tool names to interrupt on (HITL). When a tool in this list is about to dispatch, the run aborts and the TUI surfaces the AbortError message.',
   )
+  .option(
+    '--approve-on <names>',
+    'Comma-separated tool names to pre-approve on the interrupt list (TUI lets the user /approve on the fly; this flag is the static allow-list).',
+  )
   .action(async (opts: Record<string, unknown>) => {
     // Lazy-load Ink only when actually entering the TUI.
     const { chatCommand } = await import('./commands/chat.js')
-    // Parse --interrupt-on the same way as `lumen run`: comma split,
-    // trim, drop empties. Empty / missing list = no interrupt rules,
-    // matching the pre-P20.1.2 chat behaviour.
-    const interruptOnRaw = opts.interruptOn as string | undefined
-    const interruptOn = interruptOnRaw
-      ? interruptOnRaw
-          .split(',')
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0)
-      : undefined
+    // Parse --interrupt-on / --approve-on the same way as
+    // `lumen run`: comma split, trim, drop empties. Empty /
+    // missing list = no interrupt rules, matching the
+    // pre-P20.1.2 chat behaviour.
+    const splitNames = (raw: string | undefined): ReadonlyArray<string> | undefined =>
+      raw === undefined || raw.length === 0
+        ? undefined
+        : raw
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0)
+    const interruptOn = splitNames(opts.interruptOn as string | undefined)
+    const approveOn = splitNames(opts.approveOn as string | undefined)
     const code = await chatCommand({
       model: opts.model as string | undefined,
       configPath: opts.config as string | undefined,
       cwd: opts.cwd as string | undefined,
       interruptOn,
+      approveOn,
       checkpointPath: opts.checkpoint as string | undefined,
       noResume: opts.resume === false,
       resumeTtlMs:

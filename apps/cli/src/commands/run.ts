@@ -34,6 +34,8 @@ export interface RunCommandOptions {
    * a no-op. Multiple names allowed.
    */
   interruptOn?: ReadonlyArray<string>
+  /** Pre-approve tool names listed in interruptOn. */
+  approveOn?: ReadonlyArray<string>
   /**
    * P19.0.3 follow-up: when true, buildAgent wires the
    * PlanMiddleware with `planMode ?? 'auto'`.

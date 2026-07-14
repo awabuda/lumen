@@ -107,6 +107,16 @@ export interface CliAgentOptions {
    */
   interruptOn?: ReadonlyArray<string>
   /**
+   * P20.1.2 follow-up: pre-approve a list of tool names so
+   * they bypass the `interruptOn` AbortError. Used by the
+   * TUI's persistent approve list and by the CLI
+   * `--approve-on` flag. When both `interruptOn` and
+   * `approveOn` contain the same name, the tool always
+   * dispatches (the rule effectively becomes a no-op for
+   * that tool). Empty / undefined is a no-op.
+   */
+  approveOn?: ReadonlyArray<string>
+  /**
    * P20.6.2: when true, wire `createSkillTriggerMiddleware`
    * into the agent loop. The trigger function is built from
    * the discovered `SkillRegistry` (see {@link CliAgentOptions.skillsPath})
@@ -224,7 +234,18 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
     middleware.push(createPlanMiddleware({ mode: options.planMode ?? 'auto' }))
   }
   if (options.interruptOn && options.interruptOn.length > 0) {
-    middleware.push(createInterruptMiddleware({ toolNames: [...options.interruptOn] }))
+    const approveSet = new Set(options.approveOn ?? [])
+    middleware.push(
+      createInterruptMiddleware({
+        toolNames: [...options.interruptOn],
+        ...(approveSet.size > 0
+          ? {
+              approve: (call: { readonly name: string }) =>
+                Promise.resolve(approveSet.has(call.name)),
+            }
+          : {}),
+      }),
+    )
   }
   // P20.6.2: skill-trigger wiring. Opt-in via
   // `enableSkillTrigger: true` so a bare `lumen run` keeps
