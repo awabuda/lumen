@@ -22,12 +22,17 @@ import { type LumenConfig, loadConfig } from '@lumen/config'
 import {
   type Agent,
   type BaseProvider,
+  ConfigError,
   HookRegistry,
+  type ToolPermissionPolicy,
+  ToolPermissionPolicySchema,
   ToolRegistry,
   createAgent,
   createInterruptMiddleware,
   createPlanMiddleware,
   createSkillTriggerMiddleware,
+  createStaticToolPermissionPolicy,
+  createToolPermissionMiddleware,
 } from '@lumen/core'
 import { OpenAICompatibleProvider } from '@lumen/llm'
 import { type DiscoveredMcpServer, closeAllMcpServers, connectAllMcpServers } from '@lumen/mcp'
@@ -35,6 +40,7 @@ import { SqliteStore } from '@lumen/memory'
 import { defaultSkillsPath } from '@lumen/skills'
 import { createFilesystemTools } from '@lumen/tools'
 import { loadSkillRegistry } from './commands/skills.js'
+import { loadPermissionPolicyFromFile } from './permissions-loader.js'
 import { buildKeywordTriggerFn } from './skill-trigger-adapter.js'
 
 export interface CliAgentOptions {
@@ -116,6 +122,17 @@ export interface CliAgentOptions {
    * that tool). Empty / undefined is a no-op.
    */
   approveOn?: ReadonlyArray<string>
+  /**
+   * P22.2: optional path to a YAML permission policy file.
+   * When set, the composition root wires
+   * `createToolPermissionMiddleware({ policy: loadPolicy(path) })`
+   * in front of the interrupt chain. A non-existent file
+   * throws a typed `ConfigError`; a malformed file throws
+   * with the Zod issue list. When omitted, the bare path
+   * runs (no permission middleware) so pre-P22 commands
+   * keep their original behaviour.
+   */
+  permissionsPath?: string
   /**
    * P20.6.2: when true, wire `createSkillTriggerMiddleware`
    * into the agent loop. The trigger function is built from
@@ -230,6 +247,18 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
   // bare path so existing CLI commands that have not opted in
   // keep their original behaviour exactly.
   const middleware: import('@lumen/core').AgentMiddleware[] = []
+  // P22.2: permission policy is the outermost gate. When the
+  // file is missing or malformed we surface the typed
+  // ConfigError rather than silently fall through, because
+  // a misconfigured permission file is a security incident
+  // (the operator expects the rule to fire, but it would
+  // not). The wiring is opt-in: callers that do not pass
+  // `permissionsPath` keep the pre-P22 behaviour exactly.
+  if (options.permissionsPath !== undefined) {
+    const parsed = await loadPermissionPolicyFromFile(options.permissionsPath)
+    const policy = createStaticToolPermissionPolicy(parsed)
+    middleware.push(createToolPermissionMiddleware({ policy }))
+  }
   if (options.enablePlanMiddleware === true) {
     middleware.push(createPlanMiddleware({ mode: options.planMode ?? 'auto' }))
   }

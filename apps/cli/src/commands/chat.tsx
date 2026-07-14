@@ -43,6 +43,8 @@ export interface ChatCommandOptions {
   interruptOn?: ReadonlyArray<string>
   /** Pre-approve tool names listed in interruptOn. */
   approveOn?: ReadonlyArray<string>
+  /** P22.2: path to a YAML permission policy file. */
+  permissionsPath?: string
   /** SQLite checkpoint database used for durable TUI turns. */
   checkpointPath?: string
   /** Disable startup auto-resume. */

@@ -34,6 +34,10 @@ program
     '--approve-on <names>',
     'Comma-separated tool names to pre-approve when they appear in --interrupt-on. The TUI can also /approve on the fly; this flag is the static allow-list.',
   )
+  .option(
+    '--permissions <path>',
+    'Path to a YAML tool-permission policy file (P22.2). The file is validated against the Zod policy schema; a missing or malformed file throws a typed ConfigError.',
+  )
   .option('--plan [mode]', "Wire PlanMiddleware; mode is 'plan' / 'act' / 'auto' (default 'auto')")
   .option('--checkpoint <path>', 'Path to a SQLite checkpoint database (P20.4)')
   .option('--session-id <id>', 'Scope durable checkpoints and auto-resume to one session')
@@ -75,6 +79,7 @@ program
       noMcp: opts.mcp === false,
       interruptOn,
       approveOn,
+      permissionsPath: opts.permissions as string | undefined,
       enablePlanMiddleware: planRaw !== undefined,
       planMode,
       checkpointPath: opts.checkpoint as string | undefined,
@@ -98,6 +103,7 @@ program
   .option('-m, --model <model>', 'Override the LLM model')
   .option('-c, --config <path>', 'Path to a Lumen config file')
   .option('--cwd <path>', 'Working directory for tool execution')
+  .option('--permissions <path>', 'Path to a YAML tool-permission policy file (P22.2)')
   .option('--checkpoint <path>', 'Path to a SQLite checkpoint database')
   .option('--no-resume', 'Do not resume a fresh in-progress checkpoint')
   .option('--resume-ttl <ms>', 'Maximum checkpoint age for auto-resume (default 600000)')
@@ -132,6 +138,7 @@ program
       cwd: opts.cwd as string | undefined,
       interruptOn,
       approveOn,
+      permissionsPath: opts.permissions as string | undefined,
       checkpointPath: opts.checkpoint as string | undefined,
       noResume: opts.resume === false,
       resumeTtlMs:
