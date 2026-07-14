@@ -38,6 +38,10 @@ program
     '--permissions <path>',
     'Path to a YAML tool-permission policy file (P22.2). The file is validated against the Zod policy schema; a missing or malformed file throws a typed ConfigError.',
   )
+  .option(
+    '--auto-mode',
+    "P22.5.3: print a one-line status that auto-mode is enabled (based on the policy file's autoMode.enabled flag). The flag does NOT override the policy file; the file is the source of truth. Requires --permissions.",
+  )
   .option('--plan [mode]', "Wire PlanMiddleware; mode is 'plan' / 'act' / 'auto' (default 'auto')")
   .option('--checkpoint <path>', 'Path to a SQLite checkpoint database (P20.4)')
   .option('--session-id <id>', 'Scope durable checkpoints and auto-resume to one session')
@@ -80,6 +84,7 @@ program
       interruptOn,
       approveOn,
       permissionsPath: opts.permissions as string | undefined,
+      autoMode: opts.autoMode === true,
       enablePlanMiddleware: planRaw !== undefined,
       planMode,
       checkpointPath: opts.checkpoint as string | undefined,

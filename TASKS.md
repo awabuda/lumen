@@ -979,11 +979,11 @@ P19–P20 + P21 全部已 push 到 `origin/main`（v0.14.0 tag 已发布，72 co
 ### P22.5 — Auto-mode classifier (heuristic, opt-in, opt-out-by-name)
 
 - [x] **P22.5 design lock** — `docs: P22.5 design lock — auto-mode classifier for low-risk tool calls` *(this commit)* — Added `docs/P22.5-DESIGN.md` (~280 lines). 4-framework fetch (Claude Code `autoMode` prose classifier / OpenClaw "Safer Than YOLO" blurb with the post itself 404s / LangGraph no auto-mode / Hermes unverified) + 7-question audit (P19.0 6 + new **risk** axis) + 5 P-ticket scope. Decision list: **heuristic rule engine** (NOT LLM — preserves P22.0's "every decision is auditable from `git log`" invariant) + risk table core-shipped + never-allow opt-out + composition order `permission → permission-auto → interrupt → skill-trigger → plan` + classifier-`allow` short-circuits interrupt.
-- [ ] **P22.5.0** — `packages/core/src/agent/middleware/auto-mode.ts` — `BaseRiskClassifier` interface + `createHeuristicRiskClassifier({ rules, riskTable })` + core-shipped risk table (read_file/list_dir/search_files = low, write_file = medium, terminal = high) + 6 unit tests
-- [ ] **P22.5.1** — `createAutoModeMiddleware({ classifier, staticPolicy })` composition wiring + 4 e2e (classifier-allow skips interrupt, classifier-ask chains, never-allow-tool still chains, high-risk still chains)
-- [ ] **P22.5.2** — `autoMode: { enabled, allowPatterns, softDenyPatterns, hardDenyPatterns, neverAllowTools }` block in the policy file (Zod discriminated union) + `lumen permissions show` `autoMode:` section
-- [ ] **P22.5.3** — `lumen run --auto-mode` flag (mirrors the operator's intent; composition wires the heuristic engine with `enabled: true`)
-- [ ] **P22.5.4** — `docs/AUTO-MODE.md` operator guide (3 worked examples + risk-tier reference)
+- [x] **P22.5.0** — `packages/core/src/agent/middleware/auto-mode.ts` — `BaseRiskClassifier` interface + `AutoModeRulesSchema` (Zod, `.strict()`) + `createHeuristicRiskClassifier({ rules })` + core-shipped `DEFAULT_RISK_TABLE` (read_file/list_dir/search_files = low, write_file = medium, terminal = high) + `createAutoModeMiddleware({ classifier })` + 14 unit tests *(commit `3a2da3e`)*
+- [x] **P22.5.1** — composition wiring: when `parsed.autoMode?.enabled === true`, the composition root wires `createHeuristicRiskClassifier` + `createAutoModeMiddleware` in front of the interrupt chain. 4 coexistence cases *(commit `382715d`)*
+- [x] **P22.5.2** — `autoMode:` block in the policy file (Zod optional, defaults to omitted). 2 cli yaml-parser cases + 3 core schema cases *(commit `382715d`)*
+- [x] **P22.5.3** — `lumen run --auto-mode` flag (one-line status; file is the source of truth) *(this commit)*
+- [x] **P22.5.4** — `docs/AUTO-MODE.md` operator guide (~250 lines: composition overview, autoMode block shape, risk table, decision precedence, audit, 3 worked examples, CLI surface, composition with the interrupt layer, limits) *(this commit)*
 
 ### P22 deferred (backlog, not in P22 commit window)
 

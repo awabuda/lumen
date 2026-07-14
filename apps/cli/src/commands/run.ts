@@ -39,6 +39,16 @@ export interface RunCommandOptions {
   /** P22.2: path to a YAML permission policy file. */
   permissionsPath?: string
   /**
+   * P22.5.3: when true, print a one-line confirmation that
+   * auto-mode is enabled (based on the policy file's
+   * `autoMode.enabled` flag). The flag itself does NOT
+   * override the policy file; the file is the source of
+   * truth. A missing `autoMode:` block or `enabled: false`
+   * triggers a hint to edit the file. A `--permissions`
+   * flag is also required.
+   */
+  autoMode?: boolean
+  /**
    * P19.0.3 follow-up: when true, buildAgent wires the
    * PlanMiddleware with `planMode ?? 'auto'`.
    */
@@ -75,6 +85,37 @@ export interface RunCommandOptions {
 export const runCommand = async (options: RunCommandOptions): Promise<number> => {
   // Defer the heavy import so the command surface stays light.
   const { buildAgent } = await import('../composition.js')
+
+  // P22.5.3: when --auto-mode is set, surface a one-line
+  // status that the operator can see before the run
+  // starts. The flag itself does not override the policy
+  // file; the file is the source of truth.
+  if (options.autoMode === true) {
+    if (options.permissionsPath === undefined) {
+      process.stderr.write(
+        'lumen: --auto-mode requires --permissions <path>; the policy file declares the autoMode block.\n',
+      )
+      return 2
+    }
+    const { loadPermissionPolicyFromFile } = await import('../permissions-loader.js')
+    try {
+      const parsed = await loadPermissionPolicyFromFile(options.permissionsPath)
+      if (parsed.autoMode?.enabled === true) {
+        process.stdout.write(
+          `auto-mode: enabled (heuristic classifier + ${parsed.autoMode.neverAllowTools.length} never-allow tool(s))\n`,
+        )
+      } else {
+        process.stdout.write(
+          `auto-mode: not enabled in ${options.permissionsPath}; edit the file's autoMode block to set enabled: true\n`,
+        )
+      }
+    } catch (err) {
+      process.stderr.write(
+        `lumen: --auto-mode could not read policy: ${(err as Error).message ?? String(err)}\n`,
+      )
+      return 2
+    }
+  }
 
   // Pre-flight: surface the missing-key error **before** we
   // touch the filesystem (buildAgent opens the SQLite
