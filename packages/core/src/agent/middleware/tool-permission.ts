@@ -70,6 +70,23 @@ export const ToolPermissionRuleSchema = z
   })
   .strict()
 
+/** P22.5.2 — auto-mode block. Optional. When omitted the
+ *  classifier middleware is not wired (default: ask for every
+ *  tool call). Mirrors the `AutoModeRulesSchema` in
+ *  `./auto-mode.ts`; defined inline here to avoid a
+ *  cross-import between the two middleware files (the
+ *  composition root parses the policy once and threads the
+ *  block into the auto-mode middleware). */
+const AutoModePolicyBlockSchema = z
+  .object({
+    enabled: z.boolean(),
+    neverAllowTools: z.array(z.string().min(1)).default([]),
+    hardDenyPatterns: z.array(z.string()).default([]),
+    allowPatterns: z.array(z.string()).default([]),
+    softDenyPatterns: z.array(z.string()).default([]),
+  })
+  .strict()
+
 /** Top-level policy file. */
 export const ToolPermissionPolicySchema = z
   .object({
@@ -79,6 +96,14 @@ export const ToolPermissionPolicySchema = z
     default: ToolPermissionDecisionSchema,
     /** Ordered list of rules; first match wins. */
     rules: z.array(ToolPermissionRuleSchema),
+    /**
+     * P22.5.2: optional auto-mode block. When set, the
+     * composition root wires `createAutoModeMiddleware`
+     * with the heuristic engine. When omitted (the default),
+     * auto-mode is off and every `ask` decision falls
+     * through to the interrupt layer unchanged.
+     */
+    autoMode: AutoModePolicyBlockSchema.optional(),
   })
   .strict()
 

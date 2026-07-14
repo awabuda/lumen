@@ -24,10 +24,13 @@ import {
   type BaseProvider,
   ConfigError,
   HookRegistry,
+  type ToolPermissionAutoModeBlock,
   type ToolPermissionPolicy,
   ToolPermissionPolicySchema,
   ToolRegistry,
   createAgent,
+  createAutoModeMiddleware,
+  createHeuristicRiskClassifier,
   createInterruptMiddleware,
   createPlanMiddleware,
   createSkillTriggerMiddleware,
@@ -258,6 +261,19 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
     const parsed = await loadPermissionPolicyFromFile(options.permissionsPath)
     const policy = createStaticToolPermissionPolicy(parsed)
     middleware.push(createToolPermissionMiddleware({ policy }))
+    // P22.5.1: when the policy file declares an autoMode
+    // block with enabled=true, wire the heuristic classifier
+    // in front of the interrupt chain. The classifier
+    // short-circuits `allow` decisions (operator's explicit
+    // opt-in); `ask` falls through to the interrupt chain
+    // unchanged. Composition order is alphabetical by
+    // `name` (tool-permission < tool-permission-auto <
+    // interrupt), so this is naturally correct.
+    if (parsed.autoMode && parsed.autoMode.enabled === true) {
+      const autoModeRules: ToolPermissionAutoModeBlock = parsed.autoMode
+      const classifier = createHeuristicRiskClassifier({ rules: autoModeRules })
+      middleware.push(createAutoModeMiddleware({ classifier }))
+    }
   }
   if (options.enablePlanMiddleware === true) {
     middleware.push(createPlanMiddleware({ mode: options.planMode ?? 'auto' }))

@@ -405,6 +405,8 @@ export {
   type ToolPermissionMiddlewareOptions,
 } from './agent/middleware/tool-permission.js'
 
+export type { AutoModeRules as ToolPermissionAutoModeBlock } from './agent/middleware/auto-mode.js'
+
 // Auto-mode classifier middleware (P22.5) — heuristic
 // risk-tiered gating for low-risk tool calls. Sits between
 // the static permission layer and the interrupt layer.

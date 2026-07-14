@@ -93,6 +93,30 @@ rules: []
 `),
     ).toThrow(/not a valid ToolPermissionPolicy/)
   })
+
+  it('parses an optional autoMode block (P22.5.2)', () => {
+    const policy = parsePermissionPolicy(`
+version: 1
+default: ask
+rules: []
+autoMode:
+  enabled: true
+  neverAllowTools: [read_file]
+  hardDenyPatterns: ['^terminal$']
+`)
+    expect(policy.autoMode?.enabled).toBe(true)
+    expect(policy.autoMode?.neverAllowTools).toEqual(['read_file'])
+    expect(policy.autoMode?.hardDenyPatterns).toEqual(['^terminal$'])
+  })
+
+  it('omits the autoMode block when the policy file does not declare one', () => {
+    const policy = parsePermissionPolicy(`
+version: 1
+default: ask
+rules: []
+`)
+    expect(policy.autoMode).toBeUndefined()
+  })
 })
 
 describe('loadPermissionPolicyFromFile', () => {

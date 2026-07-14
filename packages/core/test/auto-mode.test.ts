@@ -138,3 +138,65 @@ describe('createAutoModeMiddleware', () => {
     expect(result).toBe('default')
   })
 })
+
+describe('auto-mode + default-call coexistence (P22.5.1)', () => {
+  it('chains auto-mode allow → defaultCall → result (short-circuit path)', async () => {
+    const c = createHeuristicRiskClassifier({ rules: enabledRules() })
+    const mw = createAutoModeMiddleware({ classifier: c })
+    let innerCalled = false
+    const defaultCall = async () => {
+      innerCalled = true
+      return 'inner-result'
+    }
+    const result = await mw.wrapToolCall!(toolCall('read_file') as never, defaultCall as never)
+    expect(result).toBe('inner-result')
+    expect(innerCalled).toBe(true)
+  })
+})
+
+describe('static policy autoMode block (P22.5.2)', () => {
+  it('accepts an omitted autoMode block', async () => {
+    const { ToolPermissionPolicySchema } = await import('../src/index.js')
+    const result = ToolPermissionPolicySchema.safeParse({
+      version: 1,
+      default: 'ask',
+      rules: [],
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.autoMode).toBeUndefined()
+    }
+  })
+
+  it('accepts a fully-populated autoMode block', async () => {
+    const { ToolPermissionPolicySchema } = await import('../src/index.js')
+    const result = ToolPermissionPolicySchema.safeParse({
+      version: 1,
+      default: 'ask',
+      rules: [],
+      autoMode: {
+        enabled: true,
+        neverAllowTools: ['read_file'],
+        hardDenyPatterns: ['^terminal$'],
+      },
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.autoMode?.enabled).toBe(true)
+      expect(result.data.autoMode?.neverAllowTools).toEqual(['read_file'])
+    }
+  })
+
+  it('rejects a malformed autoMode block (missing enabled)', async () => {
+    const { ToolPermissionPolicySchema } = await import('../src/index.js')
+    const result = ToolPermissionPolicySchema.safeParse({
+      version: 1,
+      default: 'ask',
+      rules: [],
+      autoMode: {
+        neverAllowTools: ['read_file'],
+      },
+    })
+    expect(result.success).toBe(false)
+  })
+})
