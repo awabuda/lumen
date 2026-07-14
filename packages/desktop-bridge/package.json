@@ -1,6 +1,6 @@
 {
   "name": "@lumen/desktop-bridge",
-  "version": "0.10.0",
+  "version": "0.14.0",
   "description": "Bridge between the Lumen agent and Tauri-based desktop clients.",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,7 +11,9 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
