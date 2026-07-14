@@ -106,9 +106,11 @@ const tokenize = (s: string): ReadonlySet<string> => {
   const out = new Set<string>()
   const lower = s.toLowerCase()
   const re = /[a-z0-9]+/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(lower)) !== null) {
-    if (m[0].length > 0) out.add(m[0])
+  const matches = lower.match(re)
+  if (matches) {
+    for (const m of matches) {
+      if (m.length > 0) out.add(m)
+    }
   }
   return out
 }
