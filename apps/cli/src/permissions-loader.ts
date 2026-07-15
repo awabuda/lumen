@@ -90,10 +90,9 @@ export const loadPermissionPolicyWithSources = async (
     text = await fs.readFile(resolved, 'utf8')
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new ConfigError(
-        `permission policy file not found: ${resolved}`,
-        { field: 'permissionsPath' },
-      )
+      throw new ConfigError(`permission policy file not found: ${resolved}`, {
+        field: 'permissionsPath',
+      })
     }
     throw err
   }
