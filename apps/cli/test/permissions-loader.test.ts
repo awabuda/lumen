@@ -143,3 +143,163 @@ rules:
     await expect(loadPermissionPolicyFromFile(file)).rejects.toBeInstanceOf(ConfigError)
   })
 })
+
+describe('loadPermissionPolicyFromFile imports (P22.6.0)', () => {
+  const load = (p: string) => loadPermissionPolicyFromFile(p)
+
+  it('merges rules from a single imported file in declaration order', async () => {
+    const root = path.join(workDir, 'root.yaml')
+    const child = path.join(workDir, 'child.yaml')
+    await fs.writeFile(
+      child,
+      `version: 1
+default: ask
+rules:
+  - name: child-allow
+    tools: [read_file]
+    decision: allow
+`,
+      'utf8',
+    )
+    await fs.writeFile(
+      root,
+      `version: 1
+default: ask
+rules:
+  - name: root-allow
+    tools: [list_dir]
+    decision: allow
+imports:
+  - ./child.yaml
+`,
+      'utf8',
+    )
+    const policy = await load(root)
+    expect(policy.rules.map((r) => r.name)).toEqual(['root-allow', 'child-allow'])
+  })
+
+  it('walks a deep import chain', async () => {
+    const root = path.join(workDir, 'root-deep.yaml')
+    const mid = path.join(workDir, 'mid.yaml')
+    const leaf = path.join(workDir, 'leaf.yaml')
+    await fs.writeFile(
+      leaf,
+      `version: 1
+default: ask
+rules:
+  - name: leaf
+    tools: [read_file]
+    decision: allow
+`,
+      'utf8',
+    )
+    await fs.writeFile(
+      mid,
+      `version: 1
+default: ask
+rules: []
+imports:
+  - ./leaf.yaml
+`,
+      'utf8',
+    )
+    await fs.writeFile(
+      root,
+      `version: 1
+default: ask
+rules: []
+imports:
+  - ./mid.yaml
+`,
+      'utf8',
+    )
+    const policy = await load(root)
+    expect(policy.rules.map((r) => r.name)).toEqual(['leaf'])
+  })
+
+  it('rejects a cyclic import with a typed ConfigError', async () => {
+    const a = path.join(workDir, 'cyc-a.yaml')
+    const b = path.join(workDir, 'cyc-b.yaml')
+    await fs.writeFile(
+      a,
+      `version: 1
+default: ask
+rules: []
+imports:
+  - ./cyc-b.yaml
+`,
+      'utf8',
+    )
+    await fs.writeFile(
+      b,
+      `version: 1
+default: ask
+rules: []
+imports:
+  - ./cyc-a.yaml
+`,
+      'utf8',
+    )
+    await expect(load(a)).rejects.toThrow(/circular policy import/)
+  })
+
+  it('throws when an imported file is missing', async () => {
+    const root = path.join(workDir, 'root-missing.yaml')
+    await fs.writeFile(
+      root,
+      `version: 1
+default: ask
+rules: []
+imports:
+  - ./no-such.yaml
+`,
+      'utf8',
+    )
+    await expect(load(root)).rejects.toThrow(/permission policy file not found/)
+  })
+
+  it('last import wins for the autoMode block; neverAllowTools dedupes and hardDenyPatterns concatenate', async () => {
+    const root = path.join(workDir, 'root-am.yaml')
+    const first = path.join(workDir, 'first-am.yaml')
+    const second = path.join(workDir, 'second-am.yaml')
+    await fs.writeFile(
+      first,
+      `version: 1
+default: ask
+rules: []
+autoMode:
+  enabled: true
+  neverAllowTools: [read_file, terminal]
+  hardDenyPatterns: ['^terminal$']
+`,
+      'utf8',
+    )
+    await fs.writeFile(
+      second,
+      `version: 1
+default: ask
+rules: []
+autoMode:
+  enabled: true
+  neverAllowTools: [read_file, list_dir]
+  hardDenyPatterns: ['^write_file$']
+`,
+      'utf8',
+    )
+    await fs.writeFile(
+      root,
+      `version: 1
+default: ask
+rules: []
+imports:
+  - ./first-am.yaml
+  - ./second-am.yaml
+`,
+      'utf8',
+    )
+    const policy = await load(root)
+    expect(policy.autoMode?.enabled).toBe(true)
+    expect(policy.autoMode?.neverAllowTools.sort()).toEqual(['list_dir', 'read_file', 'terminal'])
+    expect(policy.autoMode?.hardDenyPatterns).toEqual(['^terminal$', '^write_file$'])
+  })
+})

@@ -37,6 +37,14 @@ import { z } from 'zod'
 import { AbortError } from '../../errors/index.js'
 import type { ToolCall } from '../../message/index.js'
 import type { AgentMiddleware } from '../middleware.js'
+import { AutoModeRulesSchema } from './auto-mode.js'
+
+/** P22.5.2 + P22.6.0 — re-export the public autoMode schema so
+ *  the inferred `ToolPermissionPolicy.autoMode` type
+ *  carries the full set of fields (neverAllowTools,
+ *  hardDenyPatterns, allowPatterns, softDenyPatterns). The
+ *  auto-mode module's `z.lazy(...)` typing is preserved. */
+export { AutoModeRulesSchema as AutoModePolicyBlockSchema }
 
 /** The three outcomes a permission rule can produce. */
 export const ToolPermissionDecisionSchema = z.enum(['allow', 'deny', 'ask'])
@@ -70,23 +78,12 @@ export const ToolPermissionRuleSchema = z
   })
   .strict()
 
-/** P22.5.2 — auto-mode block. Optional. When omitted the
+/** P22.5.2 + P22.6.0 — auto-mode block. Optional. When omitted the
  *  classifier middleware is not wired (default: ask for every
- *  tool call). Mirrors the `AutoModeRulesSchema` in
- *  `./auto-mode.ts`; defined inline here to avoid a
- *  cross-import between the two middleware files (the
- *  composition root parses the policy once and threads the
- *  block into the auto-mode middleware). */
-const AutoModePolicyBlockSchema = z
-  .object({
-    enabled: z.boolean(),
-    neverAllowTools: z.array(z.string().min(1)).default([]),
-    hardDenyPatterns: z.array(z.string()).default([]),
-    allowPatterns: z.array(z.string()).default([]),
-    softDenyPatterns: z.array(z.string()).default([]),
-  })
-  .strict()
-
+ *  tool call). The schema is `AutoModeRulesSchema` re-exported
+ *  from `./auto-mode.ts`; the inferred autoMode type carries
+ *  the full set of fields (neverAllowTools, hardDenyPatterns,
+ *  allowPatterns, softDenyPatterns). */
 /** Top-level policy file. */
 export const ToolPermissionPolicySchema = z
   .object({
@@ -103,7 +100,19 @@ export const ToolPermissionPolicySchema = z
      * auto-mode is off and every `ask` decision falls
      * through to the interrupt layer unchanged.
      */
-    autoMode: AutoModePolicyBlockSchema.optional(),
+    autoMode: AutoModeRulesSchema.optional(),
+    /**
+     * P22.6.0: optional list of relative or absolute paths
+     * to additional policy files. The composition root
+     * walks the list in order and merges the imported
+     * files' `rules`, `autoMode`, `neverAllowTools`,
+     * `hardDenyPatterns`, `allowPatterns`, and
+     * `softDenyPatterns` onto the root policy. The root
+     * policy's `default` and `version` win (the imports
+     * cannot override either). Cyclic imports are a
+     * typed `ConfigError`.
+     */
+    imports: z.array(z.string().min(1)).default([]),
   })
   .strict()
 

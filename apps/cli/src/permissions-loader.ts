@@ -40,11 +40,28 @@ import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { ConfigError, type ToolPermissionPolicy, ToolPermissionPolicySchema } from '@lumen/core'
 
-/** Read a YAML policy file from disk and return the parsed object. */
+/** Read a YAML policy file from disk and return the merged
+ *  policy. P22.6.0: when the file declares an `imports:`
+ *  list, the loader walks the imports in order, merging
+ *  each imported file's `rules`, `autoMode`,
+ *  `neverAllowTools`, `hardDenyPatterns`, `allowPatterns`,
+ *  and `softDenyPatterns` onto the root policy. Cyclic
+ *  imports are a typed `ConfigError`. The root policy's
+ *  `default` and `version` win; the imports cannot
+ *  override either. */
 export const loadPermissionPolicyFromFile = async (
   policyPath: string,
+  options: { readonly visited?: ReadonlySet<string> } = {},
 ): Promise<ToolPermissionPolicy> => {
   const resolved = path.resolve(policyPath)
+  if (options.visited?.has(resolved) === true) {
+    throw new ConfigError(
+      `circular policy import: ${resolved} (already visited in this composition)`,
+      { field: 'permissions' },
+    )
+  }
+  const visited = new Set<string>([...(options.visited ?? []), resolved])
+
   let text: string
   try {
     text = await fs.readFile(resolved, 'utf8')
@@ -56,9 +73,77 @@ export const loadPermissionPolicyFromFile = async (
     }
     throw err
   }
-  return parsePermissionPolicy(text)
-}
+  const root = parsePermissionPolicy(text)
 
+  if (root.imports.length === 0) {
+    return root
+  }
+
+  // Walk the imports in order. Each imported file is
+  // recursively loaded; the resulting policies are
+  // merged onto the root in declaration order. First match
+  // wins inside the merged `rules` array; we keep that
+  // invariant by appending imports after the root.
+  const merged: ToolPermissionPolicy = {
+    version: root.version,
+    default: root.default,
+    rules: [...root.rules],
+    autoMode: root.autoMode,
+    imports: [],
+  }
+
+  for (const rel of root.imports) {
+    const importPath = path.isAbsolute(rel) ? rel : path.resolve(path.dirname(resolved), rel)
+    const imported = await loadPermissionPolicyFromFile(importPath, { visited })
+    merged.rules = [...merged.rules, ...imported.rules]
+    // Arrays concat + dedupe. The neverAllowTools and
+    // hardDenyPatterns are deterministic; allowPatterns and
+    // softDenyPatterns are audit-only so duplicates are
+    // harmless. We dedupe neverAllowTools because the
+    // operator may list the same tool in two files. The
+    // autoMode block is a single config (last import wins);
+    // we surface that decision in the audit log by tracking
+    // which import set it.
+    if (
+      (imported.autoMode?.neverAllowTools.length ?? 0) > 0 ||
+      (imported.autoMode?.hardDenyPatterns.length ?? 0) > 0 ||
+      (imported.autoMode?.allowPatterns.length ?? 0) > 0 ||
+      (imported.autoMode?.softDenyPatterns.length ?? 0) > 0 ||
+      imported.autoMode !== undefined
+    ) {
+      // Preserve the previous `enabled` flag if the
+      // current import does not set it. The root policy
+      // can also set `enabled: true`; an import that
+      // omits the field inherits the root's value.
+      const mergedEnabled = merged.autoMode?.enabled ?? imported.autoMode?.enabled ?? false
+      const existing = new Set(merged.autoMode?.neverAllowTools ?? [])
+      for (const t of imported.autoMode?.neverAllowTools ?? []) existing.add(t)
+      merged.autoMode = {
+        enabled: mergedEnabled,
+        neverAllowTools: [...existing],
+        hardDenyPatterns: [
+          ...(merged.autoMode?.hardDenyPatterns ?? []),
+          ...(imported.autoMode?.hardDenyPatterns ?? []),
+        ],
+        allowPatterns: [
+          ...(merged.autoMode?.allowPatterns ?? []),
+          ...(imported.autoMode?.allowPatterns ?? []),
+        ],
+        softDenyPatterns: [
+          ...(merged.autoMode?.softDenyPatterns ?? []),
+          ...(imported.autoMode?.softDenyPatterns ?? []),
+        ],
+      }
+    } else if (imported.autoMode !== undefined) {
+      // The import has an autoMode block but no
+      // patterns; preserve it as-is so the `enabled`
+      // flag from the import still wins for the merge.
+      merged.autoMode = imported.autoMode
+    }
+  }
+
+  return merged
+}
 /** Parse the YAML text into a {@link ToolPermissionPolicy}. Throws on shape errors. */
 export const parsePermissionPolicy = (text: string): ToolPermissionPolicy => {
   const parsed = parseSimpleYaml(text)
@@ -131,7 +216,8 @@ const parseSimpleYaml = (text: string): unknown => {
     return value
   }
 
-  for (const raw of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i]!
     const line = raw.replace(/\t/g, '  ')
     const indent = line.match(/^ */)?.[0].length ?? 0
     // Pop the stack until indent fits.
@@ -182,21 +268,18 @@ const parseSimpleYaml = (text: string): unknown => {
       if (rest.length > 0) {
         container[key] = parseValue(rest)
       } else {
-        // The nested block could be a list (the next line starts
-        // with `- `) or an object. We don't know yet, so we
-        // default to object. If a subsequent `- ` line lands
-        // here, the list-item branch will replace this entry
-        // with an array. To keep the surface small we instead
-        // use a sentinel: assume object and let the consumer
-        // decide. The P22 policy file only has object-shaped
-        // rules for `when:` (argMatches) and list-shaped rules
-        // for `rules:`. The order matters: `when:` is always
-        // a child of a list item, not a child of the top level.
-        // For the top level we always expect `default:`,
-        // `version:`, and `rules:` (a list). So we can default
-        // to array when the key is `rules`, and object
-        // otherwise.
-        if (key === 'rules') {
+        // Decide array vs. object by peeking at the next
+        // non-empty line. If it starts with `- `, the block
+        // is a list; otherwise an object. The P22 policy
+        // file uses both shapes (e.g. `imports:` is a list,
+        // `autoMode:` is an object).
+        const peekIndent = indent + 2
+        const peekLine = lines.slice(i + 1).find((l) => {
+          const m2 = l.match(/^( *)/)
+          return m2 && m2[1]!.length >= peekIndent && l.trim().length > 0
+        })
+        const isList = peekLine?.trimStart().startsWith('- ') ?? false
+        if (isList) {
           const list: unknown[] = []
           container[key] = list
           stack.push({ container: list, indent, key: null })
