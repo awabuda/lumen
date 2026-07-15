@@ -1,10 +1,6 @@
 /** P22.3 + P22.6.2 — `lumen permissions show` and `lumen permissions preset` commands. */
-
-import {
-  loadPermissionPolicyWithSources,
-  parsePermissionPolicy,
-} from '../permissions-loader.js'
-import { ConfigError } from '@lumen/core'
+import { ConfigError, type ToolPermissionPolicy } from '@lumen/core'
+import { loadPermissionPolicyWithSources, parsePermissionPolicy } from '../permissions-loader.js'
 import { defaultPermissionsPath, starterPermissionPolicy } from './init.js'
 
 /** Options for {@link permissionsShowCommand}. */
@@ -24,8 +20,8 @@ export const permissionsShowCommand = async (
   options: PermissionsShowOptions = {},
 ): Promise<number> => {
   const file = options.path ?? defaultPermissionsPath()
-  let policy
-  let sources
+  let policy: ToolPermissionPolicy
+  let sources: ReadonlyMap<string, string>
   try {
     const loaded = await loadPermissionPolicyWithSources(file)
     policy = loaded.policy
@@ -56,7 +52,7 @@ export const permissionsShowCommand = async (
   lines.push(`version: ${String(policy.version)}`)
   lines.push(`default: ${policy.default}`)
   if (policy.allowOverrides === true) {
-    lines.push(`allowOverrides: true (imports may override root denies)`)
+    lines.push('allowOverrides: true (imports may override root denies)')
   }
   lines.push('rules:')
   for (const rule of policy.rules) {
