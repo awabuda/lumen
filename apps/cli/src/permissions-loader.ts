@@ -39,6 +39,17 @@
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { ConfigError, type ToolPermissionPolicy, ToolPermissionPolicySchema } from '@lumen/core'
+/**
+ * The return type of {@link loadPermissionPolicyWithSources}.
+ * `policy` is the merged policy; `sources` maps every rule
+ * `name` to the absolute path of the file the rule came
+ * from. Use this to render the per-rule source in
+ * `lumen permissions show` or in the audit log.
+ */
+export interface LoadedPermissionPolicy {
+  readonly policy: ToolPermissionPolicy
+  readonly sources: ReadonlyMap<string, string>
+}
 
 /** Read a YAML policy file from disk and return the merged
  *  policy. P22.6.0: when the file declares an `imports:`
@@ -51,8 +62,20 @@ import { ConfigError, type ToolPermissionPolicy, ToolPermissionPolicySchema } fr
  *  override either. */
 export const loadPermissionPolicyFromFile = async (
   policyPath: string,
-  options: { readonly visited?: ReadonlySet<string> } = {},
 ): Promise<ToolPermissionPolicy> => {
+  const loaded = await loadPermissionPolicyWithSources(policyPath)
+  return loaded.policy
+}
+
+/** Same as {@link loadPermissionPolicyFromFile} but also
+ *  returns a `sources` map that records the absolute path
+ *  of the file each rule came from. P22.6.2: the loader
+ *  populates this so `lumen permissions show` can print
+ *  the source for every rule in the merged policy. */
+export const loadPermissionPolicyWithSources = async (
+  policyPath: string,
+  options: { readonly visited?: ReadonlySet<string> } = {},
+): Promise<LoadedPermissionPolicy> => {
   const resolved = path.resolve(policyPath)
   if (options.visited?.has(resolved) === true) {
     throw new ConfigError(
@@ -67,16 +90,27 @@ export const loadPermissionPolicyFromFile = async (
     text = await fs.readFile(resolved, 'utf8')
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new ConfigError(`permission policy file not found: ${resolved}`, {
-        field: 'permissionsPath',
-      })
+      throw new ConfigError(
+        `permission policy file not found: ${resolved}`,
+        { field: 'permissionsPath' },
+      )
     }
     throw err
   }
   const root = parsePermissionPolicy(text)
 
+  // P22.6.2: track which file each rule came from. The
+  // root policy's rules map to the root file's absolute
+  // path. Imported rules map to the import's absolute
+  // path. After the lockout runs, the surviving rule is
+  // whichever one the merge kept.
+  const sources = new Map<string, string>()
+  for (const rule of root.rules) {
+    sources.set(rule.name, resolved)
+  }
+
   if (root.imports.length === 0) {
-    return root
+    return { policy: applyLockout(root, root), sources }
   }
 
   // Walk the imports in order. Each imported file is
@@ -95,8 +129,19 @@ export const loadPermissionPolicyFromFile = async (
 
   for (const rel of root.imports) {
     const importPath = path.isAbsolute(rel) ? rel : path.resolve(path.dirname(resolved), rel)
-    const imported = await loadPermissionPolicyFromFile(importPath, { visited })
-    merged.rules = [...merged.rules, ...imported.rules]
+    const child = await loadPermissionPolicyWithSources(importPath, { visited })
+    merged.rules = [...merged.rules, ...child.policy.rules]
+    // The source map takes the imported file's path for
+    // every imported rule name. A rule name that was set
+    // by an earlier file is NOT overwritten — the first
+    // occurrence (the root) wins the source attribution.
+    // The P22.6.1 lockout keeps the root's rule on a
+    // name collision, so the source must point at the root.
+    for (const rule of child.policy.rules) {
+      if (!sources.has(rule.name)) {
+        sources.set(rule.name, importPath)
+      }
+    }
     // Arrays concat + dedupe. The neverAllowTools and
     // hardDenyPatterns are deterministic; allowPatterns and
     // softDenyPatterns are audit-only so duplicates are
@@ -105,45 +150,51 @@ export const loadPermissionPolicyFromFile = async (
     // autoMode block is a single config (last import wins);
     // we surface that decision in the audit log by tracking
     // which import set it.
-    if (
-      (imported.autoMode?.neverAllowTools.length ?? 0) > 0 ||
-      (imported.autoMode?.hardDenyPatterns.length ?? 0) > 0 ||
-      (imported.autoMode?.allowPatterns.length ?? 0) > 0 ||
-      (imported.autoMode?.softDenyPatterns.length ?? 0) > 0 ||
-      imported.autoMode !== undefined
-    ) {
+    if (child.policy.autoMode !== undefined) {
       // Preserve the previous `enabled` flag if the
       // current import does not set it. The root policy
       // can also set `enabled: true`; an import that
       // omits the field inherits the root's value.
-      const mergedEnabled = merged.autoMode?.enabled ?? imported.autoMode?.enabled ?? false
+      const mergedEnabled = merged.autoMode?.enabled ?? child.policy.autoMode?.enabled ?? false
       const existing = new Set(merged.autoMode?.neverAllowTools ?? [])
-      for (const t of imported.autoMode?.neverAllowTools ?? []) existing.add(t)
+      for (const t of child.policy.autoMode?.neverAllowTools ?? []) existing.add(t)
       merged.autoMode = {
         enabled: mergedEnabled,
         neverAllowTools: [...existing],
         hardDenyPatterns: [
           ...(merged.autoMode?.hardDenyPatterns ?? []),
-          ...(imported.autoMode?.hardDenyPatterns ?? []),
+          ...(child.policy.autoMode?.hardDenyPatterns ?? []),
         ],
         allowPatterns: [
           ...(merged.autoMode?.allowPatterns ?? []),
-          ...(imported.autoMode?.allowPatterns ?? []),
+          ...(child.policy.autoMode?.allowPatterns ?? []),
         ],
         softDenyPatterns: [
           ...(merged.autoMode?.softDenyPatterns ?? []),
-          ...(imported.autoMode?.softDenyPatterns ?? []),
+          ...(child.policy.autoMode?.softDenyPatterns ?? []),
         ],
       }
-    } else if (imported.autoMode !== undefined) {
-      // The import has an autoMode block but no
-      // patterns; preserve it as-is so the `enabled`
-      // flag from the import still wins for the merge.
-      merged.autoMode = imported.autoMode
     }
   }
 
-  return applyLockout(merged, root)
+  const finalPolicy = applyLockout(merged, root)
+
+  // P22.6.1 lockout may have dropped a rule that was in
+  // the merged list. Re-attribute the source map: every
+  // surviving rule's name maps to its source file. For a
+  // rule with the same name in both the root and an
+  // import, the lockout kept the root's entry, so the
+  // source is the root file. This is the only way to make
+  // the source map consistent with the final policy.
+  const finalSources = new Map<string, string>()
+  for (const rule of finalPolicy.rules) {
+    const source = sources.get(rule.name)
+    if (source !== undefined) {
+      finalSources.set(rule.name, source)
+    }
+  }
+
+  return { policy: finalPolicy, sources: finalSources }
 }
 
 /**

@@ -5,7 +5,11 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import { ConfigError } from '@lumen/core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { loadPermissionPolicyFromFile, parsePermissionPolicy } from '../src/permissions-loader.js'
+import {
+  loadPermissionPolicyFromFile,
+  loadPermissionPolicyWithSources,
+  parsePermissionPolicy,
+} from '../src/permissions-loader.js'
 
 let workDir = ''
 
@@ -403,5 +407,99 @@ rules:
     )
     const policy = await load(root)
     expect(policy.rules.map((r) => r.name)).toEqual(['deny-write', 'allow-read'])
+  })
+})
+
+describe('P22.6.2 sources map', () => {
+  const load = (p: string) => loadPermissionPolicyWithSources(p)
+
+  it('attaches the root file as the source for root rules', async () => {
+    const file = path.join(workDir, 'solo-root.yaml')
+    await fs.writeFile(
+      file,
+      `version: 1
+default: ask
+rules:
+  - name: r1
+    tools: [x]
+    decision: allow
+`,
+      'utf8',
+    )
+    const { policy, sources } = await load(file)
+    expect(policy.rules.map((r) => r.name)).toEqual(['r1'])
+    expect(sources.get('r1')).toBe(file)
+  })
+
+  it('attributes imported rules to the import file', async () => {
+    const root = path.join(workDir, 'src-root.yaml')
+    const child = path.join(workDir, 'src-child.yaml')
+    await fs.writeFile(
+      root,
+      `version: 1
+default: ask
+rules:
+  - name: root-rule
+    tools: [a]
+    decision: allow
+imports:
+  - ./src-child.yaml
+`,
+      'utf8',
+    )
+    await fs.writeFile(
+      child,
+      `version: 1
+default: ask
+rules:
+  - name: child-rule
+    tools: [b]
+    decision: allow
+`,
+      'utf8',
+    )
+    const { sources } = await load(root)
+    expect(sources.get('root-rule')).toBe(root)
+    expect(sources.get('child-rule')).toBe(child)
+  })
+
+  it('trims the source map when the lockout drops a rule', async () => {
+    const root = path.join(workDir, 'trim-root.yaml')
+    const child = path.join(workDir, 'trim-child.yaml')
+    await fs.writeFile(
+      root,
+      `version: 1
+default: ask
+rules:
+  - name: deny-terminal
+    tools: [terminal]
+    decision: deny
+imports:
+  - ./trim-child.yaml
+`,
+      'utf8',
+    )
+    await fs.writeFile(
+      child,
+      `version: 1
+default: ask
+rules:
+  - name: deny-terminal
+    tools: [terminal]
+    decision: allow
+  - name: allow-read
+    tools: [read_file]
+    decision: allow
+`,
+      'utf8',
+    )
+    const { policy, sources } = await load(root)
+    // The lockout drops the import's `deny-terminal` allow.
+    expect(policy.rules.find((r) => r.name === 'deny-terminal')?.decision).toBe('deny')
+    // The source map has no entry for the dropped rule.
+    expect(sources.has('deny-terminal')).toBe(true)
+    // The source of the surviving rule is the root.
+    expect(sources.get('deny-terminal')).toBe(root)
+    expect(sources.get('allow-read')).toBe(child)
   })
 })
