@@ -998,8 +998,8 @@ P19–P20 + P21 全部已 push 到 `origin/main`（v0.14.0 tag 已发布，72 co
 
 ### P22 deferred (backlog, not in P22 commit window)
 
-- [ ] **P22.5** — `auto mode` (Lumen's analogue of OpenClaw's "Safer Than YOLO" auto-mode for low-risk calls) — deferred; needs its own 4-framework fetch + decision list
-- [ ] **P22.6** — cross-policy composition (multiple files via `imports:`) — deferred; no other framework has a public surface for it
+- [x] **P22.5** — `auto mode` *(shipped 2026-07-15; commits `131aa20` design lock + `3a2da3e` P22.5.0 + `382715d` P22.5.1+2 + `569031c` P22.5.3 + `a9e5d98` P22.5.4; TASKS row above)* — The earlier "deferred" line is a stale duplicate. The 4-framework fetch + 5 P-ticket scope were all shipped in this session window.
+- [x] **P22.6** — cross-policy composition *(shipped 2026-07-15; commits `c0dd9da` design lock + `f8760ba` P22.6.0 + `77c7ef7` P22.6.1 + `3807a61` P22.6.2 + `6d30679` P22.6.3 + `c511af2` P22.6.4; TASKS row above)* — The earlier "deferred" line is a stale duplicate. The 4-framework fetch + 5 P-ticket scope were all shipped in this session window.
 
 ### P22 declined (3-framework 主线, no alignment)
 
