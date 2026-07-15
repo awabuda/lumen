@@ -303,3 +303,105 @@ imports:
     expect(policy.autoMode?.hardDenyPatterns).toEqual(['^terminal$', '^write_file$'])
   })
 })
+
+describe('P22.6.1 managed-only lockout', () => {
+  const load = (p: string) => loadPermissionPolicyFromFile(p)
+
+  it('drops an import allow that matches a root deny by name', async () => {
+    const root = path.join(workDir, 'lockout-root.yaml')
+    const child = path.join(workDir, 'lockout-child.yaml')
+    await fs.writeFile(
+      root,
+      `version: 1
+default: ask
+rules:
+  - name: deny-terminal
+    tools: [terminal]
+    decision: deny
+imports:
+  - ./lockout-child.yaml
+`,
+      'utf8',
+    )
+    await fs.writeFile(
+      child,
+      `version: 1
+default: ask
+rules:
+  - name: deny-terminal
+    tools: [terminal]
+    decision: allow
+  - name: allow-read
+    tools: [read_file]
+    decision: allow
+`,
+      'utf8',
+    )
+    const policy = await load(root)
+    expect(policy.rules.map((r) => r.name)).toEqual(['deny-terminal', 'allow-read'])
+    expect(policy.rules.find((r) => r.name === 'deny-terminal')?.decision).toBe('deny')
+  })
+
+  it('respects allowOverrides: true in the root file', async () => {
+    const root = path.join(workDir, 'override-root.yaml')
+    const child = path.join(workDir, 'override-child.yaml')
+    await fs.writeFile(
+      root,
+      `version: 1
+default: ask
+allowOverrides: true
+rules:
+  - name: deny-terminal
+    tools: [terminal]
+    decision: deny
+imports:
+  - ./override-child.yaml
+`,
+      'utf8',
+    )
+    await fs.writeFile(
+      child,
+      `version: 1
+default: ask
+rules:
+  - name: deny-terminal
+    tools: [terminal]
+    decision: allow
+`,
+      'utf8',
+    )
+    const policy = await load(root)
+    expect(policy.rules.find((r) => r.name === 'deny-terminal')?.decision).toBe('allow')
+  })
+
+  it('does not touch allows that do not match any root deny', async () => {
+    const root = path.join(workDir, 'no-match-root.yaml')
+    const child = path.join(workDir, 'no-match-child.yaml')
+    await fs.writeFile(
+      root,
+      `version: 1
+default: ask
+rules:
+  - name: deny-write
+    tools: [write_file]
+    decision: deny
+imports:
+  - ./no-match-child.yaml
+`,
+      'utf8',
+    )
+    await fs.writeFile(
+      child,
+      `version: 1
+default: ask
+rules:
+  - name: allow-read
+    tools: [read_file]
+    decision: allow
+`,
+      'utf8',
+    )
+    const policy = await load(root)
+    expect(policy.rules.map((r) => r.name)).toEqual(['deny-write', 'allow-read'])
+  })
+})

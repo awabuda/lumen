@@ -90,6 +90,7 @@ export const loadPermissionPolicyFromFile = async (
     rules: [...root.rules],
     autoMode: root.autoMode,
     imports: [],
+    allowOverrides: root.allowOverrides,
   }
 
   for (const rel of root.imports) {
@@ -142,7 +143,57 @@ export const loadPermissionPolicyFromFile = async (
     }
   }
 
-  return merged
+  return applyLockout(merged, root)
+}
+
+/**
+ * P22.6.1: managed-only lockout.
+ *
+ * On a `name` collision between a root rule and an import
+ * rule, the behavior depends on the root's `allowOverrides`
+ * flag:
+ *
+ * - `allowOverrides: false` (the default; the secure
+ *   default): the root rule wins. The import rule is
+ *   dropped. This is the managed-only lockout — a project /
+ *   user file cannot loosen a rule the managed file
+ *   explicitly denies. Mirrors Claude Code's
+ *   `allowManagedPermissionRulesOnly`.
+ *
+ * - `allowOverrides: true`: last import wins. The import
+ *   rule replaces the root rule. Discouraged for production
+ *   but useful for tests.
+ *
+ * Rules that do not collide with the root pass through
+ * unchanged in both modes.
+ */
+const applyLockout = (
+  merged: ToolPermissionPolicy,
+  root: ToolPermissionPolicy,
+): ToolPermissionPolicy => {
+  if (root.allowOverrides === true) {
+    // Last-import-wins dedup by name.
+    const byName = new Map<string, ToolPermissionPolicy['rules'][number]>()
+    for (const rule of merged.rules) {
+      byName.set(rule.name, rule)
+    }
+    return { ...merged, rules: Array.from(byName.values()) }
+  }
+  // Lockout: build a set of root rule names. Any import
+  // rule that collides with a root rule name is dropped
+  // (the root wins). Non-colliding import rules pass through.
+  const rootNames = new Set(root.rules.map((r) => r.name))
+  return {
+    ...merged,
+    rules: merged.rules.filter((rule, idx, all) => {
+      if (!rootNames.has(rule.name)) return true
+      // The first occurrence of this name is the root
+      // rule (rules are appended root-first). Keep the root
+      // rule; drop subsequent entries with the same name.
+      const firstIdx = all.findIndex((r) => r.name === rule.name)
+      return idx === firstIdx
+    }),
+  }
 }
 /** Parse the YAML text into a {@link ToolPermissionPolicy}. Throws on shape errors. */
 export const parsePermissionPolicy = (text: string): ToolPermissionPolicy => {

@@ -113,6 +113,19 @@ export const ToolPermissionPolicySchema = z
      * typed `ConfigError`.
      */
     imports: z.array(z.string().min(1)).default([]),
+    /**
+     * P22.6.1: managed-only lockout. When `false` (the
+     * default), an `allow` rule in any imported file
+     * whose name matches a `deny` rule in the root is
+     * filtered out at merge time. The root policy's
+     * denies always win. The flag mirrors Claude Code's
+     * `allowManagedPermissionRulesOnly`: a project /
+     * user file cannot loosen a rule the managed file
+     * explicitly denies. Set `true` to opt out (an
+     * imported `allow` may override a root `deny` —
+     * discouraged for production but useful for tests).
+     */
+    allowOverrides: z.boolean().default(false),
   })
   .strict()
 
