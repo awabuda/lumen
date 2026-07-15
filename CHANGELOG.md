@@ -94,6 +94,152 @@ Test counts are point-in-time totals across the monorepo. The pre-1.0 series
   experiment that did not land on `main`); P19-DESIGN.md and
   PITFALLS.md live under the existing `docs/` directory.
 
+## [0.16.0] — 2026-07-15 — P22 permission modes for HITL tool dispatch
+
+> **Permission-modes pass.** Closes the Q6 "operator-controlled
+> tool gating" gap from the 2026-06-25 six-question audit. The
+> agent loop now consults a static YAML policy file before
+> the interrupt chain. Three outcomes: `allow` short-circuits,
+> `deny` throws a typed `AbortError`, `ask` falls through to
+> the existing interrupt middleware. The policy file supports
+> a hand-rolled YAML subset (no `js-yaml` dependency) and
+> cross-file composition via `imports:` with cycle detection
+> and a managed-only lockout (`allowOverrides: false` default).
+> A second layer — auto-mode — wires a heuristic risk-tiered
+> classifier (`BaseRiskClassifier`) between the static layer
+> and the interrupt chain. The classifier is **opt-in**; the
+> policy file's `autoMode.enabled` field is the single source
+> of truth. The framework's promise to operators is "every
+> decision in the policy file is auditable from `git log`" —
+> the auto-mode layer is heuristic, not LLM-based, to keep
+> the audit promise intact.
+
+### Added
+
+- **Permission policy middleware (P22.0)** — `BaseToolPermissionPolicy`
+  + `StaticToolPermissionPolicy` + `createToolPermissionMiddleware`
+  in `packages/core/src/agent/middleware/tool-permission.ts`.
+  Three outcomes (`allow` / `deny` / `ask`) with a per-rule
+  `when:` block (`argMatches: Record<argKey, regex>`) for
+  argument-level gating. 15 e2e tests.
+- **Interrupt coexistence (P22.1)** — the permission middleware
+  runs before the interrupt middleware; `ask` falls through,
+  `allow` records and proceeds, `deny` throws `AbortError`
+  with a name + tool context. The P20.4.2 catch path still
+  auto-checkpoints on `deny`.
+- **`--permissions <path>` flag (P22.2)** — `lumen run` /
+  `lumen chat` accept a YAML policy file. The hand-rolled
+  YAML parser covers scalars, inline lists (`[a, b]`),
+  list-of-maps, nested objects, and the new multi-line list
+  syntax (peek-down to choose array vs. object). 8 e2e tests.
+- **`lumen init` (P22.3)** — writes a starter
+  `~/.lumen/permissions.yaml` with `default: ask` + a
+  least-privilege rule set. `--force` to overwrite,
+  `--path <file>` to override. 7 e2e tests.
+- **`lumen permissions show` (P22.3)** — prints the parsed
+  policy in human-readable form. `--json` for machine-readable.
+- **`lumen permissions preset` (P22.4)** — prints the
+  recommended starter text to stdout (pipable to a file).
+  1 e2e test.
+- **`docs/PERMISSIONS.md` (P22.4)** — ~190-line operator guide
+  covering policy file shape, 3-way decision semantics,
+  `when:` argument matching, the `lumen permissions` command
+  surface, and composition with the interrupt layer.
+- **Auto-mode classifier (P22.5.0)** — `BaseRiskClassifier`
+  interface + `AutoModeRulesSchema` (Zod, `.strict()`) +
+  `createHeuristicRiskClassifier` + core-shipped risk table
+  (`read_file` / `list_dir` → low, `write_file` → medium,
+  `terminal` → high) + `createAutoModeMiddleware`. 14 e2e
+  tests. The classifier is **never** LLM-based.
+- **Auto-mode composition (P22.5.1)** — when the policy file
+  declares `autoMode.enabled: true`, the composition root
+  wires the heuristic engine between the static permission
+  layer and the interrupt chain. The `lumen run --auto-mode`
+  flag (P22.5.3) surfaces a one-line status from the file.
+- **`autoMode:` policy block (P22.5.2)** — Zod optional,
+  five fields: `enabled`, `neverAllowTools`, `hardDenyPatterns`,
+  `allowPatterns`, `softDenyPatterns`. The `neverAllowTools`
+  list is enforced even at `low` risk; `hardDenyPatterns` are
+  regex matches against tool names that always deny. The
+  audit-only `allowPatterns` / `softDenyPatterns` are written
+  to the audit log.
+- **`docs/AUTO-MODE.md` (P22.5.4)** — ~250-line operator guide
+  covering the composition overview, the `autoMode` block
+  shape, the core risk table, decision precedence
+  (permission → permission-auto → interrupt), 3 worked
+  examples, the CLI surface, and composition with the
+  interrupt layer.
+- **Cross-policy imports (P22.6.0)** — `imports: string[]` in
+  the policy file. The loader walks the imports in order,
+  appends the imported files' `rules` after the root's,
+  and merges the `autoMode` block last-import-wins. The
+  hand-rolled YAML parser learns multi-line list syntax.
+  5 e2e tests.
+- **Managed-only lockout (P22.6.1)** — `allowOverrides: boolean`
+  field on the top-level policy (default `false`). When
+  `false`, a rule in an imported file whose `name` collides
+  with a root rule is dropped (the root wins). Mirrors
+  Claude Code's `allowManagedPermissionRulesOnly`. 3 e2e
+  tests.
+- **Source attribution (P22.6.2)** — `lumen permissions show`
+  annotates every rule with `(from <path>)`. The JSON form
+  carries a `_sources` map (rule name → source file path).
+  The loader tracks the source per rule; first-occurrence
+  wins the source attribution (the root's rule on a name
+  collision keeps the root's source). 3 e2e tests.
+- **Audit log (P22.6.3)** — `lumen permissions audit [--format
+  human|json|csv]`. Walks the policy (and imports) and emits
+  one row per rule with name, tools, decision, source path,
+  and **SHA-256 of the source file**. The hash pins the audit
+  report to a specific file revision; `git checkout <sha> -- <policy>`
+  + re-run the audit to verify a reviewer's local copy. 4
+  e2e tests.
+- **Cross-policy imports operator guide (P22.6.4)** —
+  `docs/PERMISSIONS.md` §8 (5 subsections: 8.1 starter
+  multi-file project, 8.2 cycle detection, 8.3 managed-only
+  lockout, 8.4 source attribution, 8.5 the audit log).
+- **P19.5.5** — asymmetric trust delta in `@lumen/memory`.
+  The fact_store now records trust-deltas that account for
+  older observations decaying slower than newer ones.
+  Triggered by a production run-end reflection signal in
+  2026-07-12; the previous "wait for production signal"
+  blocker is closed. 3 sibling commits (e028f33, 76387f5,
+  e054a7b).
+
+### Changed
+
+- The hand-rolled YAML parser in `apps/cli/src/permissions-loader.ts`
+  was extended in two passes: first to support `imports:`
+  multi-line lists, then to learn the `autoMode:` block
+  shape. The parser stays a single file (~290 lines) with
+  no `js-yaml` dependency.
+- `apps/cli/src/composition.ts` learned the `permissionsPath`
+  option (P22.2) and the `autoMode` block detection (P22.5.1).
+  Composition order: `tool-permission` → `tool-permission-auto`
+  → `interrupt` → `plan` → `skill-trigger`.
+
+### Migration from 0.14.0
+
+- Operators who do not pass `--permissions <path>` see no
+  change. The default `default: ask` for every tool call is
+  the historical behavior; the interrupt middleware has
+  always been the gate.
+- The `tool-permission` middleware name (`'tool-permission'`)
+  sorts before `'interrupt'` alphabetically, so the order
+  in the chain is automatic. No composition config change is
+  required.
+- The P22.6.0 YAML parser learned a new construct (multi-line
+  list); existing single-file policies continue to parse
+  byte-identical.
+
+### Test counts (point-in-time)
+
+- `@lumen/core`: 423 e2e tests (P22 + P22.5 + P22.6.0 = +33).
+- `@lumen/cli`: 204 e2e tests (P22.2 + P22.3 + P22.4 + P22.5 +
+  P22.6.0–P22.6.3 = +39).
+- `@lumen/memory`: 175 e2e tests (P19.5.5 = +10).
+- `pnpm -r typecheck`: 11/11 packages PASS.
+
 ## [0.14.0] — 2026-07-13 — P21 durable execution pass
 
 > **Durable-execution pass.** Closes the Q5 "failure recovery" gap from

@@ -1,6 +1,6 @@
 {
   "name": "@lumen/core",
-  "version": "0.14.0",
+  "version": "0.16.0",
   "private": true,
   "description": "Agent runtime. Defines BaseProvider / BaseTool / BaseMemoryStore / BaseVectorMemoryStore / BaseProviderPool / BaseMutex / Agent and ships hook registry, telemetry, cron, multi-user, and plan/act sub-modules.",
   "type": "module",
@@ -12,7 +12,9 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",

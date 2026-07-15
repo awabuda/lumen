@@ -1,6 +1,6 @@
 {
   "name": "@lumen/memory",
-  "version": "0.14.0",
+  "version": "0.16.0",
   "private": true,
   "description": "Concrete memory stores (InMemory, Sqlite+FTS5+WAL), vector backend, hybrid retriever, RAG pipeline, reflection, conflict detection, and long-term user profile builder.",
   "type": "module",
@@ -12,7 +12,9 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
