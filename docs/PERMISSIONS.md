@@ -242,10 +242,172 @@ lumen checkpoint show --db <db> --latest
 
 (Decision-log wiring is P22.5+; P22.0 records decisions in
 memory and the audit-row rendering is left to the host
-application — the CLI does not yet have a dedicated
-`lumen permissions audit` subcommand.)
+application. The CLI ships `lumen permissions audit` since
+P22.6.3 — see [§8 Cross-policy imports](#8-cross-policy-imports-p226)
+for the operator guide.)
 
-## 8. Limits
+## 8. Cross-policy imports (P22.6)
+
+> **Operator guide.** A policy file can pull in additional
+> files via the `imports:` block. The loader walks the imports
+> in order, merges the imported files' `rules`, `autoMode`,
+> `neverAllowTools`, `hardDenyPatterns`, `allowPatterns`,
+> and `softDenyPatterns` onto the root policy. The root
+> policy's `default` and `version` always win. Cyclic imports
+> are a typed `ConfigError`. The composition root reads a
+> single path; cross-file composition lives in the file
+> itself, not on the CLI flag.
+
+### 7.1 A starter multi-file project
+
+```yaml
+# ~/.lumen/permissions.yaml
+version: 1
+default: ask
+rules:
+  - name: deny-terminal
+    tools: [terminal]
+    decision: deny
+imports:
+  - ./shared/personal.yaml
+  - ./shared/team.yaml
+```
+
+```yaml
+# ./shared/personal.yaml
+version: 1
+default: ask
+rules:
+  - name: allow-read
+    tools: [read_file, list_dir]
+    decision: allow
+```
+
+```yaml
+# ./shared/team.yaml
+version: 1
+default: ask
+rules:
+  - name: allow-write
+    tools: [write_file]
+    decision: ask
+  - name: deny-publish
+    tools: [publish, deploy]
+    decision: deny
+autoMode:
+  enabled: true
+  neverAllowTools: [terminal]
+  hardDenyPatterns: ['^publish$', '^deploy$']
+```
+
+The merged policy is the root's `deny-terminal` plus the two
+imports' rules in declaration order: `deny-terminal`,
+`allow-read`, `allow-write`, `deny-publish`. The autoMode
+block is the last import that declares one — here, `team.yaml`.
+
+### 7.2 Cycle detection
+
+```yaml
+# root.yaml
+imports: [./child.yaml]
+# child.yaml
+imports: [./root.yaml]
+```
+
+`lumen permissions show` on `root.yaml` throws:
+
+```
+ConfigError: circular policy import: /home/me/root.yaml (already visited in this composition)
+```
+
+The loader tracks a `Set<string>` of absolute paths and
+rejects a revisit.
+
+### 7.3 Managed-only lockout (P22.6.1)
+
+The root file's `allowOverrides: false` (the default) makes
+the root's denies win over any import that tries to allow
+the same `name`:
+
+```yaml
+# root.yaml
+version: 1
+default: ask
+rules:
+  - name: deny-terminal
+    tools: [terminal]
+    decision: deny
+imports:
+  - ./overrides.yaml
+```
+
+```yaml
+# overrides.yaml
+version: 1
+default: ask
+rules:
+  - name: deny-terminal
+    tools: [terminal]
+    decision: allow  # dropped: root's deny wins
+```
+
+The merged `rules` list keeps the root's `deny-terminal` (deny)
+and drops the import's `deny-terminal` (allow). Set
+`allowOverrides: true` in the root to opt out (last-import-wins;
+discouraged for production).
+
+### 7.4 Source attribution (P22.6.2)
+
+`lumen permissions show` annotates every rule with the file
+it came from:
+
+```
+policy: /home/me/.lumen/permissions.yaml
+version: 1
+default: ask
+rules:
+  - deny-terminal (from /home/me/.lumen/permissions.yaml)
+    tools: [terminal]
+    decision: deny
+  - allow-read (from /home/me/shared/personal.yaml)
+    tools: [read_file, list_dir]
+    decision: allow
+```
+
+The JSON form (`--json`) carries a `_sources` map (rule
+name → source file path) for audit pipelines.
+
+### 7.5 The audit log (P22.6.3)
+
+`lumen permissions audit [--format human|json|csv]` walks the
+policy and prints one row per rule with a SHA-256 of the
+source file:
+
+```
+$ lumen permissions audit --format csv
+rule,tools,decision,source,sourceHash
+deny-terminal,terminal,deny,/home/me/.lumen/permissions.yaml,3a7c...
+allow-read,read_file|list_dir,allow,/home/me/shared/personal.yaml,9b1e...
+```
+
+The JSON form (`--format json`) is a `PermissionsAuditReport`:
+
+```json
+{
+  "policy": "/home/me/.lumen/permissions.yaml",
+  "generatedAt": "2026-07-15T13:00:00.000Z",
+  "entries": [
+    { "rule": "deny-terminal", "tools": ["terminal"], "decision": "deny",
+      "source": "/home/me/.lumen/permissions.yaml", "sourceHash": "3a7c..." }
+  ]
+}
+```
+
+Pin the audit log to a specific revision with
+`git checkout <sha> -- <policy>` and re-run the audit. The
+hashes will match only if no rule was added or removed.
+
+## 9. Limits
 
 - Max rules per policy file: 1000 (`PERMISSION_MAX_RULES`).
   Beyond that the loader throws; a real project should split
@@ -253,5 +415,6 @@ application — the CLI does not yet have a dedicated
 - No glob support. Exact tool names only.
 - No LLM-based classification. Every decision is reproducible
   from the policy file + the tool call.
-- No cross-policy imports. One file per run. Multi-file
-  composition is P22.6 (deferred).
+- Multi-file composition is via the in-file `imports:` block
+  (P22.6); the loader does not accept multiple `--permissions`
+  flags.
