@@ -584,13 +584,17 @@ program
 program
   .command('permissions')
   .description('Inspect the resolved tool-permission policy (P22.3)')
-  .argument('[subcommand]', '"show" (default) or "preset"', 'show')
+  .argument('[subcommand]', '"show" (default), "preset", or "audit"', 'show')
   .option('--path <file>', 'Path to a YAML policy file (default ~/.lumen/permissions.yaml)')
-  .option('--json', 'Emit JSON instead of the human-readable form')
+  .option('--json', 'Emit JSON instead of the human-readable form. (show only)')
+  .option(
+    '--format <format>',
+    'Audit output format: human (default), json, or csv. (audit only)',
+    'human',
+  )
   .action(async (subcommand: string, opts: Record<string, unknown>) => {
-    const { permissionsPresetCommand, permissionsShowCommand } = await import(
-      './commands/permissions.js'
-    )
+    const { permissionsAuditCommand, permissionsPresetCommand, permissionsShowCommand } =
+      await import('./commands/permissions.js')
     let code = 0
     if (subcommand === 'show') {
       code = await permissionsShowCommand({
@@ -599,6 +603,11 @@ program
       })
     } else if (subcommand === 'preset') {
       code = await permissionsPresetCommand()
+    } else if (subcommand === 'audit') {
+      code = await permissionsAuditCommand({
+        path: opts.path as string | undefined,
+        format: (opts.format as 'human' | 'json' | 'csv' | undefined) ?? 'human',
+      })
     } else {
       process.stderr.write(`lumen permissions: unknown subcommand: ${subcommand}\n`)
       code = 1

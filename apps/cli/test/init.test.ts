@@ -6,6 +6,7 @@ import * as path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { initCommand, starterPermissionPolicy } from '../src/commands/init.js'
 import {
+  permissionsAuditCommand as audit,
   permissionsPresetCommand as preset,
   permissionsShowCommand as show,
 } from '../src/commands/permissions.js'
@@ -114,5 +115,90 @@ describe('permissionsPresetCommand', () => {
   })
 })
 
+describe('permissionsAuditCommand (P22.6.3)', () => {
+  const writePolicy = async (name: string, text: string): Promise<string> => {
+    const p = path.join(workDir, name)
+    await fs.writeFile(p, text, 'utf8')
+    return p
+  }
+
+  it('exits 1 with a hint when the file does not exist', async () => {
+    const code = await audit({ path: path.join(workDir, 'no-such-audit.yaml') })
+    expect(code).toBe(1)
+    expect(stderr).toContain('lumen permissions audit: no policy file at')
+  })
+
+  it('emits JSON with one entry per rule and a source hash', async () => {
+    const file = await writePolicy(
+      'audit-json.yaml',
+      `version: 1
+default: ask
+rules:
+  - name: r1
+    tools: [read_file]
+    decision: allow
+`,
+    )
+    stdout = ''
+    const code = await audit({ path: file, format: 'json' })
+    expect(code).toBe(0)
+    const report = JSON.parse(stdout) as {
+      policy: string
+      entries: Array<{ rule: string; source: string; sourceHash: string }>
+    }
+    expect(report.policy).toBe(file)
+    expect(report.entries).toHaveLength(1)
+    expect(report.entries[0]?.rule).toBe('r1')
+    expect(report.entries[0]?.source).toBe(file)
+    expect(report.entries[0]?.sourceHash).toMatch(/^[a-f0-9]{64}$/)
+  })
+
+  it('emits CSV with a header row and one row per rule', async () => {
+    const file = await writePolicy(
+      'audit-csv.yaml',
+      `version: 1
+default: ask
+rules:
+  - name: r1
+    tools: [read_file]
+    decision: allow
+  - name: r2
+    tools: [write_file]
+    decision: deny
+`,
+    )
+    stdout = ''
+    const code = await audit({ path: file, format: 'csv' })
+    expect(code).toBe(0)
+    const lines = stdout.trim().split('\n')
+    expect(lines[0]).toBe('rule,tools,decision,source,sourceHash')
+    expect(lines).toHaveLength(3)
+    expect(lines[1]).toMatch(/r1,read_file,allow,.*[a-f0-9]{64}/)
+    expect(lines[2]).toMatch(/r2,write_file,deny,.*[a-f0-9]{64}/)
+  })
+
+  it('emits human-readable form by default with a generatedAt timestamp', async () => {
+    const file = await writePolicy(
+      'audit-human.yaml',
+      `version: 1
+default: ask
+rules:
+  - name: r1
+    tools: [read_file]
+    decision: allow
+`,
+    )
+    stdout = ''
+    const code = await audit({ path: file })
+    expect(code).toBe(0)
+    expect(stdout).toContain('# lumen permissions audit')
+    expect(stdout).toContain(`policy: ${file}`)
+    expect(stdout).toContain('generatedAt:')
+    expect(stdout).toContain('- r1')
+    expect(stdout).toMatch(/sourceHash: [a-f0-9]{64}/)
+  })
+})
+
 // Reference the re-export so eslint does not flag the unused import.
+void audit
 void starterPermissionPolicy
