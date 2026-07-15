@@ -987,6 +987,10 @@ P19–P20 + P21 全部已 push 到 `origin/main`（v0.14.0 tag 已发布，72 co
 - [x] **P22.5.3** — `lumen run --auto-mode` flag (one-line status; file is the source of truth) *(this commit)*
 - [x] **P22.5.4** — `docs/AUTO-MODE.md` operator guide (~250 lines: composition overview, autoMode block shape, risk table, decision precedence, audit, 3 worked examples, CLI surface, composition with the interrupt layer, limits) *(this commit)*
 
+### P22.6 — Cross-policy imports (multi-file composition)
+
+- [x] **P22.6 design lock** — `docs: P22.6 design lock — cross-policy imports (multi-file composition)` *(this commit)* — Added `docs/P22.6-DESIGN.md` (~290 lines). 4-framework fetch (Claude Code multi-scope settings with merge semantics / OpenClaw single file / LangGraph no policy / Hermes unverified) + 7-question audit (P19.0 6 + new **composition** axis) + 5 P-ticket scope. Decision list: one path + imports list + topological walk + cycle detection + autoMode block as single config (last import wins) + arrays concat + dedupe + managed-only lockout via `allowOverrides: false`.
+
 ### P22 deferred (backlog, not in P22 commit window)
 
 - [ ] **P22.5** — `auto mode` (Lumen's analogue of OpenClaw's "Safer Than YOLO" auto-mode for low-risk calls) — deferred; needs its own 4-framework fetch + decision list

@@ -72,6 +72,7 @@ export default defineConfig({
       { text: 'P19 Design', link: '/p19-design' },
       { text: 'P22 Design', link: '/p22-design' },
       { text: 'P22.5 Design', link: '/p22-5-design' },
+      { text: 'P22.6 Design', link: '/p22-6-design' },
     ],
     sidebar: [
       {
@@ -99,6 +100,7 @@ export default defineConfig({
           { text: 'P19+ design', link: '/p19-design' },
           { text: 'P22 design', link: '/p22-design' },
           { text: 'P22.5 design', link: '/p22-5-design' },
+          { text: 'P22.6 design', link: '/p22-6-design' },
         ],
       },
     ],
