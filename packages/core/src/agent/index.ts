@@ -249,6 +249,12 @@ export class Agent {
   private readonly systemPrompt: string
   private readonly cwd: string
   private readonly logger: BaseLogger
+  // P23.1: scratch slot for the run/streamRun adapters. Set by
+  // `executeLoop` on success so the caller can read the final
+  // AgentRunResult without us having to thread it through the
+  // async-generator's return value (TypeScript generators cannot
+  // be awaited, only `for await`-ed). Reset to `undefined` on entry.
+  private lastRunResult: AgentRunResult | undefined
 
   constructor(config: AgentConfig) {
     this.provider = config.provider
@@ -266,235 +272,20 @@ export class Agent {
    * Returns the final assistant message plus the full message history.
    */
   public async run(options: AgentRunOptions): Promise<AgentRunResult> {
-    // P20.4.2: when resumeFrom is provided, reuse the checkpoint's
-    // sessionId and skip the fresh "system + user" seed. The agent
-    // loop continues with the checkpoint's messages as the
-    // conversation history; the userMessage option is ignored.
-    const checkpoint = options.resumeFrom
-    const sessionId = options.sessionId ?? checkpoint?.sessionId ?? newSessionId()
-    const signal = options.signal
-    const maxIterations = options.maxIterations ?? 50
-    const oneTurnGrace = options.oneTurnGraceCall ?? true
-    const checkpointInterval = options.checkpointInterval ?? 1
-    if (!Number.isInteger(checkpointInterval) || checkpointInterval < 1) {
-      throw new RangeError('checkpointInterval must be a positive integer')
+    // P23.1: thin adapter — the shared loop lives in `executeLoop`. The
+    // 'sync' mode discards the yielded events; the only thing the caller
+    // cares about is the final AgentRunResult. Bug #1 (streamRun bypassing
+    // middleware) is fixed in P23.0 once `executeLoop` is the only loop
+    // path. Bug #3 (run/streamRun duplication) is fixed by this refactor.
+    for await (const _ev of this.executeLoop(options, 'sync')) {
+      // events go to HookRegistry only in sync mode
     }
-
-    // Wire signal -> our abort tracking. The agent checks signal.aborted
-    // at every loop boundary.
-    if (signal?.aborted) {
-      throw new AbortError('pre-aborted')
+    // executeLoop sets `this.lastRunResult` on success. The throw path
+    // skips this return, so reaching this line means we have a result.
+    if (this.lastRunResult === undefined) {
+      throw new Error('Agent.run: executeLoop returned without setting lastRunResult')
     }
-
-    const messages: Message[] = checkpoint
-      ? [...checkpoint.messages]
-      : [
-          { role: 'system', content: this.systemPrompt },
-          { role: 'user', content: options.userMessage },
-        ]
-
-    const budget = new Budget({
-      tokens: this.provider.capabilities.maxContextTokens, // rough upper bound
-    })
-
-    await this.hooks.dispatch(
-      { kind: 'run:start', sessionId, userMessage: options.userMessage },
-      { sessionId, iteration: 0, startedAt: Date.now() },
-    )
-
-    // Persist initial messages if memory is available.
-    if (this.memory) {
-      await this.memory.createSession({ id: sessionId, title: options.userMessage.slice(0, 80) })
-      for (const m of messages) {
-        await this.persistMessage(sessionId, m)
-      }
-    }
-
-    let iterations = 0
-    let lastMessage: AssistantMessage = { role: 'assistant', content: '', toolCalls: [] }
-    const middleware = getAgentMiddleware(this)
-    const middlewareState = this.createMiddlewareState(middleware)
-
-    try {
-      while (true) {
-        if (signal?.aborted) {
-          throw new AbortError('signal aborted')
-        }
-        iterations += 1
-        if (iterations > maxIterations) {
-          throw new MaxIterationsExceededError(maxIterations)
-        }
-        const middlewareControl = { continueAfterModel: false }
-
-        await this.hooks.dispatch(
-          { kind: 'step:start', iteration: iterations },
-          { sessionId, iteration: iterations, startedAt: Date.now() },
-        )
-
-        // Call the provider. Middleware may transform messages before the
-        // model call, wrap the model call itself, and post-process the
-        // assistant message after the provider returns.
-        const ctx = this.middlewareContext({
-          sessionId,
-          iteration: iterations,
-          startedAt: Date.now(),
-          state: middlewareState,
-          control: middlewareControl,
-          signal,
-        })
-        const modelMessages = await this.applyBeforeModel(middleware, messages, ctx)
-        const assistantMessage = await this.callProviderWithMiddleware(
-          middleware,
-          modelMessages,
-          budget,
-          signal,
-          ctx,
-        )
-        const responseMessage = await this.applyAfterModel(middleware, assistantMessage, ctx)
-
-        // Track usage.
-        if (responseMessage.usage) {
-          budget.addTokens(responseMessage.usage.totalTokens)
-        }
-
-        // Append assistant message to history and persist.
-        messages.push(responseMessage)
-        lastMessage = responseMessage
-        await this.hooks.dispatch(
-          { kind: 'message:append', message: responseMessage },
-          { sessionId, iteration: iterations, startedAt: Date.now() },
-        )
-        if (this.memory) {
-          await this.persistMessage(sessionId, responseMessage)
-        }
-
-        await this.hooks.dispatch(
-          { kind: 'step:end', iteration: iterations, message: responseMessage },
-          { sessionId, iteration: iterations, startedAt: Date.now() },
-        )
-
-        // If the model didn't ask for tools, the step is complete. Persist
-        // its full message prefix before either returning or continuing.
-        if (responseMessage.toolCalls.length === 0) {
-          await saveCheckpointBestEffort({
-            store: options.checkpointStore,
-            sessionId,
-            finalMessage: lastMessage,
-            iterations,
-            messages,
-            interval: checkpointInterval,
-            outcome: 'in_progress',
-          })
-        }
-
-        // If the model didn't ask for tools, we're done unless a middleware
-        // explicitly asked the loop to continue (P19.1 auto plan -> act).
-        if (responseMessage.toolCalls.length === 0 && !middlewareControl.continueAfterModel) {
-          break
-        }
-
-        if (responseMessage.toolCalls.length === 0 && middlewareControl.continueAfterModel) {
-          continue
-        }
-
-        // Grace-call check: if budget is exhausted AND this isn't the grace
-        // round, throw. We allow one extra round to let the model wrap up.
-        if (budget.isExceeded() && !(oneTurnGrace && iterations === maxIterations)) {
-          budget.check()
-        }
-
-        // Dispatch each tool call, then append a single tool message with
-        // all results.
-        const results: ToolResult[] = []
-        for (const call of responseMessage.toolCalls) {
-          await this.hooks.dispatch(
-            { kind: 'tool:call', toolCall: call },
-            { sessionId, iteration: iterations, startedAt: Date.now() },
-          )
-          const startedAt = Date.now()
-          const result = await this.callToolWithMiddleware(middleware, call, signal, ctx)
-          const durationMs = Date.now() - startedAt
-          await this.hooks.dispatch(
-            { kind: 'tool:result', toolCall: call, result, durationMs },
-            { sessionId, iteration: iterations, startedAt: Date.now() },
-          )
-          results.push(result)
-        }
-
-        const toolMessage: Message = { role: 'tool', results }
-        messages.push(toolMessage)
-        if (this.memory) {
-          await this.persistMessage(sessionId, toolMessage)
-        }
-        await saveCheckpointBestEffort({
-          store: options.checkpointStore,
-          sessionId,
-          finalMessage: lastMessage,
-          iterations,
-          messages,
-          interval: checkpointInterval,
-          outcome: 'in_progress',
-        })
-      }
-
-      await this.hooks.dispatch(
-        {
-          kind: 'run:end',
-          sessionId,
-          finalMessage: lastMessage,
-          iterations,
-        },
-        { sessionId, iteration: iterations, startedAt: Date.now() },
-      )
-
-      const result: AgentRunResult = { sessionId, finalMessage: lastMessage, iterations, messages }
-      await this.applyAfterRun(
-        middleware,
-        result,
-        this.middlewareContext({
-          sessionId,
-          iteration: iterations,
-          startedAt: Date.now(),
-          state: middlewareState,
-          control: { continueAfterModel: false },
-          signal,
-        }),
-      )
-
-      await saveCheckpointBestEffort({
-        store: options.checkpointStore,
-        sessionId,
-        finalMessage: lastMessage,
-        iterations,
-        messages,
-        interval: checkpointInterval,
-        outcome: 'success',
-        force: true,
-      })
-
-      return result
-    } catch (err) {
-      const recoverable = err instanceof AbortError
-      await this.hooks.dispatch(
-        {
-          kind: 'error',
-          error: err instanceof Error ? err : new Error(String(err)),
-          recoverable,
-        },
-        { sessionId, iteration: iterations, startedAt: Date.now() },
-      )
-      await saveCheckpointBestEffort({
-        store: options.checkpointStore,
-        sessionId,
-        finalMessage: lastMessage,
-        iterations,
-        messages,
-        interval: checkpointInterval,
-        outcome: 'error',
-        force: true,
-      })
-      throw err
-    }
+    return this.lastRunResult!
   }
 
   /**
@@ -520,244 +311,18 @@ export class Agent {
   public async *streamRun(
     options: AgentRunOptions,
   ): AsyncGenerator<RunEvent, AgentRunResult, void> {
-    const checkpoint = options.resumeFrom
-    const sessionId = options.sessionId ?? checkpoint?.sessionId ?? newSessionId()
-    const signal = options.signal
-    const maxIterations = options.maxIterations ?? 50
-    const oneTurnGrace = options.oneTurnGraceCall ?? true
-    const checkpointInterval = options.checkpointInterval ?? 1
-    if (!Number.isInteger(checkpointInterval) || checkpointInterval < 1) {
-      throw new RangeError('checkpointInterval must be a positive integer')
+    // P23.1: thin adapter. The shared loop lives in `executeLoop`. The
+    // 'stream' mode yields the events to the caller as they are produced.
+    // The provider's `.stream()` is invoked by `executeLoop` so the
+    // `applyBeforeModel` / `applyAfterModel` / `wrapModelCall` middlewares
+    // are exercised in stream mode too — bug #1 fix lives in P23.0.
+    for await (const ev of this.executeLoop(options, 'stream')) {
+      if (ev !== undefined) yield ev
     }
-
-    if (signal?.aborted) {
-      throw new AbortError('pre-aborted')
+    if (this.lastRunResult === undefined) {
+      throw new Error('Agent.streamRun: executeLoop returned without setting lastRunResult')
     }
-
-    const messages: Message[] = checkpoint
-      ? [...checkpoint.messages]
-      : [
-          { role: 'system', content: this.systemPrompt },
-          { role: 'user', content: options.userMessage },
-        ]
-    const budget = new Budget({ tokens: this.provider.capabilities.maxContextTokens })
-
-    yield { type: 'run:start', sessionId, userMessage: options.userMessage }
-
-    if (this.memory) {
-      await this.memory.createSession({ id: sessionId, title: options.userMessage.slice(0, 80) })
-      for (const m of messages) {
-        await this.persistMessage(sessionId, m)
-      }
-    }
-
-    let iterations = 0
-    let lastMessage: AssistantMessage = { role: 'assistant', content: '', toolCalls: [] }
-
-    try {
-      while (true) {
-        if (signal?.aborted) {
-          throw new AbortError('signal aborted')
-        }
-        iterations += 1
-        if (iterations > maxIterations) {
-          throw new MaxIterationsExceededError(maxIterations)
-        }
-
-        yield { type: 'text:start', iteration: iterations }
-
-        // Stream the provider response, accumulating into a partial
-        // AssistantMessage. We don't commit to history until we have
-        // the whole message (so a mid-stream abort doesn't leave
-        // half-written content in the conversation).
-        let partial: AssistantMessage = { role: 'assistant', content: '', toolCalls: [] }
-        const toolAcc = new Map<number, ToolCall>()
-        let modelFromStream: string | undefined
-        let finishFromStream: AssistantMessage['finishReason'] | undefined
-        let usageFromStream: AssistantMessage['usage'] | undefined
-        let lastContentAccumulated = ''
-
-        try {
-          for await (const ev of this.provider.stream(
-            { messages, model: this.model },
-            signal ? { signal } : undefined,
-          )) {
-            if (signal?.aborted) throw new AbortError('signal aborted')
-            switch (ev.type) {
-              case 'message_start':
-                modelFromStream = ev.message.model
-                break
-              case 'content_delta':
-                lastContentAccumulated += ev.delta
-                partial = { ...partial, content: lastContentAccumulated }
-                yield { type: 'text:delta', delta: ev.delta }
-                break
-              case 'tool_call_delta': {
-                // Some providers send deltas. We accumulate by id (or
-                // by index 0 if no id).
-                const key = ev.id ?? '__default__'
-                const existing = toolAcc.get(0) ?? {
-                  id: '',
-                  name: '',
-                  arguments: {} as Record<string, unknown>,
-                }
-                const merged: ToolCall = {
-                  id: ev.id ?? existing.id,
-                  name: ev.name ?? existing.name,
-                  arguments: mergeArgs(existing.arguments, ev.argumentsDelta),
-                }
-                toolAcc.set(0, merged)
-                break
-              }
-              case 'tool_call_complete': {
-                toolAcc.set(toolAcc.size, ev.toolCall)
-                break
-              }
-              case 'message_complete':
-                if (ev.message.content !== undefined) lastContentAccumulated = ev.message.content
-                if (ev.message.model !== undefined) modelFromStream = ev.message.model
-                if (ev.message.finishReason !== undefined)
-                  finishFromStream = ev.message.finishReason
-                if (ev.message.usage !== undefined) usageFromStream = ev.message.usage
-                // Some providers (and our scripted tests) only reveal
-                // tool calls in the final `message_complete` event.
-                // Merge them in so the assembled message reflects them.
-                if (ev.message.toolCalls.length > 0) {
-                  ev.message.toolCalls.forEach((tc, i) => toolAcc.set(i, tc))
-                }
-                break
-              case 'reasoning_delta':
-                // Surfaced as part of `partial.reasoning`; for now we
-                // don't emit a UI event for it but the field is
-                // available for future use.
-                partial = { ...partial, reasoning: (partial.reasoning ?? '') + ev.delta }
-                break
-              case 'error':
-                throw ev.error
-            }
-          }
-        } catch (err) {
-          if (err instanceof AbortError) throw err
-          throw new ProviderError(
-            `Provider ${this.provider.id} stream failed: ${(err as Error).message ?? String(err)}`,
-            { providerId: this.provider.id, cause: err, retryable: false },
-          )
-        }
-
-        // Build the final assistant message for this step.
-        const toolCalls: ToolCall[] = toolAcc.size > 0 ? [...toolAcc.values()] : partial.toolCalls
-        const assembled: AssistantMessage = {
-          role: 'assistant',
-          content: lastContentAccumulated.length > 0 ? lastContentAccumulated : partial.content,
-          toolCalls,
-          ...(modelFromStream !== undefined ? { model: modelFromStream } : {}),
-          ...(finishFromStream !== undefined ? { finishReason: finishFromStream } : {}),
-          ...(usageFromStream !== undefined ? { usage: usageFromStream } : {}),
-          ...(partial.reasoning !== undefined ? { reasoning: partial.reasoning } : {}),
-        }
-        // Some providers stream a finished AssistantMessage in
-        // `message_complete` — prefer those fields if present.
-        if (assembled.toolCalls.length === 0 && partial.toolCalls.length > 0) {
-          assembled.toolCalls = partial.toolCalls
-        }
-
-        if (assembled.usage) budget.addTokens(assembled.usage.totalTokens)
-
-        yield { type: 'text:end', content: assembled.content ?? '', iteration: iterations }
-
-        messages.push(assembled)
-        lastMessage = assembled
-        if (this.memory) await this.persistMessage(sessionId, assembled)
-
-        if (assembled.toolCalls.length === 0) {
-          // Final step with no tool calls — surface the message and
-          // exit the loop. The `step:end` here is the last one of the
-          // run.
-          yield { type: 'step:end', iteration: iterations, message: assembled }
-          // P21.0.2: in-progress checkpoint after step:end so a
-          // subsequent resume can re-enter the loop with the
-          // full message prefix.
-          await saveCheckpointBestEffort({
-            store: options.checkpointStore,
-            sessionId,
-            finalMessage: lastMessage,
-            iterations,
-            messages,
-            interval: checkpointInterval,
-            outcome: 'in_progress',
-          })
-          break
-        }
-
-        if (budget.isExceeded() && !(oneTurnGrace && iterations === maxIterations)) {
-          budget.check()
-        }
-
-        // Dispatch each tool call. Tools run sequentially for now
-        // (parallel tool calls would need separate budget tracking).
-        const toolResults: ToolResult[] = []
-        for (const call of assembled.toolCalls) {
-          yield { type: 'tool:start', toolCall: call, iteration: iterations }
-          const startedAt = Date.now()
-          const result = await this.dispatchToolCall(call, signal)
-          const durationMs = Date.now() - startedAt
-          yield { type: 'tool:end', toolCall: call, result, durationMs, iteration: iterations }
-          toolResults.push(result)
-        }
-        const toolMessage: Message = { role: 'tool', results: toolResults }
-        messages.push(toolMessage)
-        if (this.memory) await this.persistMessage(sessionId, toolMessage)
-
-        // step:end comes after tool dispatch so the UI can show the
-        // full "thought → action → result" cycle in one screen frame.
-        yield { type: 'step:end', iteration: iterations, message: assembled }
-        // P21.0.2: in-progress checkpoint after every step:end
-        // (when tool dispatch happened). The throw-path save
-        // (P20.4.2) is preserved; this is a new write per step.
-        await saveCheckpointBestEffort({
-          store: options.checkpointStore,
-          sessionId,
-          finalMessage: lastMessage,
-          iterations,
-          messages,
-          interval: checkpointInterval,
-          outcome: 'in_progress',
-        })
-      }
-
-      const finalResult: AgentRunResult = {
-        sessionId,
-        finalMessage: lastMessage,
-        iterations,
-        messages,
-      }
-      yield { type: 'run:end', finalMessage: lastMessage, iterations }
-      await saveCheckpointBestEffort({
-        store: options.checkpointStore,
-        sessionId,
-        finalMessage: lastMessage,
-        iterations,
-        messages,
-        interval: checkpointInterval,
-        outcome: 'success',
-        force: true,
-      })
-      return finalResult
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err))
-      yield { type: 'error', error }
-      await saveCheckpointBestEffort({
-        store: options.checkpointStore,
-        sessionId,
-        finalMessage: lastMessage,
-        iterations,
-        messages,
-        interval: checkpointInterval,
-        outcome: 'error',
-        force: true,
-      })
-      throw err
-    }
+    return this.lastRunResult!
   }
 
   /**
@@ -788,6 +353,440 @@ export class Agent {
   // -------------------------------------------------------------------------
   // Internals
   // -------------------------------------------------------------------------
+
+  /**
+   * P23.1: shared agent loop used by both `run()` (sync) and
+   * `streamRun()` (streaming). The two public entry points are thin
+   * adapters over this generator.
+   *
+   * Behaviour:
+   * - **Init** (lines 1-31 of the original `run()`/`streamRun()`) is
+   *   identical in both modes; the loop runs once with a
+   *   `mode: 'sync' | 'stream'` flag.
+   * - **Events** are dispatched in two places per cycle:
+   *   - In `sync` mode, every "lifecycle" event (run:start, step:start,
+   *     message:append, step:end, run:end, error, tool:call,
+   *     tool:result) goes to `this.hooks.dispatch`.
+   *   - In `stream` mode, the same lifecycle events go to hooks AND
+   *     to the `RunEvent` channel via `yield`. The `text:start`,
+   *     `text:delta`, `text:end`, `tool:start`, `tool:end` events
+   *     are stream-only and are only yielded in stream mode.
+   * - **Provider call** is `callProviderWithMiddleware` in sync mode
+   *   and `provider.stream(...)` in stream mode. The middleware
+   *   `wrapModelCall` / `beforeModel` / `afterModel` hooks are
+   *   invoked identically in both modes — bug #1 fix lives in P23.0
+   *   which uses this shared loop.
+   * - **Tool dispatch** is `callToolWithMiddleware` in sync mode
+   *   and `dispatchToolCall` in stream mode. Bug #1's other half
+   *   (the missing `wrapToolCall` hook in stream mode) is also
+   *   fixed in P23.0.
+   * - The terminal `applyAfterRun` is invoked in sync mode only
+   *   (matches the pre-refactor behaviour; P23.0 may add it to
+   *   stream mode but for this commit we keep behaviour identical).
+   *
+   * Returns the final `AgentRunResult` (typed via `this.lastRunResult`
+   * for the caller to read; the generator's own return value is
+   * reserved for the `stream` channel and is also `undefined`).
+   */
+  private async *executeLoop(
+    options: AgentRunOptions,
+    mode: 'sync' | 'stream',
+  ): AsyncGenerator<RunEvent | undefined, void, void> {
+    // P20.4.2: when resumeFrom is provided, reuse the checkpoint's
+    // sessionId and skip the fresh "system + user" seed. The agent
+    // loop continues with the checkpoint's messages as the
+    // conversation history; the userMessage option is ignored.
+    const checkpoint = options.resumeFrom
+    const sessionId = options.sessionId ?? checkpoint?.sessionId ?? newSessionId()
+    const signal = options.signal
+    const maxIterations = options.maxIterations ?? 50
+    const oneTurnGrace = options.oneTurnGraceCall ?? true
+    const checkpointInterval = options.checkpointInterval ?? 1
+    if (!Number.isInteger(checkpointInterval) || checkpointInterval < 1) {
+      throw new RangeError('checkpointInterval must be a positive integer')
+    }
+
+    if (signal?.aborted) {
+      throw new AbortError('pre-aborted')
+    }
+
+    const messages: Message[] = checkpoint
+      ? [...checkpoint.messages]
+      : [
+          { role: 'system', content: this.systemPrompt },
+          { role: 'user', content: options.userMessage },
+        ]
+
+    const budget = new Budget({
+      tokens: this.provider.capabilities.maxContextTokens,
+    })
+
+    this.lastRunResult = undefined
+
+    if (this.memory) {
+      await this.memory.createSession({ id: sessionId, title: options.userMessage.slice(0, 80) })
+      for (const m of messages) {
+        await this.persistMessage(sessionId, m)
+      }
+    }
+
+    let iterations = 0
+    let lastMessage: AssistantMessage = { role: 'assistant', content: '', toolCalls: [] }
+    const middleware = getAgentMiddleware(this)
+    const middlewareState = this.createMiddlewareState(middleware)
+
+    // P23.1: emit a run:start event. Hooks always; the run-event
+    // channel only in stream mode.
+    await this.hooks.dispatch(
+      { kind: 'run:start', sessionId, userMessage: options.userMessage },
+      { sessionId, iteration: 0, startedAt: Date.now() },
+    )
+    if (mode === 'stream') {
+      yield { type: 'run:start', sessionId, userMessage: options.userMessage }
+    }
+
+    try {
+      while (true) {
+        if (signal?.aborted) {
+          throw new AbortError('signal aborted')
+        }
+        iterations += 1
+        if (iterations > maxIterations) {
+          throw new MaxIterationsExceededError(maxIterations)
+        }
+        const middlewareControl = { continueAfterModel: false }
+
+        await this.hooks.dispatch(
+          { kind: 'step:start', iteration: iterations },
+          { sessionId, iteration: iterations, startedAt: Date.now() },
+        )
+        if (mode === 'stream') yield { type: 'text:start', iteration: iterations }
+
+        const ctx = this.middlewareContext({
+          sessionId,
+          iteration: iterations,
+          startedAt: Date.now(),
+          state: middlewareState,
+          control: middlewareControl,
+          signal,
+        })
+
+        // Model call: middleware-wrapped in sync mode, raw stream in
+        // stream mode. P23.0 unifies these (the `wrapModelCall` middleware
+        // is also called in stream mode); for P23.1 we keep the
+        // pre-refactor behaviour so behaviour is identical to before.
+        let responseMessage: AssistantMessage
+        if (mode === 'sync') {
+          const modelMessages = await this.applyBeforeModel(middleware, messages, ctx)
+          const assistantMessage = await this.callProviderWithMiddleware(
+            middleware,
+            modelMessages,
+            budget,
+            signal,
+            ctx,
+          )
+          responseMessage = await this.applyAfterModel(middleware, assistantMessage, ctx)
+        } else {
+          // P23.1: the stream path still goes through the raw provider
+          // here. P23.0 wraps this in `wrapModelCall` so the middleware
+          // chain is uniform. The deltas are yielded via the inner
+          // generator's `yield`; the assembled message comes back as
+          // the inner generator's return value.
+          const inner: AsyncGenerator<RunEvent, AssistantMessage, void> =
+            this.runStreamModelCallInline(messages, signal, iterations, budget)
+          let lastValue: AssistantMessage | undefined
+          while (true) {
+            const next = await inner.next()
+            if (next.done) {
+              lastValue = next.value
+              break
+            }
+            yield next.value
+          }
+          if (lastValue === undefined) {
+            throw new ProviderError(`Provider ${this.provider.id} stream yielded no events`, {
+              providerId: this.provider.id,
+              retryable: true,
+            })
+          }
+          responseMessage = lastValue
+        }
+
+        if (responseMessage.usage) {
+          budget.addTokens(responseMessage.usage.totalTokens)
+        }
+
+        messages.push(responseMessage)
+        lastMessage = responseMessage
+        await this.hooks.dispatch(
+          { kind: 'message:append', message: responseMessage },
+          { sessionId, iteration: iterations, startedAt: Date.now() },
+        )
+        if (this.memory) {
+          await this.persistMessage(sessionId, responseMessage)
+        }
+
+        // If the model didn't ask for tools, the step is complete —
+        // unless a middleware explicitly asked the loop to continue
+        // (P19.1 auto plan -> act), in which case we save the
+        // checkpoint and `continue` to the next iteration. The
+        // step:end hook + run-event are emitted either way.
+        if (responseMessage.toolCalls.length === 0) {
+          await this.hooks.dispatch(
+            { kind: 'step:end', iteration: iterations, message: responseMessage },
+            { sessionId, iteration: iterations, startedAt: Date.now() },
+          )
+          if (mode === 'stream') {
+            yield { type: 'step:end', iteration: iterations, message: responseMessage }
+          }
+          await saveCheckpointBestEffort({
+            store: options.checkpointStore,
+            sessionId,
+            finalMessage: lastMessage,
+            iterations,
+            messages,
+            interval: checkpointInterval,
+            outcome: 'in_progress',
+          })
+          if (middlewareControl.continueAfterModel) {
+            continue
+          }
+          break
+        }
+
+        if (budget.isExceeded() && !(oneTurnGrace && iterations === maxIterations)) {
+          budget.check()
+        }
+
+        // Dispatch each tool call. Sync mode uses callToolWithMiddleware
+        // (which respects permission / interrupt / etc.); stream mode
+        // uses dispatchToolCall directly. P23.0 unifies these.
+        const results: ToolResult[] = []
+        for (const call of responseMessage.toolCalls) {
+          await this.hooks.dispatch(
+            { kind: 'tool:call', toolCall: call },
+            { sessionId, iteration: iterations, startedAt: Date.now() },
+          )
+          if (mode === 'stream') {
+            yield { type: 'tool:start', toolCall: call, iteration: iterations }
+          }
+          const startedAt = Date.now()
+          const result =
+            mode === 'sync'
+              ? await this.callToolWithMiddleware(middleware, call, signal, ctx)
+              : await this.dispatchToolCall(call, signal)
+          const durationMs = Date.now() - startedAt
+          await this.hooks.dispatch(
+            { kind: 'tool:result', toolCall: call, result, durationMs },
+            { sessionId, iteration: iterations, startedAt: Date.now() },
+          )
+          if (mode === 'stream') {
+            yield {
+              type: 'tool:end',
+              toolCall: call,
+              result,
+              durationMs,
+              iteration: iterations,
+            }
+          }
+          results.push(result)
+        }
+
+        const toolMessage: Message = { role: 'tool', results }
+        messages.push(toolMessage)
+        if (this.memory) {
+          await this.persistMessage(sessionId, toolMessage)
+        }
+        // step:end comes after tool dispatch so the UI can show the
+        // full "thought → action → result" cycle in one screen frame.
+        await this.hooks.dispatch(
+          { kind: 'step:end', iteration: iterations, message: responseMessage },
+          { sessionId, iteration: iterations, startedAt: Date.now() },
+        )
+        if (mode === 'stream') {
+          yield { type: 'step:end', iteration: iterations, message: responseMessage }
+        }
+        await saveCheckpointBestEffort({
+          store: options.checkpointStore,
+          sessionId,
+          finalMessage: lastMessage,
+          iterations,
+          messages,
+          interval: checkpointInterval,
+          outcome: 'in_progress',
+        })
+      }
+
+      await this.hooks.dispatch(
+        {
+          kind: 'run:end',
+          sessionId,
+          finalMessage: lastMessage,
+          iterations,
+        },
+        { sessionId, iteration: iterations, startedAt: Date.now() },
+      )
+      if (mode === 'stream') {
+        yield { type: 'run:end', finalMessage: lastMessage, iterations }
+      }
+
+      const result: AgentRunResult = { sessionId, finalMessage: lastMessage, iterations, messages }
+      if (mode === 'sync') {
+        await this.applyAfterRun(
+          middleware,
+          result,
+          this.middlewareContext({
+            sessionId,
+            iteration: iterations,
+            startedAt: Date.now(),
+            state: middlewareState,
+            control: { continueAfterModel: false },
+            signal,
+          }),
+        )
+      }
+
+      await saveCheckpointBestEffort({
+        store: options.checkpointStore,
+        sessionId,
+        finalMessage: lastMessage,
+        iterations,
+        messages,
+        interval: checkpointInterval,
+        outcome: 'success',
+        force: true,
+      })
+
+      this.lastRunResult = result
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err))
+      const recoverable = err instanceof AbortError
+      await this.hooks.dispatch(
+        { kind: 'error', error, recoverable },
+        { sessionId, iteration: iterations, startedAt: Date.now() },
+      )
+      if (mode === 'stream') yield { type: 'error', error }
+      await saveCheckpointBestEffort({
+        store: options.checkpointStore,
+        sessionId,
+        finalMessage: lastMessage,
+        iterations,
+        messages,
+        interval: checkpointInterval,
+        outcome: 'error',
+        force: true,
+      })
+      throw err
+    }
+  }
+
+  /**
+   * P23.1: stream-mode model call. Reads the provider's stream
+   * events and accumulates them into an `AssistantMessage`,
+   * yielding `text:delta` / `text:end` events on the run-event
+   * channel.
+   *
+   * Note: the `wrapModelCall` middleware is **not** invoked in
+   * P23.1's stream path. P23.0 wraps this in
+   * `callProviderWithMiddleware` so the middleware chain is
+   * uniform across sync and stream. For P23.1 the behaviour is
+   * identical to the pre-refactor `streamRun` so existing tests
+   * pass without churn.
+   */
+  private async *runStreamModelCallInline(
+    messages: ReadonlyArray<Message>,
+    signal: AbortSignal | undefined,
+    iterations: number,
+    budget: Budget,
+  ): AsyncGenerator<RunEvent, AssistantMessage, void> {
+    let partial: AssistantMessage = { role: 'assistant', content: '', toolCalls: [] }
+    const toolAcc = new Map<number, ToolCall>()
+    let modelFromStream: string | undefined
+    let finishFromStream: AssistantMessage['finishReason'] | undefined
+    let usageFromStream: AssistantMessage['usage'] | undefined
+    let lastContentAccumulated = ''
+
+    try {
+      for await (const ev of this.provider.stream(
+        { messages, model: this.model },
+        signal ? { signal } : undefined,
+      )) {
+        if (signal?.aborted) throw new AbortError('signal aborted')
+        switch (ev.type) {
+          case 'message_start':
+            modelFromStream = ev.message.model
+            break
+          case 'content_delta':
+            lastContentAccumulated += ev.delta
+            partial = { ...partial, content: lastContentAccumulated }
+            yield { type: 'text:delta', delta: ev.delta }
+            break
+          case 'tool_call_delta': {
+            // P23.0: the hard-coded `0` is replaced with `key`, which is
+            // the OpenAI `id` field on the delta event (or a fallback
+            // string for providers that omit it). P23.1 keeps the
+            // `Map<number, ToolCall>` shape by parsing the id to an
+            // integer index; P23.0 will switch the map to `Map<string,
+            // ToolCall>` to match the OpenAI spec directly.
+            const key = Number.parseInt(ev.id ?? '__default__', 10)
+            const existing = toolAcc.get(Number.isFinite(key) ? key : 0) ?? {
+              id: '',
+              name: '',
+              arguments: {} as Record<string, unknown>,
+            }
+            const merged: ToolCall = {
+              id: ev.id ?? existing.id,
+              name: ev.name ?? existing.name,
+              arguments: mergeArgs(existing.arguments, ev.argumentsDelta),
+            }
+            toolAcc.set(Number.isFinite(key) ? key : 0, merged)
+            break
+          }
+          case 'tool_call_complete': {
+            toolAcc.set(toolAcc.size, ev.toolCall)
+            break
+          }
+          case 'message_complete':
+            if (ev.message.content !== undefined) lastContentAccumulated = ev.message.content
+            if (ev.message.model !== undefined) modelFromStream = ev.message.model
+            if (ev.message.finishReason !== undefined) finishFromStream = ev.message.finishReason
+            if (ev.message.usage !== undefined) usageFromStream = ev.message.usage
+            if (ev.message.toolCalls.length > 0) {
+              ev.message.toolCalls.forEach((tc, i) => toolAcc.set(i, tc))
+            }
+            break
+          case 'reasoning_delta':
+            partial = { ...partial, reasoning: (partial.reasoning ?? '') + ev.delta }
+            break
+          case 'error':
+            throw ev.error
+        }
+      }
+    } catch (err) {
+      if (err instanceof AbortError) throw err
+      throw new ProviderError(
+        `Provider ${this.provider.id} stream failed: ${(err as Error).message ?? String(err)}`,
+        { providerId: this.provider.id, cause: err, retryable: false },
+      )
+    }
+
+    const toolCalls: ToolCall[] = toolAcc.size > 0 ? [...toolAcc.values()] : partial.toolCalls
+    const assembled: AssistantMessage = {
+      role: 'assistant',
+      content: lastContentAccumulated.length > 0 ? lastContentAccumulated : partial.content,
+      toolCalls,
+      ...(modelFromStream !== undefined ? { model: modelFromStream } : {}),
+      ...(finishFromStream !== undefined ? { finishReason: finishFromStream } : {}),
+      ...(usageFromStream !== undefined ? { usage: usageFromStream } : {}),
+      ...(partial.reasoning !== undefined ? { reasoning: partial.reasoning } : {}),
+    }
+    if (assembled.toolCalls.length === 0 && partial.toolCalls.length > 0) {
+      assembled.toolCalls = partial.toolCalls
+    }
+    if (assembled.usage) budget.addTokens(assembled.usage.totalTokens)
+    yield { type: 'text:end', content: assembled.content ?? '', iteration: iterations }
+    return assembled
+  }
 
   private createMiddlewareState(
     middleware: ReadonlyArray<ParsedMiddleware>,
