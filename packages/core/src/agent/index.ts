@@ -471,13 +471,19 @@ export class Agent {
           signal,
         })
 
-        // Model call: middleware-wrapped in sync mode, raw stream in
-        // stream mode. P23.0 unifies these (the `wrapModelCall` middleware
-        // is also called in stream mode); for P23.1 we keep the
-        // pre-refactor behaviour so behaviour is identical to before.
+        // Model call. P23.0 unifies the sync and stream paths so
+        // `applyBeforeModel` and `applyAfterModel` run in both modes
+        // (bug #1: pre-P23.0 only the sync path invoked them; the
+        // stream path went straight to `provider.stream()`). The
+        // `wrapModelCall` middleware is **still** sync-only because
+        // its signature is `(input, next, ctx) => Promise<message>` —
+        // stream support would require a new generator-aware
+        // contract. P23.0 documents the gap; P24 will add a
+        // `wrapModelStream` middleware that operates on the
+        // `AsyncGenerator<StreamEvent, message>` shape.
+        const modelMessages = await this.applyBeforeModel(middleware, messages, ctx)
         let responseMessage: AssistantMessage
         if (mode === 'sync') {
-          const modelMessages = await this.applyBeforeModel(middleware, messages, ctx)
           const assistantMessage = await this.callProviderWithMiddleware(
             middleware,
             modelMessages,
@@ -487,13 +493,14 @@ export class Agent {
           )
           responseMessage = await this.applyAfterModel(middleware, assistantMessage, ctx)
         } else {
-          // P23.1: the stream path still goes through the raw provider
-          // here. P23.0 wraps this in `wrapModelCall` so the middleware
-          // chain is uniform. The deltas are yielded via the inner
+          // P23.0: stream path now respects `applyBeforeModel` (the
+          // `modelMessages` returned above is what we pass to the
+          // stream) and runs `applyAfterModel` once the stream
+          // completes. The deltas are yielded via the inner
           // generator's `yield`; the assembled message comes back as
           // the inner generator's return value.
           const inner: AsyncGenerator<RunEvent, AssistantMessage, void> =
-            this.runStreamModelCallInline(messages, signal, iterations, budget)
+            this.runStreamModelCallInline(modelMessages, signal, iterations, budget)
           let lastValue: AssistantMessage | undefined
           while (true) {
             const next = await inner.next()
@@ -509,7 +516,7 @@ export class Agent {
               retryable: true,
             })
           }
-          responseMessage = lastValue
+          responseMessage = await this.applyAfterModel(middleware, lastValue, ctx)
         }
 
         if (responseMessage.usage) {
@@ -558,9 +565,14 @@ export class Agent {
           budget.check()
         }
 
-        // Dispatch each tool call. Sync mode uses callToolWithMiddleware
-        // (which respects permission / interrupt / etc.); stream mode
-        // uses dispatchToolCall directly. P23.0 unifies these.
+        // Dispatch each tool call. P23.0 unifies sync and stream
+        // modes on the same `callToolWithMiddleware` path so the
+        // `wrapToolCall` middleware hook fires in both modes (bug
+        // #1: pre-P23.0 the stream path went straight to
+        // `dispatchToolCall` and skipped the wrapper). The `sessionId`
+        // is threaded so the tool can scope audit logs and
+        // per-session resources (bug #6: pre-P23.0 it was always
+        // `''`).
         const results: ToolResult[] = []
         for (const call of responseMessage.toolCalls) {
           await this.hooks.dispatch(
@@ -571,10 +583,7 @@ export class Agent {
             yield { type: 'tool:start', toolCall: call, iteration: iterations }
           }
           const startedAt = Date.now()
-          const result =
-            mode === 'sync'
-              ? await this.callToolWithMiddleware(middleware, call, signal, ctx)
-              : await this.dispatchToolCall(call, signal)
+          const result = await this.callToolWithMiddleware(middleware, call, signal, ctx, sessionId)
           const durationMs = Date.now() - startedAt
           await this.hooks.dispatch(
             { kind: 'tool:result', toolCall: call, result, durationMs },
@@ -631,20 +640,24 @@ export class Agent {
       }
 
       const result: AgentRunResult = { sessionId, finalMessage: lastMessage, iterations, messages }
-      if (mode === 'sync') {
-        await this.applyAfterRun(
-          middleware,
-          result,
-          this.middlewareContext({
-            sessionId,
-            iteration: iterations,
-            startedAt: Date.now(),
-            state: middlewareState,
-            control: { continueAfterModel: false },
-            signal,
-          }),
-        )
-      }
+      // P23.0: `applyAfterRun` is now invoked in **both** sync and
+      // stream modes (bug #1: pre-P23.0 the stream path skipped it,
+      // so the `afterRun` hook never ran for `lumen run --stream` /
+      // `lumen chat`). The hook signature is sync-only, so it
+      // completes before the run-end event is yielded in stream
+      // mode; the deltas-then-final pattern is preserved.
+      await this.applyAfterRun(
+        middleware,
+        result,
+        this.middlewareContext({
+          sessionId,
+          iteration: iterations,
+          startedAt: Date.now(),
+          state: middlewareState,
+          control: { continueAfterModel: false },
+          signal,
+        }),
+      )
 
       await saveCheckpointBestEffort({
         store: options.checkpointStore,
@@ -681,17 +694,20 @@ export class Agent {
   }
 
   /**
-   * P23.1: stream-mode model call. Reads the provider's stream
+   * P23.0: stream-mode model call. Reads the provider's stream
    * events and accumulates them into an `AssistantMessage`,
    * yielding `text:delta` / `text:end` events on the run-event
    * channel.
    *
-   * Note: the `wrapModelCall` middleware is **not** invoked in
-   * P23.1's stream path. P23.0 wraps this in
-   * `callProviderWithMiddleware` so the middleware chain is
-   * uniform across sync and stream. For P23.1 the behaviour is
-   * identical to the pre-refactor `streamRun` so existing tests
-   * pass without churn.
+   * P23.0 changes from P23.1:
+   *  - `applyBeforeModel` is honoured upstream (the caller passes
+   *    the modified `modelMessages`).
+   *  - `applyAfterModel` is honoured downstream (the caller wraps
+   *    the assembled message).
+   *  - The `toolAcc` map key is the OpenAI `id` string instead of
+   *    the integer index 0 (bug #10: pre-P23.0 all parallel
+   *    tool-call deltas were collapsed into a single entry at
+   *    index 0; the last one won and the rest were dropped).
    */
   private async *runStreamModelCallInline(
     messages: ReadonlyArray<Message>,
@@ -700,7 +716,12 @@ export class Agent {
     budget: Budget,
   ): AsyncGenerator<RunEvent, AssistantMessage, void> {
     let partial: AssistantMessage = { role: 'assistant', content: '', toolCalls: [] }
-    const toolAcc = new Map<number, ToolCall>()
+    // P23.0: switch to `Map<string, ToolCall>` keyed by the OpenAI
+    // `id` of the tool call delta. Pre-P23.0 the map was
+    // `Map<number, ToolCall>` and `toolAcc.get(0)` / `set(0)` were
+    // hard-coded, so parallel tool-call deltas collapsed into a
+    // single entry (the last write won).
+    const toolAcc = new Map<string, ToolCall>()
     let modelFromStream: string | undefined
     let finishFromStream: AssistantMessage['finishReason'] | undefined
     let usageFromStream: AssistantMessage['usage'] | undefined
@@ -722,14 +743,12 @@ export class Agent {
             yield { type: 'text:delta', delta: ev.delta }
             break
           case 'tool_call_delta': {
-            // P23.0: the hard-coded `0` is replaced with `key`, which is
-            // the OpenAI `id` field on the delta event (or a fallback
-            // string for providers that omit it). P23.1 keeps the
-            // `Map<number, ToolCall>` shape by parsing the id to an
-            // integer index; P23.0 will switch the map to `Map<string,
-            // ToolCall>` to match the OpenAI spec directly.
-            const key = Number.parseInt(ev.id ?? '__default__', 10)
-            const existing = toolAcc.get(Number.isFinite(key) ? key : 0) ?? {
+            // P23.0: key by the OpenAI `id` (string), not the
+            // hard-coded `0`. Providers that omit `id` fall back to
+            // a stable per-delta synthetic key so a second call
+            // for the same tool id still gets the right entry.
+            const key = ev.id ?? `__index_${toolAcc.size}__`
+            const existing = toolAcc.get(key) ?? {
               id: '',
               name: '',
               arguments: {} as Record<string, unknown>,
@@ -739,11 +758,15 @@ export class Agent {
               name: ev.name ?? existing.name,
               arguments: mergeArgs(existing.arguments, ev.argumentsDelta),
             }
-            toolAcc.set(Number.isFinite(key) ? key : 0, merged)
+            toolAcc.set(key, merged)
             break
           }
           case 'tool_call_complete': {
-            toolAcc.set(toolAcc.size, ev.toolCall)
+            // P23.0: align with the delta path — key by the
+            // tool call's `id` so multiple tool calls in the same
+            // step coexist.
+            const key = ev.toolCall.id ?? `__complete_${toolAcc.size}__`
+            toolAcc.set(key, ev.toolCall)
             break
           }
           case 'message_complete':
@@ -752,7 +775,7 @@ export class Agent {
             if (ev.message.finishReason !== undefined) finishFromStream = ev.message.finishReason
             if (ev.message.usage !== undefined) usageFromStream = ev.message.usage
             if (ev.message.toolCalls.length > 0) {
-              ev.message.toolCalls.forEach((tc, i) => toolAcc.set(i, tc))
+              ev.message.toolCalls.forEach((tc, i) => toolAcc.set(tc.id ?? `__complete_${i}__`, tc))
             }
             break
           case 'reasoning_delta':
@@ -864,8 +887,9 @@ export class Agent {
     toolCall: ToolCall,
     signal: AbortSignal | undefined,
     ctx: MiddlewareContext,
+    sessionId: string,
   ): Promise<ToolResult> {
-    let call = async (): Promise<ToolResult> => this.dispatchToolCall(toolCall, signal)
+    let call = async (): Promise<ToolResult> => this.dispatchToolCall(toolCall, signal, sessionId)
 
     for (const m of [...middleware].reverse()) {
       if (!m.raw.wrapToolCall) continue
@@ -931,6 +955,7 @@ export class Agent {
   private async dispatchToolCall(
     call: ToolCall,
     signal: AbortSignal | undefined,
+    sessionId: string,
   ): Promise<ToolResult> {
     const tool = this.tools.get(call.name)
     if (!tool) {
@@ -944,7 +969,10 @@ export class Agent {
       const output = await tool.call(call.arguments, {
         cwd: this.cwd,
         signal: signal ?? new AbortController().signal,
-        sessionId: '',
+        // P23.0: thread the real sessionId so the tool can scope
+        // audit logs and per-session resources. Pre-refactor this
+        // was hard-coded to `''` (bug #6 in bug.md).
+        sessionId,
         log: {
           debug: (msg, meta) => this.logger.debug(msg, meta),
           info: (msg, meta) => this.logger.info(msg, meta),
