@@ -94,6 +94,27 @@ const stateFrom = (state: unknown): PlanMiddlewareState => {
   return state as PlanMiddlewareState
 }
 
+/**
+ * P23.3 — read the current PlanMiddlewareState and return both the
+ * snapshot and the typed `stateView.plan.set` writer. The pre-P23.3
+ * pattern (`state.plan = X` with a cast) mutated the snapshot but
+ * bypassed the schema guard; `set()` re-parses on every write.
+ */
+const stateViewFrom = (ctx: { readonly stateView?: Readonly<Record<string, unknown>> }): {
+  current: PlanMiddlewareState
+  set: (next: PlanMiddlewareState) => void
+} => {
+  const view = ctx.stateView?.plan as
+    | { current: PlanMiddlewareState; set: (next: PlanMiddlewareState) => void }
+    | undefined
+  if (!view) {
+    throw new Error(
+      'PlanMiddleware requires ctx.stateView.plan — agent.run must build the typed state surface (P23.3)',
+    )
+  }
+  return { current: stateFrom(view.current), set: view.set }
+}
+
 /** Create a plan/act/auto middleware instance. */
 export const createPlanMiddleware = (
   options: PlanMiddlewareOptions,
@@ -106,49 +127,56 @@ export const createPlanMiddleware = (
     stateSchema: PlanMiddlewareStateSchema,
     initialState,
     beforeModel: async (messages, ctx) => {
-      const state = stateFrom(ctx.state.plan)
+      const { current: state, set } = stateViewFrom(ctx)
       if (state.mode === 'act') return messages
       if (state.phase === 'planning') {
         if (options.planner) {
           const user = [...messages].reverse().find((m) => m.role === 'user')
           const goal = user && 'content' in user ? String(user.content) : 'plan task'
-          state.goal = goal
           const plan = await options.planner.plan(goal)
-          state.plan = plan
-          state.phase = state.mode === 'auto' ? 'acting' : 'done'
+          set({
+            ...state,
+            goal,
+            plan,
+            phase: state.mode === 'auto' ? 'acting' : 'done',
+          })
           options.planStore?.save(plan)
           if (state.mode === 'auto') {
             ctx.control.continueAfterModel = true
           }
           return [...messages, { role: 'system', content: planToContext(plan) }]
         }
-        state.goal = [...messages]
+        const goal = [...messages]
           .reverse()
           .find((m) => m.role === 'user' && 'content' in m)
           ?.content.toString()
+        set({ ...state, goal })
         return [...messages, { role: 'system', content: PLAN_PROMPT }]
       }
       if (state.mode === 'auto' && state.phase === 'acting' && state.plan) {
-        state.phase = 'done'
+        set({ ...state, phase: 'done' })
         return [...messages, { role: 'system', content: planToContext(state.plan) }]
       }
       return messages
     },
     afterModel: (response, ctx) => {
-      const state = stateFrom(ctx.state.plan)
+      const { current: state, set } = stateViewFrom(ctx)
       if (state.mode === 'act') return response
       if (state.phase !== 'planning') return response
 
       const goal = state.goal ?? 'plan task'
       const plan = parsePlanFromText(goal, response.content ?? '')
+      const nextPhase: PlanMiddlewareState['phase'] = state.mode === 'auto' ? 'acting' : 'done'
+
       if (plan) {
-        state.plan = plan
         options.planStore?.save(plan)
+        set({ ...state, plan, phase: nextPhase })
+      } else {
+        set({ ...state, phase: nextPhase })
       }
 
       // Plan mode must not execute tools even if the model tried.
       const planned = { ...response, toolCalls: [] }
-      state.phase = state.mode === 'auto' ? 'acting' : 'done'
       if (state.mode === 'auto') {
         ctx.control.continueAfterModel = true
       }

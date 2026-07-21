@@ -47,6 +47,7 @@ import type { ToolRegistry } from '../tools/index.js'
 import {
   type MiddlewareContext,
   MiddlewareError,
+  type MiddlewareStateView,
   type ParsedMiddleware,
   getAgentMiddleware,
 } from './middleware.js'
@@ -434,6 +435,10 @@ export class Agent {
     let lastMessage: AssistantMessage = { role: 'assistant', content: '', toolCalls: [] }
     const middleware = getAgentMiddleware(this)
     const middlewareState = this.createMiddlewareState(middleware)
+    // P23.3 — typed mutation surface for middleware state slices.
+    // Built once per run; the `set` callbacks close over
+    // `middlewareState` so writes persist across iterations.
+    const stateView = this.buildStateView(middleware, middlewareState)
 
     // P23.1: emit a run:start event. Hooks always; the run-event
     // channel only in stream mode.
@@ -462,14 +467,17 @@ export class Agent {
         )
         if (mode === 'stream') yield { type: 'text:start', iteration: iterations }
 
-        const ctx = this.middlewareContext({
-          sessionId,
-          iteration: iterations,
-          startedAt: Date.now(),
-          state: middlewareState,
-          control: middlewareControl,
-          signal,
-        })
+        const ctx = this.middlewareContext(
+          {
+            sessionId,
+            iteration: iterations,
+            startedAt: Date.now(),
+            state: middlewareState,
+            control: middlewareControl,
+            signal,
+          },
+          stateView,
+        )
 
         // Model call. P23.0 unifies the sync and stream paths so
         // `applyBeforeModel` and `applyAfterModel` run in both modes
@@ -649,14 +657,17 @@ export class Agent {
       await this.applyAfterRun(
         middleware,
         result,
-        this.middlewareContext({
-          sessionId,
-          iteration: iterations,
-          startedAt: Date.now(),
-          state: middlewareState,
-          control: { continueAfterModel: false },
-          signal,
-        }),
+        this.middlewareContext(
+          {
+            sessionId,
+            iteration: iterations,
+            startedAt: Date.now(),
+            state: middlewareState,
+            control: { continueAfterModel: false },
+            signal,
+          },
+          stateView,
+        ),
       )
 
       await saveCheckpointBestEffort({
@@ -817,8 +828,52 @@ export class Agent {
     return Object.fromEntries(middleware.map((m) => [m.name, m.initialState]))
   }
 
-  private middlewareContext(ctx: MiddlewareContext): MiddlewareContext {
-    return ctx
+  private middlewareContext(
+    ctx: MiddlewareContext,
+    stateView?: Readonly<Record<string, MiddlewareStateView<unknown>>>,
+  ): MiddlewareContext {
+    // P23.3 — attach the typed `stateView` map so middleware can
+    // mutate their own state slices via `ctx.stateView[name].set()`
+    // without resorting to the pre-P23.3 `state.plan = X` cast.
+    return stateView === undefined ? ctx : { ...ctx, stateView }
+  }
+
+  /**
+   * P23.3 — build a typed `stateView` map from the merged state
+   * dictionary. Each entry's `set()` callback is closed over the
+   * slice key and the owning middleware's `stateSchema`, so the
+   * mutation is enforced to live within its own slice and be
+   * schema-valid. Writes land in the same `middlewareState`
+   * dictionary the snapshot reads from, so the change persists
+   * across iterations.
+   */
+  private buildStateView(
+    middleware: ReadonlyArray<ParsedMiddleware>,
+    mergedState: Record<string, unknown>,
+  ): Record<string, MiddlewareStateView<unknown>> {
+    const out: Record<string, MiddlewareStateView<unknown>> = {}
+    for (const m of middleware) {
+      const key = m.name
+      out[key] = {
+        get current() {
+          return mergedState[key]
+        },
+        set: (next: unknown) => {
+          // Re-parse against the owning middleware's schema so a
+          // shape violation aborts the run (P19 rule 12).
+          const parsed = m.stateSchema.safeParse(next)
+          if (!parsed.success) {
+            throw new MiddlewareError(
+              `stateView[${key}].set() rejected by stateSchema`,
+              m.name,
+              parsed.error,
+            )
+          }
+          mergedState[key] = parsed.data
+        },
+      }
+    }
+    return out
   }
 
   private async applyBeforeModel(

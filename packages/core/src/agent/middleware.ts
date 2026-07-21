@@ -104,6 +104,15 @@ export interface MiddlewareControl {
  * may only read/write its own slice (`state[this.name]`); writing any
  * other key throws `ConfigError` at runtime (P19.0 defensive check,
  * P19-DESIGN.md §1.2 last bullet).
+ *
+ * P23.3 — `stateView` is the typed mutation surface. Each middleware
+ * owns `stateView[this.name]`, which exposes a `current` snapshot and
+ * a `set(next)` writer that (a) re-parses `next` against the owning
+ * middleware's `stateSchema`, throwing `MiddlewareError` on parse
+ * failure, and (b) writes back into the agent's merged middleware
+ * state so the change persists across iterations. The pre-P23.3
+ * workaround (`state.plan = X` with a cast) is a footgun: TypeScript
+ * lies about readonliness and there is no schema enforcement.
  */
 export interface MiddlewareContext {
   /** Session id (UUID v4). Stable across the run. */
@@ -118,6 +127,19 @@ export interface MiddlewareContext {
    * `stateSchema`.
    */
   readonly state: Readonly<Record<string, unknown>>
+  /**
+   * P23.3 — typed mutation surface for middleware state. Indexed by
+   * middleware `name`; each entry wraps `state[this.name]` and
+   * provides a `set()` writer that re-parses against the owning
+   * middleware's `stateSchema` and persists across iterations.
+   *
+   * Reads of `stateView[otherMiddleware]` are permitted by the type
+   * system (P19 design: middleware state is namespaced only on
+   * writes). Writes via `stateView[otherMiddleware].set(...)` will
+   * fail at runtime with `MiddlewareError` because each `set`
+   * closure is bound to its own slice key.
+   */
+  readonly stateView?: Readonly<Record<string, MiddlewareStateView<unknown>>>
   /** Mutable control flags for the current Agent.run iteration. */
   readonly control: MiddlewareControl
   /** Abort signal. Middleware can check `signal.aborted`. */

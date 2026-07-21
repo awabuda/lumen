@@ -70,6 +70,30 @@ const stateFrom = (state: unknown): ReflectionMiddlewareState => {
   return state as ReflectionMiddlewareState
 }
 
+/**
+ * P23.3 — typed read/write seam for ReflectionMiddlewareState. The
+ * pre-P23.3 pattern (`state.stepCount += 1`) bypassed the schema
+ * guard; `set()` re-parses on every write so a shape violation
+ * aborts the run.
+ */
+const stateViewFrom = (ctx: { readonly stateView?: Readonly<Record<string, unknown>> }): {
+  current: ReflectionMiddlewareState
+  set: (next: ReflectionMiddlewareState) => void
+} => {
+  const view = ctx.stateView?.reflection as
+    | {
+        current: ReflectionMiddlewareState
+        set: (next: ReflectionMiddlewareState) => void
+      }
+    | undefined
+  if (!view) {
+    throw new Error(
+      'ReflectionMiddleware requires ctx.stateView.reflection — agent.run must build the typed state surface (P23.3)',
+    )
+  }
+  return { current: stateFrom(view.current), set: view.set }
+}
+
 const hashReflectionId = (sessionId: string, iterations: number): string =>
   `reflection-${sessionId}-${iterations}`
 
@@ -86,20 +110,22 @@ export const createReflectionMiddleware = (
     stateSchema: ReflectionStateSchema,
     initialState: { stepCount: 0 },
     afterModel: (message, ctx) => {
-      const state = stateFrom(ctx.state.reflection)
-      state.stepCount += 1
+      const { current: state, set } = stateViewFrom(ctx)
+      const nextCount = state.stepCount + 1
       const messages = [message]
       const reflection = ruleBasedReflectMessages(messages)
-      if (state.stepCount % stepInterval === 0) {
-        state.last = reflection
+      const nextState: ReflectionMiddlewareState = {
+        stepCount: nextCount,
+        last: nextCount % stepInterval === 0 ? reflection : state.last,
       }
+      set(nextState)
       return inline ? withInlineConfidence(message, reflection.confidence) : message
     },
     afterRun: async (result: MiddlewareRunResult, ctx) => {
       if (runEnd === 'off' || !options.memory) return
       const reflection = ruleBasedReflectMessages(result.messages)
-      const state = stateFrom(ctx.state.reflection)
-      state.last = reflection
+      const { current: state, set } = stateViewFrom(ctx)
+      set({ ...state, last: reflection })
       await options.memory.put({
         id: hashReflectionId(result.sessionId, result.iterations),
         kind: 'reflection',
