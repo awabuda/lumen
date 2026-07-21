@@ -140,6 +140,24 @@ export interface MiddlewareContext {
    * closure is bound to its own slice key.
    */
   readonly stateView?: Readonly<Record<string, MiddlewareStateView<unknown>>>
+  /**
+   * P23.4 — full conversation history as seen by the agent loop
+   * at the point the hook fires. For `afterModel`, this is the
+   * history including the just-produced `response`. For
+   * `beforeModel`, this is the history about to be sent (same
+   * shape as the `messages` argument).
+   *
+   * Reflection (and other history-aware middleware) reads this
+   * instead of synthesising a single-element array. The
+   * pre-P23.4 workaround (`[message]` in reflection's
+   * `afterModel`) lost all the signals that depend on prior
+   * turns (assistant count, tool count, error pattern frequency).
+   *
+   * Optional for back-compat: when omitted, history-aware
+   * middleware must fall back to a single-message view (or
+   * throw — reflection.ts throws to surface the misconfig).
+   */
+  readonly history?: ReadonlyArray<Message>
   /** Mutable control flags for the current Agent.run iteration. */
   readonly control: MiddlewareControl
   /** Abort signal. Middleware can check `signal.aborted`. */

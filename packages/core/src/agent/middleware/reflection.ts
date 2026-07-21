@@ -112,8 +112,20 @@ export const createReflectionMiddleware = (
     afterModel: (message, ctx) => {
       const { current: state, set } = stateViewFrom(ctx)
       const nextCount = state.stepCount + 1
-      const messages = [message]
-      const reflection = ruleBasedReflectMessages(messages)
+      // P23.4 — reflection now reads the full conversation history
+      // (prior turns + the just-produced message) so its signals
+      // (assistant count, tool count, error-pattern frequency)
+      // reflect the entire run, not the single turn. The
+      // pre-P23.4 fallback `[message]` collapsed the whole run to
+      // a single message and made every signal degenerate.
+      const history =
+        ctx.history ??
+        (() => {
+          throw new Error(
+            'ReflectionMiddleware requires ctx.history — agent.run must attach the full conversation history (P23.4)',
+          )
+        })()
+      const reflection = ruleBasedReflectMessages(history)
       const nextState: ReflectionMiddlewareState = {
         stepCount: nextCount,
         last: nextCount % stepInterval === 0 ? reflection : state.last,
@@ -123,7 +135,15 @@ export const createReflectionMiddleware = (
     },
     afterRun: async (result: MiddlewareRunResult, ctx) => {
       if (runEnd === 'off' || !options.memory) return
-      const reflection = ruleBasedReflectMessages(result.messages)
+      // P23.4 — same full-history read on the afterRun hook.
+      const history =
+        ctx.history ??
+        (() => {
+          throw new Error(
+            'ReflectionMiddleware requires ctx.history — agent.run must attach the full conversation history (P23.4)',
+          )
+        })()
+      const reflection = ruleBasedReflectMessages(history)
       const { current: state, set } = stateViewFrom(ctx)
       set({ ...state, last: reflection })
       await options.memory.put({

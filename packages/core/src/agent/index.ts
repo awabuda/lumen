@@ -489,7 +489,10 @@ export class Agent {
         // contract. P23.0 documents the gap; P24 will add a
         // `wrapModelStream` middleware that operates on the
         // `AsyncGenerator<StreamEvent, message>` shape.
-        const modelMessages = await this.applyBeforeModel(middleware, messages, ctx)
+        const modelMessages = await this.applyBeforeModel(middleware, messages, {
+          ...ctx,
+          history: messages,
+        })
         let responseMessage: AssistantMessage
         if (mode === 'sync') {
           const assistantMessage = await this.callProviderWithMiddleware(
@@ -497,9 +500,17 @@ export class Agent {
             modelMessages,
             budget,
             signal,
-            ctx,
+            // P23.4 — wrapModelCall also sees history (the
+            // pre-model-call messages).
+            { ...ctx, history: messages },
           )
-          responseMessage = await this.applyAfterModel(middleware, assistantMessage, ctx)
+          // P23.4 — attach the post-response history so middleware
+          // (notably reflection) can read signals across the whole
+          // run, not just the single turn.
+          responseMessage = await this.applyAfterModel(middleware, assistantMessage, {
+            ...ctx,
+            history: [...messages, assistantMessage],
+          })
         } else {
           // P23.0: stream path now respects `applyBeforeModel` (the
           // `modelMessages` returned above is what we pass to the
@@ -518,13 +529,17 @@ export class Agent {
             }
             yield next.value
           }
+          // P23.4 — same history-attach on the stream path.
           if (lastValue === undefined) {
             throw new ProviderError(`Provider ${this.provider.id} stream yielded no events`, {
               providerId: this.provider.id,
               retryable: true,
             })
           }
-          responseMessage = await this.applyAfterModel(middleware, lastValue, ctx)
+          responseMessage = await this.applyAfterModel(middleware, lastValue, {
+            ...ctx,
+            history: [...messages, lastValue],
+          })
         }
 
         if (responseMessage.usage) {
@@ -668,6 +683,8 @@ export class Agent {
           },
           stateView,
         ),
+        // P23.4 — afterRun sees the full final history.
+        messages,
       )
 
       await saveCheckpointBestEffort({
@@ -965,11 +982,17 @@ export class Agent {
     middleware: ReadonlyArray<ParsedMiddleware>,
     result: AgentRunResult,
     ctx: MiddlewareContext,
+    // P23.4 — full final history. The result object already
+    // carries `messages` (the same reference) but threading the
+    // explicit argument lets the call site pass a richer ctx
+    // (history already attached) without forcing every afterRun
+    // implementation to read `result.messages`.
+    history: ReadonlyArray<Message>,
   ): Promise<void> {
     for (const m of middleware) {
       if (!m.raw.afterRun) continue
       try {
-        await m.raw.afterRun(result, ctx)
+        await m.raw.afterRun(result, { ...ctx, history })
       } catch (err) {
         throw new MiddlewareError('afterRun failed', m.name, err)
       }
