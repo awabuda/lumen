@@ -13,8 +13,8 @@ import { z } from 'zod'
 import type { BaseProvider } from '../../message/provider.js'
 import { BaseTool, type ToolContext, type ToolRisk } from '../../tools/index.js'
 import type { AgentMiddleware } from '../middleware.js'
-import { type SubAgentSpec, SubAgentSpecSchema, createSubAgentFromSpec } from '../sub-agent.js'
 import { createHandoffSubAgent } from '../sub-agent-handoff.js'
+import { type SubAgentSpec, SubAgentSpecSchema, createSubAgentFromSpec } from '../sub-agent.js'
 
 /** Stable tool name for the sub-agent dispatch tool. */
 export const SUB_AGENT_TOOL_NAME = 'task' as const
@@ -27,6 +27,14 @@ export interface SubAgentMiddlewareOptions {
     readonly tools: import('../../tools/index.js').ToolRegistry
     readonly model?: string
     readonly cwd?: string
+    /**
+     * P23.2 — the parent's middleware list. When present, spawned
+     * sub-agents route through `createAgent` so the parent's
+     * beforeModel / afterModel / wrapToolCall / state-injection
+     * surface propagates to the child agent. Omitted = sub-agent
+     * has no middleware (preserves pre-P23.2 behaviour).
+     */
+    readonly middleware?: ReadonlyArray<AgentMiddleware>
   }
   /** Named sub-agent specs available to the parent. */
   readonly specs: ReadonlyArray<SubAgentSpec>
@@ -161,18 +169,21 @@ export const createSubAgentMiddleware = (
           ...(parsed.parent.model ? { model: parsed.parent.model } : {}),
           ...(parsed.parent.cwd ? { cwd: parsed.parent.cwd } : {}),
         }
+        // P23.2 — forward the parent's middleware list so spawned
+        // sub-agents inherit the same middleware surface. Both the
+        // plain and handoff paths consume the optional 5th arg.
+        const parentMiddleware = parsed.parent.middleware
         if (parsed.enableHandoff) {
           const handoff = createHandoffSubAgent({
             parent: parentConfig,
             spec,
             prompt: parsedInput.data.prompt,
             maxIterations: parsed.maxIterations,
+            parentMiddleware,
           })
           const handoffResult = await handoff.run()
           const text = formatOutput(handoffResult.result.finalMessage.content ?? '')
-          const handoffSuffix = handoffResult.handoff
-            ? formatHandoff(handoffResult.handoff)
-            : ''
+          const handoffSuffix = handoffResult.handoff ? formatHandoff(handoffResult.handoff) : ''
           return {
             toolCallId: toolCall.id,
             isError: false,
@@ -184,6 +195,7 @@ export const createSubAgentMiddleware = (
           spec,
           parsedInput.data.prompt,
           parsed.maxIterations,
+          parentMiddleware,
         )
         const result = await runner.run()
         return {

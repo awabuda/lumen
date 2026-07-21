@@ -16,10 +16,11 @@
 
 import { z } from 'zod'
 
+import { BaseTool, type ToolContext, ToolRegistry } from '../tools/index.js'
 import type { AgentRunResult } from './index.js'
+import type { AgentMiddleware } from './middleware.js'
 import { type SubAgentSpec, SubAgentSpecSchema, createSubAgentFromSpec } from './sub-agent.js'
 import type { SubAgentRunner } from './sub-agent.js'
-import { BaseTool, type ToolContext, ToolRegistry } from '../tools/index.js'
 
 /** Stable tool name for the handoff dispatch tool. */
 export const HANDOFF_TOOL_NAME = 'handoff' as const
@@ -68,10 +69,24 @@ export interface HandoffSubAgentOptions {
     readonly tools: import('../tools/index.js').ToolRegistry
     readonly model?: string
     readonly cwd?: string
+    /**
+     * P23.2 — the parent's middleware list. Forwarded to the spawned
+     * sub-agent so the handoff path inherits the same middleware
+     * surface as the parent. Omitted = sub-agent has no middleware
+     * (preserves pre-P23.2 behaviour).
+     */
+    readonly middleware?: ReadonlyArray<AgentMiddleware>
   }
   readonly spec: SubAgentSpec
   readonly prompt: string
   readonly maxIterations?: number
+  /**
+   * P23.2 — convenience field. When set, forwarded to the spawned
+   * sub-agent's middleware list. Takes precedence over
+   * `parent.middleware` so callers can override without mutating the
+   * parent object. Most callers leave this undefined.
+   */
+  readonly parentMiddleware?: ReadonlyArray<AgentMiddleware>
 }
 
 const HandoffResultSchema = z.object({
@@ -108,9 +123,7 @@ export interface HandoffSubAgentRunner {
 }
 
 /** Create a sub-agent that can hand control back to a parent. */
-export const createHandoffSubAgent = (
-  options: HandoffSubAgentOptions,
-): HandoffSubAgentRunner => {
+export const createHandoffSubAgent = (options: HandoffSubAgentOptions): HandoffSubAgentRunner => {
   const spec = SubAgentSpecSchema.parse(options.spec)
   const parent = options.parent
   const maxIterations = options.maxIterations ?? 10
@@ -129,11 +142,16 @@ export const createHandoffSubAgent = (
       }
       if (parent.model !== undefined) parentConfig.model = parent.model
       if (parent.cwd !== undefined) parentConfig.cwd = parent.cwd
+      // P23.2 — resolve middleware list: top-level option wins, then
+      // parent.middleware. Undefined / empty both pass through to
+      // createSubAgentFromSpec which no-ops when the list is empty.
+      const parentMiddleware = options.parentMiddleware ?? parent.middleware
       const runner = createSubAgentFromSpec(
         parentConfig,
         spec,
         options.prompt,
         maxIterations,
+        parentMiddleware,
       )
       const result = await runner.run()
       return { task: { spec, prompt: options.prompt }, result, handoff: findHandoff(result) }
@@ -181,6 +199,13 @@ export interface SupervisorSubAgentOptions {
     readonly tools: import('../tools/index.js').ToolRegistry
     readonly model?: string
     readonly cwd?: string
+    /**
+     * P23.2 — the parent's middleware list. Forwarded to every spawned
+     * sub-agent so the supervisor chain inherits the parent's
+     * middleware surface. Omitted = sub-agents have no middleware
+     * (preserves pre-P23.2 behaviour).
+     */
+    readonly middleware?: ReadonlyArray<AgentMiddleware>
   }
   readonly tasks: ReadonlyArray<{ spec: SubAgentSpec; prompt: string }>
   readonly maxIterations?: number
@@ -256,9 +281,7 @@ const judgeTask = async (
     temperature: 0,
   })
   const content = response.message.content ?? ''
-  const parsed = SupervisorDecisionToolInputSchema.safeParse(
-    extractDecisionFromText(content),
-  )
+  const parsed = SupervisorDecisionToolInputSchema.safeParse(extractDecisionFromText(content))
   if (parsed.success) return parsed.data.decision
   return 'continue'
 }
@@ -309,6 +332,7 @@ export const createSupervisorSubAgent = (
           task.spec,
           task.prompt,
           options.subMaxIterations ?? options.maxIterations ?? 10,
+          options.parent.middleware,
         )
         const result = await runner.run()
         const decision = await judgeTask(judge, judgeModel, { result })

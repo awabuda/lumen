@@ -13,7 +13,9 @@ import { z } from 'zod'
 
 import { Agent } from '../index.js'
 import { ToolRegistry } from '../tools/index.js'
+import { createAgent } from './factory.js'
 import type { AgentConfig, AgentRunOptions, AgentRunResult, RunEvent } from './index.js'
+import type { AgentMiddleware } from './middleware.js'
 
 /** Zod schema for {@link SubAgentOptions}. */
 export const SubAgentOptionsSchema = z
@@ -88,6 +90,11 @@ const buildRestrictedRegistry = (
   return restricted
 }
 
+/** Build a one-shot sub-agent `Agent`. P23.2 — wires the parent's
+ *  middleware list through `createAgent` so sub-agent runs inherit
+ *  the same beforeModel / afterModel / wrapToolCall / state-injection
+ *  surface the parent has. When `parentMiddleware` is undefined or
+ *  empty, the result is identical to a plain `new Agent({...})`. */
 const buildAgent = (
   parent: AgentConfig,
   goal: string,
@@ -96,27 +103,53 @@ const buildAgent = (
     readonly systemPrompt?: string
     readonly model?: string
   },
+  parentMiddleware?: ReadonlyArray<AgentMiddleware>,
 ): Agent => {
   const tools = options.allowedTools
     ? buildRestrictedRegistry(parent.tools, options.allowedTools)
     : parent.tools
 
-  return new Agent({
+  const baseConfig: AgentConfig = {
     ...parent,
     tools,
     model: options.model ?? parent.model,
     systemPrompt: options.systemPrompt ?? SUB_AGENT_SYSTEM_PROMPT(goal),
-  })
+  }
+
+  // P23.2: route through createAgent so the parent middleware list
+  // (P19.0.3 symbol-keyed attachment) propagates to the child agent.
+  // The factory validates duplicate names at construction time and
+  // is a no-op when the list is empty, so this is a strict superset
+  // of the previous `new Agent(...)` path.
+  if (parentMiddleware && parentMiddleware.length > 0) {
+    return createAgent({ ...baseConfig, middleware: parentMiddleware })
+  }
+  return new Agent(baseConfig)
 }
 
-/** Create a one-shot sub-agent runner from a parent config + options. */
-export const createSubAgent = (parent: AgentConfig, options: SubAgentOptions): SubAgentRunner => {
+/** Create a one-shot sub-agent runner from a parent config + options.
+ *
+ *  P23.2 — the optional `parentMiddleware` list is forwarded to
+ *  {@link buildAgent} so sub-agent runs inherit the parent's
+ *  middleware. When omitted, the sub-agent behaves exactly like the
+ *  pre-P23.2 implementation (no middleware).
+ */
+export const createSubAgent = (
+  parent: AgentConfig,
+  options: SubAgentOptions,
+  parentMiddleware?: ReadonlyArray<AgentMiddleware>,
+): SubAgentRunner => {
   const parsed = SubAgentOptionsSchema.parse(options)
-  const agent = buildAgent(parent, parsed.goal, {
-    allowedTools: parsed.allowedTools,
-    systemPrompt: parsed.systemPrompt,
-    model: parsed.model,
-  })
+  const agent = buildAgent(
+    parent,
+    parsed.goal,
+    {
+      allowedTools: parsed.allowedTools,
+      systemPrompt: parsed.systemPrompt,
+      model: parsed.model,
+    },
+    parentMiddleware,
+  )
   const runOptions: AgentRunOptions = {
     userMessage: parsed.goal,
     maxIterations: parsed.maxIterations ?? 10,
@@ -133,19 +166,30 @@ export const createSubAgent = (parent: AgentConfig, options: SubAgentOptions): S
   }
 }
 
-/** Create a one-shot sub-agent runner from a reusable spec + prompt. */
+/** Create a one-shot sub-agent runner from a reusable spec + prompt.
+ *
+ *  P23.2 — the optional `parentMiddleware` list is forwarded so the
+ *  spawned sub-agent inherits the parent's middleware surface
+ *  (P19.0.3 symbol-keyed attachment). When omitted, the sub-agent
+ *  behaves exactly like the pre-P23.2 implementation.
+ */
 export const createSubAgentFromSpec = (
   parent: AgentConfig,
   spec: SubAgentSpec,
   prompt: string,
   maxIterations = 10,
+  parentMiddleware?: ReadonlyArray<AgentMiddleware>,
 ): SubAgentRunner => {
   const parsed = SubAgentSpecSchema.parse(spec)
-  return createSubAgent(parent, {
-    goal: prompt,
-    maxIterations,
-    allowedTools: parsed.tools,
-    systemPrompt: parsed.systemPrompt,
-    model: parsed.model,
-  })
+  return createSubAgent(
+    parent,
+    {
+      goal: prompt,
+      maxIterations,
+      allowedTools: parsed.tools,
+      systemPrompt: parsed.systemPrompt,
+      model: parsed.model,
+    },
+    parentMiddleware,
+  )
 }
