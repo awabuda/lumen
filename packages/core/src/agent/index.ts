@@ -204,11 +204,17 @@ When you have a final answer, state it directly.`
  * key holds the concatenated delta when we know parsing is unsafe yet.
  */
 const mergeArgs = (
-  existing: Record<string, unknown>,
+  existing: Record<PropertyKey, unknown>,
   delta: string | undefined,
-): Record<string, unknown> => {
+): Record<PropertyKey, unknown> => {
   if (delta === undefined || delta.length === 0) return existing
-  const rawKey = '__raw__'
+  // P23.9 (fix #11) — use a Symbol for the raw-string slot instead
+  // of a string key. The previous '__raw__' key could collide with
+  // a real tool argument named '__raw__' (OpenAI's tools spec does
+  // not reserve the name, and a 3rd-party tool with such an arg
+  // would silently overwrite our delta-accumulator). A Symbol key
+  // cannot collide with any string-keyed property.
+  const rawKey = Symbol.for('@lumen/core/merge-args-raw')
   const prior = typeof existing[rawKey] === 'string' ? (existing[rawKey] as string) : ''
   return { ...existing, [rawKey]: prior + delta }
 }

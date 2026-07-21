@@ -87,8 +87,11 @@ describe('P23.6 — cost + time limits wired', () => {
     // Provider: 1st response with `echo` tool call (forces
     // iteration 2 because echo is registered), 2nd response
     // with another echo (forces iteration 3). With timeLimitMs:
-    // 0 the budget check at the top of every iteration after
-    // the first throws BudgetExceededError.
+    // -1 (already-elapsed guarantee) the budget check at the
+    // top of every iteration after the first throws
+    // BudgetExceededError. timeLimitMs: 0 would race against
+    // the `>` comparison when the wall-clock and the budget
+    // are set in the same millisecond.
     const provider = buildProvider([
       {
         role: 'assistant',
@@ -106,7 +109,7 @@ describe('P23.6 — cost + time limits wired', () => {
       provider,
       tools: new ToolRegistry().register(new EchoTool()),
     })
-    await expect(agent.run({ userMessage: 'hi', timeLimitMs: 0 })).rejects.toThrow(
+    await expect(agent.run({ userMessage: 'hi', timeLimitMs: -1 })).rejects.toThrow(
       BudgetExceededError,
     )
   })

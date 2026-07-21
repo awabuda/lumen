@@ -97,9 +97,18 @@ describe('BasePlanner.revise (default impl)', () => {
 })
 
 describe('LLMPlanner', () => {
+  // P23.9 (fix #31) — match the real BaseProvider.chat
+  // signature (ChatRequest → ChatResponse) instead of the
+  // previous local-only `{ content: string }` shape.
   const fakeProvider = (response: string) => ({
-    async chat(_opts: { model: string; messages: Array<{ role: string; content: string }> }) {
-      return { content: response }
+    async chat(_request: {
+      model: string
+      messages: ReadonlyArray<{ role: string; content: string }>
+    }) {
+      return {
+        message: { role: 'assistant', content: response, toolCalls: [] },
+        latencyMs: 0,
+      }
     },
   })
 

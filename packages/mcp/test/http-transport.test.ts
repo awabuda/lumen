@@ -206,12 +206,30 @@ describe('HttpMcpTransport — lifecycle', () => {
     expect(transport.name).toBe('http:https://mcp.example.com/v1/mcp')
   })
 
-  it('throws if the runtime has no fetch and none was injected', () => {
+  it('throws if the runtime has no fetch and none was injected', async () => {
+    // P23.9 (fix #27) — pre-fix the constructor threw at
+    // construction time when global fetch was undefined.
+    // Post-fix the constructor stores the (undefined)
+    // implementation and the error surfaces on the first
+    // call that actually invokes fetch (sendRaw inside the
+    // initialize handshake). We assert the error still
+    // surfaces, just from a different code path. We use a
+    // thin subclass to reach the protected `sendRaw`.
     const originalFetch = (globalThis as { fetch?: typeof fetch }).fetch
     try {
       // @ts-expect-error — temporarily strip global fetch
       globalThis.fetch = undefined
-      expect(() => new HttpMcpTransport({ url: 'http://x' })).toThrow(/global fetch/)
+      const transport = new HttpMcpTransport({ url: 'http://x' })
+      await transport.open()
+      // Reaching into the protected API for the assertion
+      // only — production callers go through `request()` /
+      // `notify()` which route through sendRaw.
+      const raw = (
+        transport as unknown as {
+          sendRaw(req: unknown): Promise<void>
+        }
+      ).sendRaw.bind(transport)
+      await expect(raw({ jsonrpc: '2.0', id: 1, method: 'ping' })).rejects.toThrow(/fetch/i)
     } finally {
       ;(globalThis as { fetch?: typeof fetch }).fetch = originalFetch
     }

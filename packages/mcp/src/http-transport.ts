@@ -126,19 +126,17 @@ export class HttpMcpTransport extends McpTransport {
     this.url = options.url
     this.apiKey = options.apiKey
     this.customHeaders = options.headers ?? {}
-    // Resolve the fetch implementation up-front so we can give a
-    // useful error if the runtime has no built-in fetch (rare,
-    // but possible on stripped-down Node distributions). Doing
-    // this BEFORE the bind also avoids the cryptic
-    // "Cannot read properties of undefined (reading 'bind')" that
-    // we'd otherwise throw.
-    const resolved = options.fetchImpl ?? globalThis.fetch
-    if (typeof resolved !== 'function') {
-      throw new McpTransportError(
-        'HttpMcpTransport requires a global fetch; pass `fetchImpl` if you target a runtime without one',
-      )
-    }
-    this.fetchImpl = resolved.bind(globalThis) as typeof fetch
+    // P23.9 (fix #27) — lazy-validate the fetch implementation
+    // on first call instead of throwing in the constructor.
+    // Pre-P23.9 a misconfigured transport (e.g. no global
+    // fetch on a stripped-down Node distribution) threw at
+    // construction time, making it impossible to register
+    // the transport as part of a config-warming pass or to
+    // swap in a `fetchImpl` lazily after the constructor
+    // returned. The first-call validation surfaces the same
+    // error at the call site where the user can actually do
+    // something about it.
+    this.fetchImpl = options.fetchImpl ?? globalThis.fetch
   }
 
   public get name(): string {

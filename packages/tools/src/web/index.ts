@@ -365,8 +365,14 @@ export class WebFetchTool extends BaseTool {
   protected override async execute(input: unknown, _ctx: ToolContext): Promise<unknown> {
     const parsed = WebFetchInputSchema.parse(input)
     const text = await this.provider.fetch(parsed.url, parsed.maxBytes)
+    // P23.9 (fix #41) — drop the redundant `text.slice(0,
+    // parsed.maxBytes)`. `readCapped` already truncates to
+    // maxBytes and `truncated` is computed against the same
+    // threshold. The second slice re-checks the already-capped
+    // string and produces a misleading `truncated: false` when
+    // the input was exactly at the boundary.
     return WebFetchOutputSchema.parse({
-      text: text.slice(0, parsed.maxBytes),
+      text,
       truncated: text.length > parsed.maxBytes,
     })
   }

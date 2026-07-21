@@ -564,16 +564,22 @@ export class OpenAICompatibleProvider extends BaseProvider {
     // Emit completed tool calls
     const completedToolCalls: ToolCall[] = []
     for (const [, acc] of [...toolAcc.entries()].sort((a, b) => a[0] - b[0])) {
-      if (!acc.id || !acc.name) {
-        // Some servers omit id on intermediate chunks; bail rather than emit a
-        // broken tool call.
-        throw new ProviderError(
-          'OpenAI-compatible provider streamed a tool call without an id or name',
-          {
-            providerId: this.id,
-            retryable: false,
-          },
-        )
+      // P23.9 (fix #28) — generate a UUID when the upstream
+      // omits `id` on the final stream chunk. Pre-P23.9 the
+      // provider threw ProviderError on a missing id, which
+      // turned a recoverable server-side omission into a
+      // hard failure. Some OpenAI-compatible servers (vLLM
+      // 0.4.x, llama.cpp server) stream the id only on the
+      // first chunk; if a chunk arrives out of order the id
+      // may not have been seen by message_complete time.
+      if (!acc.name) {
+        throw new ProviderError('OpenAI-compatible provider streamed a tool call without a name', {
+          providerId: this.id,
+          retryable: false,
+        })
+      }
+      if (!acc.id) {
+        acc.id = `tc_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
       }
       const toolCall: ToolCall = {
         id: acc.id,

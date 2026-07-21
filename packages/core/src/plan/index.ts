@@ -17,6 +17,13 @@
 
 import { z } from 'zod'
 import { ProviderError } from '../errors/index.js'
+import type { Message } from '../message/index.js'
+// P23.9 (fix #31) — re-use BaseProvider's chat signature so
+// the local MinimalProvider tracks upstream exactly. The
+// previous inline `{ model, messages, temperature? }` shape
+// drifted from the real BaseProvider.chat signature and let
+// mock providers pass at compile time but fail at runtime.
+import type { ChatRequest, ChatResponse } from '../message/provider.js'
 
 /** A single step in a plan. */
 export interface PlanStep {
@@ -70,6 +77,14 @@ export const PlanSchema = z
     notes: z.string().optional(),
   })
   .strict()
+  // P23.9 (fix #29) — a plan is either approved OR rejected
+  // (mutex). The previous schema allowed both timestamps to
+  // be set, which contradicts the type's "PlanDecision"
+  // discriminated union at the consumer level and produced
+  // ambiguous audit trails.
+  .refine((p) => !(p.approvedAt !== undefined && p.rejectedAt !== undefined), {
+    message: 'Plan cannot have both approvedAt and rejectedAt set',
+  })
 
 /** The agent's current mode. */
 export type Mode = 'plan' | 'act' | 'auto'
@@ -136,13 +151,15 @@ export const StaticPlanner = createStaticPlanner
 // LLM planner helper — asks the LLM to generate a plan
 // ---------------------------------------------------------------------------
 
-/** Minimal provider shape — mirrors @lumen/core's BaseProvider. */
+/** Minimal provider shape — mirrors @lumen/core's BaseProvider.
+ *  P23.9 (fix #31) — re-uses BaseProvider.chat's signature so
+ *  mocks track upstream exactly. Pre-P23.9 the inline shape
+ *  omitted `messages` typing, `temperature`, and ChatResponse
+ *  fields; a provider that satisfied the local interface
+ *  could fail at runtime when handed to the real Agent.
+ */
 interface MinimalProvider {
-  chat(opts: {
-    model: string
-    messages: Array<{ role: string; content: string }>
-    temperature?: number
-  }): Promise<{ content: string }>
+  chat(request: ChatRequest): Promise<ChatResponse>
 }
 
 /** Zod schema for {@link LLMPlannerOptions}. */
@@ -209,11 +226,11 @@ export const createLLMPlanner = (options: LLMPlannerOptions): BasePlanner => {
 
       const response = await provider.chat({
         model,
-        messages: [{ role: 'user', content: prompt }],
+        messages: [{ role: 'user', content: prompt } satisfies Message],
         temperature: 0,
       })
 
-      const raw = extractPlanJson(response.content)
+      const raw = extractPlanJson(response.message.content ?? '')
       const parsed = JSON.parse(raw) as { steps: Array<Partial<PlanStep>> }
       const steps = parsePlanSteps(parsed.steps)
 
@@ -238,11 +255,11 @@ export const createLLMPlanner = (options: LLMPlannerOptions): BasePlanner => {
 
       const response = await provider.chat({
         model,
-        messages: [{ role: 'user', content: prompt }],
+        messages: [{ role: 'user', content: prompt } satisfies Message],
         temperature: 0,
       })
 
-      const raw = extractPlanJson(response.content)
+      const raw = extractPlanJson(response.message.content ?? '')
       const parsed = JSON.parse(raw) as { steps: Array<Partial<PlanStep>> }
       const steps = parsePlanSteps(parsed.steps)
 

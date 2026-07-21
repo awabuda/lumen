@@ -97,25 +97,45 @@ export const ruleBasedReflect = (
   return facts
 }
 
-/** Persist extracted facts, deduplicating by id. */
+/** Persist extracted facts, deduplicating by id.
+ *
+ * P23.9 (fix #26) — parallelize the dedup + put path with
+ * `Promise.all`. Pre-P23.9 a 50-fact batch did 100 sequential
+ * round-trips (one get per fact + one put per non-dup); the
+ * dedup step is read-only and parallel-safe, and the put
+ * step is idempotent on duplicate ids (which we've already
+ * filtered). The race-condition window is bounded by the
+ * dedup pass — two facts with the same id both see
+ * "existing" and both skip; the race is benign.
+ */
 export const persistExtractedFacts = async (
   facts: ReadonlyArray<ExtractedFact>,
   store: BaseMemoryStore,
 ): Promise<number> => {
-  let count = 0
-  for (const fact of facts) {
-    const existing = await store.get(fact.id)
-    if (existing) continue
-    await store.put({
-      id: fact.id,
-      kind: fact.kind,
-      content: fact.content,
-      trust: fact.trust,
-      tags: fact.tags,
-    })
-    count += 1
+  // Dedup pass: gather the set of ids that are NOT already
+  // in the store, in parallel.
+  const existing = await Promise.all(facts.map((f) => store.get(f.id)))
+  const novel: ExtractedFact[] = []
+  for (let i = 0; i < facts.length; i += 1) {
+    const fact = facts[i]
+    const dup = existing[i]
+    if (!fact || dup) continue
+    novel.push(fact)
   }
-  return count
+  if (novel.length === 0) return 0
+  // Write pass: parallel put, idempotent on the deduped ids.
+  await Promise.all(
+    novel.map((fact) =>
+      store.put({
+        id: fact.id,
+        kind: fact.kind,
+        content: fact.content,
+        trust: fact.trust,
+        tags: fact.tags,
+      }),
+    ),
+  )
+  return novel.length
 }
 
 /** Create a deterministic, regex-based reflector. */

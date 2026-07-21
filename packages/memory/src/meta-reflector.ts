@@ -83,7 +83,12 @@ export interface ClusterOptions {
   readonly limit?: number
 }
 
-const ClusterOptionsSchema = z
+// P23.9 (fix #30) — export the schema. The previous declaration
+// was `const` (file-private); callers that wanted to re-validate
+// options at their boundary (e.g. a CLI subcommand) had no way
+// to import the schema. Other schema exports in this codebase
+// follow the same convention (`export const XSchema = z...`).
+export const ClusterOptionsSchema = z
   .object({
     kind: z.string().min(1).optional(),
     similarityThreshold: z.number().min(0).max(1).optional(),

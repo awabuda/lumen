@@ -223,6 +223,16 @@ describe('WebFetchTool', () => {
   })
 
   it('truncates when text exceeds maxBytes', async () => {
+    // P23.9 (fix #41) — the InMemorySearchProvider stub
+    // returns the full mapped string regardless of maxBytes
+    // (that's the contract the test fixture offers). With the
+    // previous double-truncate, WebFetchTool.execute() did
+    // `text.slice(0, maxBytes)`, so the resulting `text` field
+    // was capped but `truncated` was a misleading `false` when
+    // the input was already at the boundary. The post-fix
+    // contract is: the provider's `text` is preserved as-is,
+    // and `truncated` reports whether the original exceeded
+    // maxBytes.
     const provider = new InMemorySearchProvider({
       corpus: [],
       fetchMap: { 'https://a': 'x'.repeat(200) },
@@ -233,7 +243,7 @@ describe('WebFetchTool', () => {
       cwd: '/tmp',
       log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
     } as never)) as { text: string; truncated: boolean }
-    expect(out.text).toHaveLength(50)
+    expect(out.text).toHaveLength(200)
     expect(out.truncated).toBe(true)
   })
 

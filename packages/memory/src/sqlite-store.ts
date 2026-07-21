@@ -509,15 +509,18 @@ export class SqliteStore extends BaseVectorMemoryStore {
     const limit = query.limit ?? 50
 
     if (query.text) {
-      // Escape the FTS5 query so a stray `*` or `"` in user
-      // input does not blow up. We split on whitespace and
-      // quote each token; this is a coarse but safe strategy.
+      // P23.9 (fix #25) — quote each token with FTS5's `"token"`
+      // syntax and double any embedded `"`. Pre-P23.9 the code
+      // stripped everything outside `[a-zA-Z0-9_]` first, which
+      // destroyed CJK / accented / punctuation-bearing queries
+      // before they reached FTS5. The new path preserves the
+      // original characters and lets FTS5 do its own tokenisation.
       const tokens = query.text
         .split(/\s+/)
-        .map((t) => t.replace(/[^a-zA-Z0-9_]/g, ''))
+        .map((t) => `"${t.replace(/"/g, '""')}"`)
         .filter(Boolean)
       if (tokens.length === 0) return []
-      const ftsQuery = tokens.map((t) => `"${t}"`).join(' ')
+      const ftsQuery = tokens.join(' ')
 
       const rows = this.s.searchByFts.all(ftsQuery, minTrust) as Array<{
         id: string
