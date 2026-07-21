@@ -82,10 +82,16 @@ export interface SqliteStoreConfig {
   readonly path: string
   readonly readonly?: boolean
   readonly verbose?: (sql: string) => void
+  /** P23.8 (fix #20) — embedding dimensionality (default 1536). */
+  readonly dimensions?: number
 }
 
 export class SqliteStore extends BaseVectorMemoryStore {
   public readonly id = 'sqlite'
+  // P23.8 (fix #20) — keep the validated config so
+  // buildVectorBackend can read `dimensions`. Previously the
+  // config was thrown away after parsing.
+  private readonly config: SqliteStoreConfig
   private readonly db: BetterSqlite3Database
   /**
    * Lazily-prepared statement bundle. The bundle is built in
@@ -138,6 +144,10 @@ export class SqliteStore extends BaseVectorMemoryStore {
     // surfaces as a typed `ValidationError` instead of an opaque
     // `better-sqlite3` exception from the underlying driver.
     const validated = parseOrThrow(SqliteStoreConfigSchema, config, 'config')
+    // P23.8 (fix #20) — retain the validated config so
+    // buildVectorBackend can read `dimensions` (and any future
+    // operator-tunable knobs).
+    this.config = validated
     this.db = new BetterSqlite3(validated.path, {
       readonly: validated.readonly ?? false,
       // better-sqlite3's `verbose` signature is a variadic
@@ -199,11 +209,12 @@ export class SqliteStore extends BaseVectorMemoryStore {
    * should leave it alone.
    */
   private buildVectorBackend(): BaseVectorBackend {
-    // The default dimensionality is 1536 (text-embedding-3-small).
-    // We do not hard-code this; an operator embedding
-    // 384-dim vectors (sentence-transformers/all-MiniLM-L6-v2)
-    // can change it via a derived class.
-    const dimensions = 1536
+    // P23.8 (fix #20) — read dimensions from config when set,
+    // otherwise fall back to the OpenAI text-embedding-3-small
+    // default of 1536. Pre-P23.8 the value was hardcoded and
+    // unreachable from outside the class, so an operator using
+    // a 384-dim or 1024-dim model could not configure it.
+    const dimensions = this.config.dimensions ?? 1536
     const loaded = SqliteVecBackend.tryLoad(this.db)
     if (loaded) {
       const backend = new SqliteVecBackend(this.db, dimensions)

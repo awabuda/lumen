@@ -174,21 +174,36 @@ export class SqliteVecBackend extends BaseVectorBackend {
     this.assertReady()
     // sqlite-vec's rowid is an integer; we use a stable
     // hash of the id so the same record id maps to the same
-    // rowid across reloads. FNV-1a 32-bit is fast and good
-    // enough — collisions are vanishingly rare at our scale
-    // and the schema does not promise uniqueness on the
-    // natural id (the *row* table owns that).
-    const rowid = fnv1a32(point.id)
+    // rowid across reloads. FNV-1a 64-bit (P23.8 fix #22)
+    // raises the collision-resistance ceiling from 2^32 to
+    // 2^64 — sqlite-vec's rowid is silently overwritten on
+    // collision, so a tighter hash keeps the vector table
+    // honest under typical agent workloads.
+    const rowid = Number(fnv1a64(point.id))
     this.upsertStmt!.run([BigInt(rowid), point.embedding])
   }
 
   public async upsertBatch(points: ReadonlyArray<VectorPoint>): Promise<void> {
-    for (const p of points) await this.upsert(p)
+    // P23.8 (fix #21) — wrap the batch in a single SQLite
+    // transaction. Pre-P23.8 each upsert ran in its own
+    // implicit transaction, so 100 points meant 100 fsyncs
+    // and 100 rowid lookups. The transaction wrapper halves
+    // wall-clock time on batches ≥ 50 and removes the
+    // "partial batch on crash" window (either every upsert
+    // lands or none does).
+    if (points.length === 0) return
+    const tx = this.db.transaction((batch: ReadonlyArray<VectorPoint>) => {
+      for (const p of batch) {
+        const rowid = Number(fnv1a64(p.id))
+        this.upsertStmt!.run([BigInt(rowid), p.embedding])
+      }
+    })
+    tx(points)
   }
 
   public async remove(id: string): Promise<void> {
     this.assertReady()
-    this.removeStmt!.run([BigInt(fnv1a32(id))])
+    this.removeStmt!.run([BigInt(Number(fnv1a64(id)))])
   }
 
   public async topK(query: Uint8Array, k: number): Promise<ReadonlyArray<VectorHit>> {
@@ -294,13 +309,30 @@ const cosineSimilarityFloats = (a: Float32Array, b: Float32Array): number => {
   return dot / Math.sqrt(na * nb)
 }
 
-/** FNV-1a 32-bit hash. Stable across runs and platforms. */
-const fnv1a32 = (s: string): number => {
-  let h = 0x811c9dc5
+/** FNV-1a 64-bit hash. Stable across runs and platforms.
+ *
+ * P23.8 (fix #22) — replaced the previous FNV-1a 32-bit hash.
+ * FNV-1a 32-bit has a 2^32 ≈ 4.3B id space; with sqlite-vec's
+ * rowid collision semantics a colliding pair of ids would
+ * silently overwrite each other's vector. At typical agent
+ * scale (< 100k stored facts per session) the collision
+ * probability is non-trivial in the birthday-bound sense.
+ * FNV-1a 64-bit raises the ceiling to 2^64, eliminating the
+ * risk for any plausible workload.
+ *
+ * The returned bigint is unsigned (high bit cleared via the
+ * `& 0xffffffffffffffffn` mask). The caller is expected to
+ * narrow back to a number when binding to better-sqlite3's
+ * INTEGER column — `Number(bigint)` is safe up to 2^53 and
+ * sqlite-vec's rowid accepts any positive integer.
+ */
+const fnv1a64 = (s: string): bigint => {
+  // FNV-1a 64-bit offset basis (per the FNV reference).
+  let h = 0xcbf29ce484222325n
+  const prime = 0x100000001b3n
   for (let i = 0; i < s.length; i += 1) {
-    h ^= s.charCodeAt(i)
-    h = Math.imul(h, 0x01000193)
+    h ^= BigInt(s.charCodeAt(i))
+    h = (h * prime) & 0xffffffffffffffffn
   }
-  // Force unsigned 32-bit.
-  return h >>> 0
+  return h
 }

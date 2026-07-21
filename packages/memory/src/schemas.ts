@@ -78,6 +78,17 @@ export const SqliteStoreConfigSchema = z
     readonly: z.boolean().optional(),
     /** Pipe SQL to a logger. */
     verbose: z.function().args(z.string()).returns(z.void()).optional(),
+    /**
+     * P23.8 (fix #20) — embedding dimensionality. Defaults to
+     * 1536 (text-embedding-3-small) when omitted. Operators
+     * embedding a smaller model (384 for
+     * sentence-transformers/all-MiniLM-L6-v2, 1024 for
+     * mistral-embed, etc.) must set this so the sqlite-vec
+     * table is created with the matching column count.
+     * Pre-P23.8 the value was hardcoded inside `buildVectorBackend`
+     * and unreachable from the config.
+     */
+    dimensions: z.number().int().positive().optional(),
   })
   .strict()
 

@@ -106,9 +106,17 @@ export function createProviderEmbedder(
   const validated = parseOrThrow(ProviderEmbedderOptionsSchema, options, 'options')
   return async (texts: ReadonlyArray<string>): Promise<ReadonlyArray<Float32Array>> => {
     if (texts.length === 0) return []
+    // P23.8 (fix #32) — pass `dimensions` to the provider when
+    // the caller declared one. Pre-P23.8 the field was dropped
+    // silently, so an operator asking for 1024-dim vectors got
+    // whatever the provider's default was (typically 1536 for
+    // OpenAI). The expected-dimensions check below still
+    // catches mismatches defensively, but passing the field
+    // up-front is the primary fix.
     const response = await source.embed({
       input: texts,
       model: validated.model,
+      ...(validated.dimensions !== undefined ? { dimensions: validated.dimensions } : {}),
     })
     if (response.vectors.length === 0) {
       throw new ProviderError(
