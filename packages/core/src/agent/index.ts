@@ -116,6 +116,19 @@ export interface AgentRunOptions {
    * Only takes effect when `checkpointStore` is also set.
    */
   readonly checkpointInterval?: number
+  /**
+   * P23.6 (fix #8) — total cost budget in USD. When the sum of
+   * per-message `usage.costUsd` exceeds this, the next
+   * `budget.check()` throws BudgetExceededError. Optional;
+   * undefined = no cost limit (the default).
+   */
+  readonly costLimitUsd?: number
+  /**
+   * P23.6 (fix #8) — wall-clock time limit in ms. When the run
+   * exceeds this from start, the next `budget.check()` throws
+   * BudgetExceededError. Optional; undefined = no time limit.
+   */
+  readonly timeLimitMs?: number
 }
 
 export interface AgentRunResult {
@@ -436,6 +449,13 @@ export class Agent {
 
     const budget = new Budget({
       tokens: this.provider.capabilities.maxContextTokens,
+      // P23.6 (fix #8) — thread the caller-provided cost and time
+      // limits into Budget. Both fields default to undefined,
+      // which BudgetLimits treats as 'no limit' (infinite
+      // default). Pre-P23.6 these two dimensions were unreachable
+      // in practice.
+      ...(options.costLimitUsd !== undefined ? { costUsd: options.costLimitUsd } : {}),
+      ...(options.timeLimitMs !== undefined ? { timeMs: options.timeLimitMs } : {}),
     })
 
     this.lastRunResult = undefined
@@ -560,6 +580,14 @@ export class Agent {
 
         if (responseMessage.usage) {
           budget.addTokens(responseMessage.usage.totalTokens)
+          // P23.6 (fix #8) — debit per-message cost when the
+          // provider populates usage.costUsd. Providers that
+          // don't track cost (or local providers) leave the
+          // field undefined, and Budget.addCost() is a no-op
+          // (0 doesn't exceed an infinite limit anyway).
+          if (responseMessage.usage.costUsd !== undefined) {
+            budget.addCost(responseMessage.usage.costUsd)
+          }
         }
 
         messages.push(responseMessage)
@@ -855,6 +883,10 @@ export class Agent {
       assembled.toolCalls = partial.toolCalls
     }
     if (assembled.usage) budget.addTokens(assembled.usage.totalTokens)
+    // P23.6 (fix #8) — same addCost hook for the stream path.
+    if (assembled.usage?.costUsd !== undefined) {
+      budget.addCost(assembled.usage.costUsd)
+    }
     yield { type: 'text:end', content: assembled.content ?? '', iteration: iterations }
     return assembled
   }

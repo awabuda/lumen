@@ -115,6 +115,12 @@ export const AssistantMessageSchema = z.object({
       inputTokens: z.number().int().nonnegative(),
       outputTokens: z.number().int().nonnegative(),
       totalTokens: z.number().int().nonnegative(),
+      // P23.6 (fix #8) — optional per-message cost in USD.
+      // Providers that track cost (Anthropic, OpenAI usage
+      // endpoints) populate this; the rest omit it and the
+      // cost budget stays infinite. Pre-P23.6 the field did
+      // not exist and Budget.addCost() was unreachable.
+      costUsd: z.number().nonnegative().optional(),
     })
     .optional(),
   // Stop reason from the provider
