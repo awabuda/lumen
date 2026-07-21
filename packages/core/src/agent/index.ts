@@ -129,6 +129,18 @@ export interface AgentRunOptions {
    * BudgetExceededError. Optional; undefined = no time limit.
    */
   readonly timeLimitMs?: number
+  /**
+   * P23.7 (fix #9) — when true, multiple tool calls in the same
+   * model response run in parallel via `Promise.all` instead of
+   * serially. The agent loop's hook / event ordering stays the
+   * same — tool:start fires in order, then tool:end events fire
+   * as each completes. Stream events are emitted in completion
+   * order, not invocation order. Default false (serial, the
+   * pre-P23.7 behaviour). Useful for read-only tools (file
+   * reads, searches) where the model emits several calls in
+   * one turn and there's no dependency between them.
+   */
+  readonly parallel?: boolean
 }
 
 export interface AgentRunResult {
@@ -633,40 +645,100 @@ export class Agent {
           budget.check()
         }
 
-        // Dispatch each tool call. P23.0 unifies sync and stream
-        // modes on the same `callToolWithMiddleware` path so the
-        // `wrapToolCall` middleware hook fires in both modes (bug
-        // #1: pre-P23.0 the stream path went straight to
-        // `dispatchToolCall` and skipped the wrapper). The `sessionId`
-        // is threaded so the tool can scope audit logs and
-        // per-session resources (bug #6: pre-P23.0 it was always
-        // `''`).
-        const results: ToolResult[] = []
-        for (const call of responseMessage.toolCalls) {
-          await this.hooks.dispatch(
-            { kind: 'tool:call', toolCall: call },
-            { sessionId, iteration: iterations, startedAt: Date.now() },
-          )
-          if (mode === 'stream') {
-            yield { type: 'tool:start', toolCall: call, iteration: iterations }
-          }
-          const startedAt = Date.now()
-          const result = await this.callToolWithMiddleware(middleware, call, signal, ctx, sessionId)
-          const durationMs = Date.now() - startedAt
-          await this.hooks.dispatch(
-            { kind: 'tool:result', toolCall: call, result, durationMs },
-            { sessionId, iteration: iterations, startedAt: Date.now() },
-          )
-          if (mode === 'stream') {
-            yield {
-              type: 'tool:end',
-              toolCall: call,
-              result,
-              durationMs,
-              iteration: iterations,
+        // Dispatch each tool call. P23.7 (fix #9) — when the caller
+        // opts in via `parallel: true`, multiple tool calls in
+        // the same response run concurrently via `Promise.all`.
+        // When false (the default), they run serially (the
+        // pre-P23.7 behaviour). tool:start events fire in
+        // invocation order before any tool runs; tool:end events
+        // fire as each tool completes (completion order in
+        // parallel mode). The aggregated `results` array is in
+        // invocation order either way.
+        const useParallel = options.parallel === true
+        let results: ToolResult[] = []
+        if (useParallel && responseMessage.toolCalls.length > 1) {
+          // P23.7 parallel: results indexed by invocation order.
+          results = new Array(responseMessage.toolCalls.length)
+          // Fire all tool:start hooks / events up front so the
+          // caller sees the full set of dispatched tools before
+          // any of them completes.
+          for (const call of responseMessage.toolCalls) {
+            await this.hooks.dispatch(
+              { kind: 'tool:call', toolCall: call },
+              { sessionId, iteration: iterations, startedAt: Date.now() },
+            )
+            if (mode === 'stream') {
+              yield { type: 'tool:start', toolCall: call, iteration: iterations }
             }
           }
-          results.push(result)
+          const startedAtList = responseMessage.toolCalls.map(() => Date.now())
+          const settled = await Promise.all(
+            responseMessage.toolCalls.map((call, idx) =>
+              this.callToolWithMiddleware(middleware, call, signal, ctx, sessionId).then(
+                (result) => ({ idx, result, ok: true as const }),
+                (err) => ({ idx, err, ok: false as const }),
+              ),
+            ),
+          )
+          for (const entry of settled) {
+            const durationMs = Date.now() - (startedAtList[entry.idx] ?? Date.now())
+            const call = responseMessage.toolCalls[entry.idx]
+            if (!call) continue
+            const result: ToolResult = entry.ok
+              ? entry.result
+              : {
+                  toolCallId: call.id,
+                  isError: true,
+                  content: `tool call '${call.name}' failed: ${(entry.err as Error).message ?? String(entry.err)}`,
+                }
+            await this.hooks.dispatch(
+              { kind: 'tool:result', toolCall: call, result, durationMs },
+              { sessionId, iteration: iterations, startedAt: Date.now() },
+            )
+            if (mode === 'stream') {
+              yield {
+                type: 'tool:end',
+                toolCall: call,
+                result,
+                durationMs,
+                iteration: iterations,
+              }
+            }
+            results[entry.idx] = result
+          }
+        } else {
+          for (const call of responseMessage.toolCalls) {
+            await this.hooks.dispatch(
+              { kind: 'tool:call', toolCall: call },
+              { sessionId, iteration: iterations, startedAt: Date.now() },
+            )
+            if (mode === 'stream') {
+              yield { type: 'tool:start', toolCall: call, iteration: iterations }
+            }
+            const startedAt = Date.now()
+            const result = await this.callToolWithMiddleware(
+              middleware,
+              call,
+              signal,
+              ctx,
+              sessionId,
+            )
+            const durationMs = Date.now() - startedAt
+            await this.hooks.dispatch(
+              { kind: 'tool:result', toolCall: call, result, durationMs },
+              { sessionId, iteration: iterations, startedAt: Date.now() },
+            )
+            if (mode === 'stream') {
+              yield {
+                type: 'tool:end',
+                toolCall: call,
+                result,
+                durationMs,
+                iteration: iterations,
+              }
+            }
+            results.push(result)
+          }
         }
 
         const toolMessage: Message = { role: 'tool', results }

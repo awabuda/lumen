@@ -172,23 +172,44 @@ export const createParallelSubAgent = (
       return results
     },
     async *stream(): AsyncGenerator<SubAgentTaskResult> {
-      const settled = await withTimeout(
-        Promise.allSettled(
-          parsed.tasks.map((task) => buildRunner(parsed.parent, task, parsed.maxIterations).run()),
-        ),
-        timeoutMs,
-      )
-      for (let i = 0; i < parsed.tasks.length; i += 1) {
-        const task = parsed.tasks[i]
-        const r = settled[i]
-        if (!task || !r) continue
-        if (r.status === 'rejected') {
-          throw r.reason instanceof Error
-            ? r.reason
-            : new Error(String(r.reason ?? 'sub-agent failed'))
-        }
-        const entry: SubAgentTaskResult = { task, result: r.value }
-        yield entry
+      // P23.7 (fix #23) — yield each task as it completes, not
+      // after all of them settle. Pre-P23.7 the stream() method
+      // ran every task via Promise.allSettled first, then
+      // iterated the results in order — making the stream
+      // functionally identical to `run()` for any caller that
+      // awaited the generator one entry at a time (which is
+      // every caller).
+      //
+      // The new implementation kicks off every task with a
+      // tagged promise, then races the live set: at each step
+      // we wait for the FIRST of the remaining promises to
+      // settle (Promise.race) and yield its result. The tag is
+      // a per-task unique object so we can identify and remove
+      // the settled promise from the map by reference. The
+      // timeout bounds the whole batch.
+      const tasks = parsed.tasks
+      const pending = new Map<object, Promise<{ tag: object; entry: SubAgentTaskResult | Error }>>()
+      for (const task of tasks) {
+        const tag = {}
+        const promise = buildRunner(parsed.parent, task, parsed.maxIterations)
+          .run()
+          .then(
+            (result) => ({ tag, entry: { task, result } as SubAgentTaskResult | Error }),
+            (err) => ({
+              tag,
+              entry: (err instanceof Error ? err : new Error(String(err))) as
+                | SubAgentTaskResult
+                | Error,
+            }),
+          )
+        pending.set(tag, promise)
+      }
+
+      while (pending.size > 0) {
+        const raced = await withTimeout(Promise.race(Array.from(pending.values())), timeoutMs)
+        pending.delete(raced.tag)
+        if (raced.entry instanceof Error) throw raced.entry
+        yield raced.entry
       }
     },
   }
