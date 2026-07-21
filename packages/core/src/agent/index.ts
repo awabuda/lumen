@@ -202,6 +202,7 @@ const newSessionId = (): string => {
  * `in_progress` checkpoint remains available for auto-resume.
  */
 const saveCheckpointBestEffort = async (input: {
+  readonly logger: BaseLogger
   readonly store?: import('./checkpoint.js').BaseCheckpointStore
   readonly sessionId: string
   readonly finalMessage: AssistantMessage
@@ -235,9 +236,24 @@ const saveCheckpointBestEffort = async (input: {
         : {}),
       outcome: input.outcome,
     })
-  } catch {
-    // Checkpoint persistence is best-effort. A storage outage must never
-    // replace the agent result or the original run error.
+  } catch (err) {
+    // P23.5 (fix #7) — checkpoint persistence is best-effort
+    // and must never replace the agent result or the original
+    // run error. But pre-P23.5 the catch block silently
+    // swallowed the failure: a user resuming after a crash had
+    // no way to tell whether the run crashed, the checkpoint
+    // save crashed, or both. Log via the agent logger at
+    // `warn` level with structured context so the failure is
+    // visible in `hermes logs` / `agent.log` without disrupting
+    // the run. We log rather than throw so the best-effort
+    // contract is preserved.
+    input.logger.warn('checkpoint save failed; run continues without persistence', {
+      sessionId: input.sessionId,
+      iterations: input.iterations,
+      outcome: input.outcome,
+      error: err instanceof Error ? err.message : String(err),
+      errorName: err instanceof Error ? err.name : 'UnknownError',
+    })
   }
 }
 
@@ -570,6 +586,7 @@ export class Agent {
             yield { type: 'step:end', iteration: iterations, message: responseMessage }
           }
           await saveCheckpointBestEffort({
+            logger: this.logger,
             store: options.checkpointStore,
             sessionId,
             finalMessage: lastMessage,
@@ -639,6 +656,7 @@ export class Agent {
           yield { type: 'step:end', iteration: iterations, message: responseMessage }
         }
         await saveCheckpointBestEffort({
+          logger: this.logger,
           store: options.checkpointStore,
           sessionId,
           finalMessage: lastMessage,
@@ -688,6 +706,7 @@ export class Agent {
       )
 
       await saveCheckpointBestEffort({
+        logger: this.logger,
         store: options.checkpointStore,
         sessionId,
         finalMessage: lastMessage,
@@ -708,6 +727,7 @@ export class Agent {
       )
       if (mode === 'stream') yield { type: 'error', error }
       await saveCheckpointBestEffort({
+        logger: this.logger,
         store: options.checkpointStore,
         sessionId,
         finalMessage: lastMessage,
