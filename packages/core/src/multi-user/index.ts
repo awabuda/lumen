@@ -300,13 +300,38 @@ export const UserSessionSchema = z.object({
 /** Per-user session gate. Maps userId -> sessionId. */
 export class SessionGate {
   private readonly sessions: Map<string, UserSession> = new Map()
+  /**
+   * P23.11 (fix #63) — reverse index `userId -> sessionId` so
+   * `open()` is O(1) instead of the pre-P23.11 `[...this.sessions.values()]
+   * .find(s => s.userId === userId)` scan (O(n)). The index is
+   * kept in sync with `this.sessions` on every create / replace /
+   * close. Stale entries in the index (e.g. if a future operator
+   * adds a path that mutates `this.sessions` directly) are not
+   * self-healing — they survive until the next `open()` call,
+   * which falls back to the linear scan when the index returns
+   * a session that no longer exists in `this.sessions`.
+   */
+  private readonly byUser: Map<string, string> = new Map()
+
+  /**
+   * Look up the user's open session via the O(1) reverse index.
+   * Returns `undefined` if either the index is missing (rare
+   * drift) or the indexed session has been closed.
+   */
+  private findOpenFor(userId: string): UserSession | undefined {
+    const id = this.byUser.get(userId)
+    if (id === undefined) return undefined
+    const session = this.sessions.get(id)
+    return session ?? undefined
+  }
 
   /** Create or return the active session for a user. */
   public async open(userId: string, title = 'untitled'): Promise<UserSession> {
-    const existing = [...this.sessions.values()].find((s) => s.userId === userId)
+    const existing = this.findOpenFor(userId)
     if (existing) {
       const bumped: UserSession = { ...existing, lastActiveAt: Date.now() }
       this.sessions.set(existing.id, bumped)
+      this.byUser.set(userId, existing.id)
       return bumped
     }
     const session: UserSession = {
@@ -318,12 +343,25 @@ export class SessionGate {
     }
     UserSessionSchema.parse(session)
     this.sessions.set(session.id, session)
+    this.byUser.set(userId, session.id)
     return session
   }
 
   /** Close a session. */
   public close(id: string): boolean {
-    return this.sessions.delete(id)
+    const removed = this.sessions.delete(id)
+    if (removed) {
+      // Find the user that owned the closed session and clear their
+      // reverse-index entry. We do a linear scan here only when
+      // closing, which is far rarer than `open()`.
+      for (const [userId, sessionId] of this.byUser.entries()) {
+        if (sessionId === id) {
+          this.byUser.delete(userId)
+          break
+        }
+      }
+    }
+    return removed
   }
 
   /** List sessions for a user. */

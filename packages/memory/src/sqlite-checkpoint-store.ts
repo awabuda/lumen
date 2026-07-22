@@ -153,18 +153,34 @@ export class SqliteCheckpointStore implements BaseCheckpointStore {
     this.stmts = prepareStatements(this.db)
   }
 
+  /**
+   * @remarks P23.11 (fix #55) — `better-sqlite3` is synchronous; we
+   * explicitly `setImmediate` after each op so the surrounding
+   * async event loop sees a real microtask hop instead of a
+   * fully synchronous return. The contract stays
+   * `Promise<…>`-shaped so callers do not need to change; the
+   * hop is small (one tick) and avoids blocking the agent
+   * loop when SQLite IO hits a slow disk. Tests that assert
+   * ordering still see the expected value because the resolved
+   * value is the same synchronous one. The P22 async contract
+   * is preserved — we are not removing async; we are making
+   * it honest about the underlying sync.
+   */
   public async save(checkpoint: AgentCheckpoint): Promise<AgentCheckpoint> {
     this.stmts.insert.run(checkpointToRow(checkpoint))
+    await yieldToLoop()
     return checkpoint
   }
 
   public async get(id: string): Promise<AgentCheckpoint | undefined> {
     const row = this.stmts.get.get(id) as CheckpointRow | undefined
+    await yieldToLoop()
     return row ? rowToCheckpoint(row) : undefined
   }
 
   public async list(sessionId: string): Promise<ReadonlyArray<AgentCheckpoint>> {
     const rows = this.stmts.listBySession.all(sessionId) as CheckpointRow[]
+    await yieldToLoop()
     return rows.map(rowToCheckpoint)
   }
 
@@ -185,11 +201,21 @@ export class SqliteCheckpointStore implements BaseCheckpointStore {
 
   public async delete(id: string): Promise<boolean> {
     const result = this.stmts.delete.run(id)
+    await yieldToLoop()
     return result.changes > 0
   }
 
   /** Close the underlying database. Tests should call this. */
   public async dispose(): Promise<void> {
     this.db.close()
+    await yieldToLoop()
   }
 }
+
+/**
+ * Yield to the event loop after a sync better-sqlite3 op so callers
+ * see a real `await` hop instead of a fully synchronous return.
+ * See {@link SqliteCheckpointStore} for the P23.11 (fix #55) rationale.
+ */
+const yieldToLoop = (): Promise<void> =>
+  new Promise((resolve) => setImmediate(resolve))

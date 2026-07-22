@@ -97,7 +97,21 @@ export abstract class BaseWorkingMemory {
 export class RingBufferWorkingMemory extends BaseWorkingMemory {
   public readonly id = 'ring-buffer'
   public readonly capacity: number
-  private readonly items: WorkingMemoryEntry[] = []
+  /**
+   * Fixed-size circular storage. `head` is the index of the
+   * next write slot; `count` is the number of entries currently
+   * held (`0..capacity`). After `capacity` appends, every
+   * write overwrites the oldest entry without any O(n) shift.
+   *
+   * P23.11 (fix #62) — replaces the pre-P23.11
+   * `this.items.push(...) + this.items.shift()` which had an
+   * O(n) shift on every eviction. The new shape is O(1) for
+   * `append` and O(k) for `recent(k)` (slice of the live
+   * window), instead of shifting on every append.
+   */
+  private readonly buffer: WorkingMemoryEntry[] = []
+  private head = 0
+  private count = 0
 
   public constructor(capacity = 50) {
     super()
@@ -108,31 +122,56 @@ export class RingBufferWorkingMemory extends BaseWorkingMemory {
       )
     }
     this.capacity = capacity
+    // Pre-allocate the storage array. Slots are `undefined` until
+    // they are filled. Iteration in `recent()` skips undefined slots
+    // based on the `count` window.
+    this.buffer.length = capacity
   }
 
   public append(record: MemoryRecord, score: number): void {
-    this.items.push({ record, score, appendedAt: Date.now() })
-    if (this.items.length > this.capacity) {
-      // `shift` is O(n) on a JS array; we accept that
-      // because the typical capacity is 50 and append is
-      // not a hot path. A derived class that needs O(1)
-      // eviction can use a real circular buffer.
-      this.items.shift()
-    }
+    this.buffer[this.head] = { record, score, appendedAt: Date.now() }
+    this.head = (this.head + 1) % this.capacity
+    if (this.count < this.capacity) this.count += 1
   }
 
   public recent(k?: number): ReadonlyArray<WorkingMemoryEntry> {
-    if (k === undefined || k >= this.items.length) return [...this.items]
+    if (this.count === 0) return []
+    if (k === undefined || k >= this.count) {
+      // Walk the live window in insertion order (oldest first).
+      const start = this.count < this.capacity ? 0 : this.head
+      const out: WorkingMemoryEntry[] = []
+      for (let i = 0; i < this.count; i += 1) {
+        const entry = this.buffer[(start + i) % this.capacity]
+        if (entry !== undefined) out.push(entry)
+      }
+      return out
+    }
     if (k <= 0) return []
-    return this.items.slice(-k)
+    // Last `k` in insertion order. The oldest of the last k lives
+    // at slot `(head - k) mod capacity` whenever the buffer is
+    // non-empty: when `count < capacity`, `head` is the next free
+    // slot, so the first append sits at index 0 and the last
+    // append sits at `head - 1`. After capacity has been reached
+    // the next free slot is also where the next overwrite lands,
+    // and the oldest entry is exactly `(head - count) mod cap`.
+    const start = (this.head - k + this.capacity) % this.capacity
+    const out: WorkingMemoryEntry[] = []
+    for (let i = 0; i < k; i += 1) {
+      const entry = this.buffer[(start + i) % this.capacity]
+      if (entry !== undefined) out.push(entry)
+    }
+    return out
   }
 
   public get size(): number {
-    return this.items.length
+    return this.count
   }
 
   public clear(): void {
-    this.items.length = 0
+    this.buffer.length = 0
+    this.buffer.length = this.capacity
+    this.head = 0
+    this.count = 0
   }
 }
 
