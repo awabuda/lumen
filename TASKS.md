@@ -1050,8 +1050,16 @@ P19–P20 + P21 全部已 push 到 `origin/main`（v0.14.0 tag 已发布，72 co
 - [x] **P23.9** — `fix(quality): P23.9 — small correctness fixes (fix #11, #25, #26, #27, #28, #29, #30, #31, #32, #41)` *(commit `76c5cfc`)* — `mergeArgs` uses a `Symbol` for the raw-string slot; FTS5 tokenisation preserves CJK + accented characters; `persistExtractedFacts` parallelises the dedup + put path; `HttpMcpTransport` lazy-validates `fetch`; the OpenAI-compatible stream generates a tool-call id when the upstream omits one; `PlanSchema` enforces mutex on `approvedAt` / `rejectedAt`; `ClusterOptionsSchema` is exported; `MinimalProvider` tracks `BaseProvider.chat`'s real signature; `createProviderEmbedder` forwards `dimensions`; `WebFetchTool.execute` drops the redundant `text.slice(0, parsed.maxBytes)`.
 - [x] **P23.10** — `fix(tools+security): P23.10 — toolset, security, skill-quality fixes (fix #12, #13, #19, #33, #35, #36, #45, #46)` *(commit `cd89661`)* — `buildRestrictedRegistry` warns on unknown `allowedTools`; `ProviderPoolOptionsSchema` exposes the `circuit` field; `ToolRegistry.materializeToolset` logs duplicate tool names; `IntervalCron.run` / `OnceCron.run` add `_running` re-entry guards; `SkillRegistry.activate` and `applyActive` run in parallel via `Promise.all`; `globLikeMatch` drops the `^` / `$` anchors when the pattern contains `*`; `createTrace` throws `ValidationError`; `HookRegistry` accepts an optional `BaseLogger` via the constructor (and HookRegistry now has the explicit `constructor(options)` so the option survives). Added `packages/core/test/p23-tools-security.test.ts` (15 cases).
 
+### P23.11 — bug.md safety / quality / skill sweep (commits 28db7f8 + eb640d3 + this batch)
+
+P23.11 follows the same fix-by-fix sweep: 12 bug.md items land in 3 commits, each commit pulling only the in-scope features and tests.
+
+- [x] **P23.11.A — pool + tools safety** — `fix(safety): P23.11.A — terminal/git/pool safety (fix #24, #36, #58, #59, #60)` *(commit `28db7f8`)* — `ProviderPool.stream` initialises `lastError` with a synthetic `ProviderError`; `GitTool` builds the child env from a curated allowlist (PATH / HOME / LUMEN_* / git overrides); `TerminalTool.execute` uses the imported `path` module and reads `ShellSandboxConfig.timeoutMs` from a cached config; `GitTool` short-circuits when `ctx.signal.aborted === true`. Added `packages/core/test/p23.11-pool-last-error.test.ts` (1 case) + `packages/tools/test/p23.11-terminal-git.test.ts` (5 cases).
+- [x] **P23.11.B — memory + multi-user polish** — `fix(memory+multi-user): P23.11.B — working-memory / multi-user polish (fix #55, #62, #63)` *(commit `eb640d3`)* — `SqliteCheckpointStore` yields to the event loop after every operation; `RingBufferWorkingMemory` uses a pre-allocated circular buffer (head + count) so append is O(1) after capacity; `SessionGate` keeps a `Map<userId, sessionId>` reverse index so `open()` is O(1). Added `packages/core/test/p23.11-memory-multiuser.test.ts` (9 cases).
+- [x] **P23.11.C — skills + tool retry + slash-command triggers** — `feat(skills+tool-retry): P23.11.C — skill expansion + tool retry + slash-command triggers (fix #67, #69, #70, #71, #72)` *(commit `<this>`)* — skill template expansion helpers (`expandTemplate` / `expandInstructions` / `expandFromContext`) substitute `$ARGUMENTS` and named placeholders; SKILL.md scaffolds for `/cost`, `/loop`, `/init` registered with parameter-aware triggers (full composition-root wiring is a P24 follow-up); `callToolWithRetry(tool, input, ctx, cfg)` adds the same exponential-backoff-with-jitter surface to tool calls (default `maxAttempts: 1` preserves back-compat). Added `packages/core/test/p23.11-tool-retry.test.ts` (5 cases) + `packages/skills/test/expansion.test.ts` (8 cases).
+
 ### P23 push status
-P22.7 + P23 全 12 commits 已 ship 到本地 main（v0.16.0 之上）。`v0.16.0` 在 P22 完成时已发布。
+P22.7 + P23 全 15 commits 已 ship 到本地 main（v0.16.0 之上）。`v0.16.0` 在 P22 完成时已发布。
 
 ### P23 Backlog (P24+ candidates)
 
@@ -1059,9 +1067,9 @@ bug.md 中尚未修的项按特征分类：
 
 - **INCORRECT（doc 修正）**: 暂无新增
 - **FEATURE_GAP（新能力提案 — P24+ ticket）**: #9 浏览器、#10 Computer Use、#37 子代理上下文隔离、#38 auto-dispatch、#39 内置子代理（Explore/Plan/General-purpose）、#40 路径作用域规则、#41 升级 Hooks 生命周期、#42 `/compact` CLI 指令、#43 worktree 隔离、#44 多渠道适配器、#45 vision 多模态、#46 People-aware Memory、#47 MCP fail-closed、#48 并行 MCP 初始化、#49 Background Task、#50 Agent View、#51 Proactive Execution、#52 Manifest-first、#53 Permission Modes 扩展、#54 apply_patch 增强
-- **性能 / O(n) 类（独立 P-ticket 候选）**: #48 rowid hash 已修，#62 RingBuffer、#63 SessionGate 反向索引
-- **剩余 P3 项（按需捡取）**: #55 sync-async 包装、#58 path 模块重复导入、#59 sandboxTimeoutMs 硬编码、#60 信号已中止检查、#64 DuckDuckGo HTML 解析、#67 Skill 参数化、#68 失败降级本地模型、#69 `/loop` 指令、#70 `/init` 指令、#71 `/cost` 指令、#72 重试语义、#73 Event Bus
-- **特别说明**: #11 / #25 / #26 / #27 / #28 / #29 / #30 / #31 / #32 / #41 已在 P23.9；#4 / #5 / #7 / #8 / #9 / #12 / #13 / #15 / #17 / #18 / #19 / #20 / #21 / #22 / #23 / #33 / #35 / #36 / #45 / #46 已在 P23.2–P23.10 散落修复。
+- **性能 / O(n) 类（独立 P-ticket 候选）**: #48 rowid hash 已修；#62 RingBuffer、#63 SessionGate 已修
+- **剩余 P3 项（按需捡取）**: #55 sync-async 包装、#58 path 模块重复导入、#59 sandboxTimeoutMs 硬编码、#60 信号已中止检查、#64 DuckDuckGo HTML 解析、#67 Skill 参数化、#68 失败降级本地模型、#69 `/loop` 指令、#70 `/init` 指令、#71 `/cost` 指令、#72 重试语义、#73 Event Bus — **#55 #58 #59 #60 #62 #63 #67 #69 #70 #71 #72 已在 P23.11 散落修复**；只剩 #64 (HTML parser → 加 dep, P24+ 提案) 与 #68/#73 (architecture tasks)
+- **特别说明**: #11 / #25 / #26 / #27 / #28 / #29 / #30 / #31 / #32 / #41 在 P23.9；#4 / #5 / #7 / #8 / #9 / #12 / #13 / #15 / #17 / #18 / #19 / #20 / #21 / #22 / #23 / #33 / #35 / #36 / #45 / #46 在 P23.2–P23.10；#24 / #36 / #58 / #59 / #60 在 P23.11.A；#55 / #62 / #63 在 P23.11.B；#67 / #69 / #70 / #71 / #72 在 P23.11.C。**bug.md 全部 CORRECT + PARTIAL 项已 ship**。
 
 ### P23 关键决策（2026-07-22）
 
@@ -1071,3 +1079,12 @@ bug.md 中尚未修的项按特征分类：
 4. 不引入新抽象 / 不改公共 API surface
 5. 不依赖 LLM call（纯 IO + Zod + structured logging + state 转换）
 6. tier 隔离保留（core 不 import skills；改动 `core/src/...` 同时改 `skills/src/...` 不打破 P19+ rule 1）
+
+### P23.11 关键决策（2026-07-22）
+
+1. **P23.11 = P23 收口**（用户 session 内请求"修复 bug.md 中的内容" — 按 4-tag verdict 范畴 = CORRECT + PARTIAL）
+2. 完成 criteria：bug.md 中剩余 40 项 NOT shipped 收口；FEATURE_GAP（18 项）按 user preference rule #3 不入 P23，留 P24+
+3. commit shape: 3 feature-commit（每 commit 一组紧密 fix）+ 1 docs-commit（changeset + TASKS + bug.md 哨兵），与 P23.x 既定形态对齐
+4. 不引入新抽象 — `#67 skill expansion`、`#72 callToolWithRetry` 均为 helper function（符合 P19+ rule 15），非抽象类
+5. **bash slash command 实现**: P23.11 只注册 SKILL.md 触发面（filesystem discoverable），不 wire 到 CLI composition root；CLI wiring 是 P24+ 任务
+6. `#70 /init` 同源 — ProjectAnalyzer 是 P24 follow-up（涉及 npm-registry + 深度 fs walk）
