@@ -16,6 +16,12 @@
 
 import { BaseTool, type ToolContext, ToolError, type ToolRisk, ValidationError } from '@lumen/core'
 import { z } from 'zod'
+import {
+  type HtmlElement,
+  HtmlTokenizer,
+  findElementsByAttr,
+  textContent,
+} from './html-tokenizer.js'
 
 // ---------------------------------------------------------------------------
 // Backend abstraction
@@ -190,26 +196,69 @@ export class DuckDuckGoSearchProvider extends BaseSearchProvider {
     return text
   }
 
-  /** Extract result blocks from DDG HTML. */
+  /**
+   * Extract result blocks from DDG HTML.
+   *
+   * P23.12 (fix #64) — replaced the pre-P23.12 mega-regex with the
+   * `HtmlTokenizer` from `./html-tokenizer.ts`. The tokenizer
+   * parses the HTML as a real tag tree, then we look up
+   * `class="result__a"` anchors (DuckDuckGo's per-result title
+   * link) and `class="result__snippet"` anchors (the snippet).
+   * For each title we walk up to the nearest enclosing block
+   * and pair the snippet via a stable `result__snippet` lookup.
+   * This survives markup tweaks that broke the regex (e.g. an
+   * `aria-label` injected between attributes).
+   */
   private parse(html: string, limit: number): ReadonlyArray<SearchResult> {
-    const results: SearchResult[] = []
-    // Each result is in <a class="result__a" href="...">title</a>
-    // followed by <a class="result__snippet">snippet</a>.
-    const blockRe =
-      /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g
-    let m: RegExpExecArray | null
-    // biome-ignore lint/suspicious/noAssignInExpressions: regex iteration idiom
-    while ((m = blockRe.exec(html)) !== null && results.length < limit) {
-      const url = decodeHtml(m[1] ?? '')
-      const title = decodeHtml(stripTags(m[2] ?? ''))
-      const snippet = decodeHtml(stripTags(m[3] ?? ''))
-      if (url && title) {
-        const parsed = SearchResultSchema.safeParse({ title, url, snippet })
-        if (parsed.success) results.push(parsed.data)
+    const tokenizer = new HtmlTokenizer()
+    tokenizer.write(html)
+    const root = tokenizer.close()
+    const titles = findElementsByAttr(root, { class: 'result__a' })
+    // Pre-resolve snippet anchors once; we look them up by the
+    // position of the title (DDG emits `<a result__a>` ... `<a result__snippet>`
+    // siblings; we walk the *whole tree* and pick the next
+    // `result__snippet` whose DFS-preorder index is greater than
+    // the title's).
+    const snippetAnchors = findElementsByAttr(root, {
+      class: 'result__snippet',
+    })
+    const out: SearchResult[] = []
+    for (const title of titles) {
+      if (out.length >= limit) break
+      const titleIdx = indexIn(root, title)
+      const snippetEl =
+        snippetAnchors.find((el) => indexIn(root, el) > titleIdx) ??
+        snippetAnchors[snippetAnchors.length - 1]
+      const url = decodeHtml(title.attrs.href ?? '')
+      const titleText = decodeHtml(stripTags(textContent(title)))
+      const snippetText = snippetEl ? decodeHtml(stripTags(textContent(snippetEl))) : ''
+      if (url && titleText) {
+        const parsed = SearchResultSchema.safeParse({
+          title: titleText,
+          url,
+          snippet: snippetText,
+        })
+        if (parsed.success) out.push(parsed.data)
       }
     }
-    return results
+    return out
   }
+}
+
+/** DFS-preorder index of `target` in the tree under `root`. */
+const indexIn = (root: HtmlElement, target: HtmlElement): number => {
+  let count = -1
+  const visit = (node: HtmlElement): boolean => {
+    count += 1
+    if (node === target) return true
+    for (const child of node.children) {
+      if (typeof child === 'string') continue
+      if (visit(child as HtmlElement)) return true
+    }
+    return false
+  }
+  visit(root)
+  return count
 }
 
 /** Strip HTML tags. */
