@@ -26,6 +26,11 @@ export {
 
 export { SkillRegistry, type ActivatedSkill } from './registry.js'
 export {
+  expandFromContext,
+  expandInstructions,
+  expandTemplate,
+} from './expansion.js'
+export {
   parseFrontmatter,
   parseSkillMarkdown,
   SkillFrontmatterSchema,

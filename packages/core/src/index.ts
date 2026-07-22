@@ -31,6 +31,15 @@ export {
   ValidationError,
 } from './errors/index.js'
 
+// P23.11 (fix #72) — opt-in tool-call retry wrapper around
+// `BaseTool.call(input, ctx)`. Pre-P23.11 retry semantics lived
+// only at the Provider level (`withRetry`); tool-level transient
+// failures did not retry. `callToolWithRetry` adds the same
+// exponential-backoff-with-jitter surface to tool calls; the
+// default `maxAttempts: 1` preserves back-compat for every
+// existing call site.
+export { callToolWithRetry, isRetryAborted } from './tool-retry.js'
+
 // Retry helper (consumes ProviderError.retryable)
 export {
   withRetry,
