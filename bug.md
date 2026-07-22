@@ -10,13 +10,13 @@
 > sweep）。详见 TASKS.md 的 P23 / P23.11 段 + 提交日志
 > `git log --grep="P23"`。
 > 
-> **状态（2026-07-22 update）**：P23.12 batch 增 ship 4 项 (#64 #69 #70
-> #71 — DuckDuckGo HTML tokenizer, /loop /cost /init slash
-> commands + ProjectAnalyzer)，于是 bug.md 中真 ship **55+4=59
-> 项**（含 silently-shipped 同 surface 的 #3 #16 #17 #18 #34
-> #56 #57 #61 #65 #66 共 9 项）。剩余 14 项为 FEATURE_GAP (= 不
-> 入 P23 sweep，按 user rule)。最新 commit hash:
-> `git log --grep="P23" --no-merges`。
+> **状态（2026-07-22 update #2）**：P23.12.E (commit `885ef40`) 补
+> 真 #26 (ContextCompression state counters)。pass-2 audit
+> (audit.py / re-grep) 发现 P23.9 commit body 提到 #26 但代码
+> 未真 ship。P23.12.E 后真 ship **60 项** bug.md（含 silently-shipped
+> 共 surface 项 9 项：#3 #16 #17 #18 #34 #56 #57 #61 #65 #66）。
+> 余 13 项为 FEATURE_GAP (= P24+ scope，按 user rule 不入
+> P23 sweep)。
 
 ---
 
