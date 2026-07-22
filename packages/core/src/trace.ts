@@ -35,6 +35,7 @@
  */
 
 import { randomBytes } from 'node:crypto'
+import { ValidationError } from './errors/index.js'
 
 /** Trace + span identifiers. 16 hex chars each (~64 bits). */
 export interface TraceContext {
@@ -76,23 +77,31 @@ const isHex = (s: string, expectedLen: number): boolean =>
 export const createTrace = (options: CreateTraceOptions = {}): TraceContext => {
   const traceId = options.traceId ?? randomHexId()
   const spanId = options.spanId ?? randomHexId()
+  // P23.10 (fix #45) — throw `ValidationError` instead of a
+  // generic `Error` so callers can `instanceof`-discriminate
+  // and route the failure into their validation-error sink.
+  // The pre-fix generic `Error` was indistinguishable from
+  // any other runtime failure.
   if (!isHex(traceId, 16)) {
-    throw new Error('createTrace: traceId must be 16 hex characters')
+    throw new ValidationError('createTrace: traceId must be 16 hex characters', {
+      field: 'traceId',
+    })
   }
   if (!isHex(spanId, 16)) {
-    throw new Error('createTrace: spanId must be 16 hex characters')
+    throw new ValidationError('createTrace: spanId must be 16 hex characters', { field: 'spanId' })
   }
   if (options.parentSpanId !== undefined && !isHex(options.parentSpanId, 16)) {
-    throw new Error('createTrace: parentSpanId must be 16 hex characters')
+    throw new ValidationError('createTrace: parentSpanId must be 16 hex characters', {
+      field: 'parentSpanId',
+    })
   }
   const base: TraceContext = {
     traceId,
     spanId,
     startedAt: Date.now(),
   }
-  let withParent: TraceContext = options.parentSpanId !== undefined
-    ? { ...base, parentSpanId: options.parentSpanId }
-    : base
+  let withParent: TraceContext =
+    options.parentSpanId !== undefined ? { ...base, parentSpanId: options.parentSpanId } : base
   withParent = options.name !== undefined ? { ...withParent, name: options.name } : withParent
   return withParent
 }

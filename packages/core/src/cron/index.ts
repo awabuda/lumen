@@ -84,6 +84,14 @@ export class IntervalCron extends BaseCron {
   private readonly job: CronJob
   private readonly intervalMs: number
   private timer: ReturnType<typeof setInterval> | undefined
+  // P23.10 (fix #33) — re-entry guard for `run()`. The public
+  // `isRunning` getter reflects the scheduler's `timer` state
+  // (true when start() is active), not the in-progress job. A
+  // second call to `run()` while the first is still awaiting
+  // the job would otherwise interleave history writes and the
+  // user's awaiter. The flag is set on entry, cleared in
+  // `finally` (below).
+  private _running = false
   private _runCount = 0
   private _history: CronRun[] = []
 
@@ -123,6 +131,13 @@ export class IntervalCron extends BaseCron {
 
   /** Execute the job once (useful for tests and manual triggers). */
   public async run(): Promise<void> {
+    // P23.10 (fix #33) — re-entry guard. The doc-flagged
+    // `isRunning` getter reflects the scheduler's timer
+    // state, not the in-progress job, so it misses manual
+    // re-entry. We add a local `_running` flag scoped to
+    // the run() call itself.
+    if (this._running) return
+    this._running = true
     const startedAt = Date.now()
     try {
       await this.job()
@@ -144,6 +159,10 @@ export class IntervalCron extends BaseCron {
       throw err
     } finally {
       this._runCount += 1
+      // P23.10 (fix #33) — clear the re-entry guard so
+      // sequential `run()` calls (the documented
+      // back-compat) can proceed.
+      this._running = false
     }
   }
 }
@@ -180,14 +199,14 @@ export class OnceCron extends BaseCron {
   }
 
   public start(): void {
-    if (this.timer || this._running) return
+    if (this.timer) return
     const delay = Math.max(0, this.at - Date.now())
     this.timer = setTimeout(() => {
       this.timer = undefined
-      this._running = true
-      void this.run().finally(() => {
-        this._running = false
-      })
+      // P23.10 (fix #33) — run() now sets/clears `_running`
+      // itself; start() no longer pre-sets the flag (that
+      // double-set caused the run() guard to early-return).
+      void this.run()
     }, delay)
   }
 
@@ -211,6 +230,11 @@ export class OnceCron extends BaseCron {
   }
 
   public async run(): Promise<void> {
+    // P23.10 (fix #33) — re-entry guard. OnceCron already
+    // tracks `_running` for the scheduler's `start()` guard
+    // but the manual `run()` path did not consult it.
+    if (this._running) return
+    this._running = true
     const startedAt = Date.now()
     try {
       await this.job()
@@ -231,13 +255,14 @@ export class OnceCron extends BaseCron {
       throw err
     } finally {
       this._runCount += 1
+      this._running = false
     }
   }
 }
 
-// ---------------------------------------------------------------------------
+// -----------------------------------------------------------------------
 // CronExpressionCron
-// ---------------------------------------------------------------------------
+// -----------------------------------------------------------------------
 
 /**
  * A 5-field cron expression:
@@ -291,16 +316,25 @@ export const CronExpressionCronOptionsSchema = BaseCronOptionsSchema.extend({
   /** 5-field cron expression. */
   expression: z.string().regex(/^\S+\s+\S+\s+\S+\s+\S+\s+\S+$/, 'must be a 5-field expression'),
 })
+// -----------------------------------------------------------------------
+// CronExpressionCron
+// -----------------------------------------------------------------------
+
+/**
+ * Fires the job whenever a 5-field cron expression matches the current minute.
+ */
 
 /** Options for {@link CronExpressionCron}. */
 export type CronExpressionCronOptions = z.input<typeof CronExpressionCronOptionsSchema>
 
-/** Fires the job whenever a 5-field cron expression matches the current minute. */
 export class CronExpressionCron extends BaseCron {
   public readonly id: string
   private readonly job: CronJob
   private readonly expression: string
   private timer: ReturnType<typeof setInterval> | undefined
+  // P23.10 (fix #33) — re-entry guard for `run()`. See the
+  // matching field on IntervalCron for rationale.
+  private _running = false
   private _runCount = 0
   private _history: CronRun[] = []
   private lastFiredMinute = ''
@@ -351,6 +385,12 @@ export class CronExpressionCron extends BaseCron {
   }
 
   public async run(): Promise<void> {
+    // P23.10 (fix #33) — re-entry guard. CronExpressionCron
+    // had the `_running` field added in P23.10; the manual
+    // `run()` path now consults it the same way IntervalCron
+    // and OnceCron do.
+    if (this._running) return
+    this._running = true
     const startedAt = Date.now()
     try {
       await this.job()
@@ -371,6 +411,7 @@ export class CronExpressionCron extends BaseCron {
       throw err
     } finally {
       this._runCount += 1
+      this._running = false
     }
   }
 }

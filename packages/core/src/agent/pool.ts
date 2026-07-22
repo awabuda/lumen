@@ -141,6 +141,13 @@ export const ProviderPoolOptionsSchema = z.object({
   targetId: z.string().min(1).optional(),
   providers: z.array(PooledProviderConfigSchema).optional(),
   random: z.function().optional(),
+  // P23.10 (fix #13) — schema now exposes the circuit-breaker
+  // field that the interface already accepts. Pre-P23.10 a
+  // caller that wired `circuit` through the schema path
+  // (e.g. `ProviderPoolOptionsSchema.parse(cfg)`) had it
+  // silently stripped; the pool then ran with no breaker
+  // even though the operator intended one.
+  circuit: z.custom<CircuitBreaker>((v) => typeof v === 'object' && v !== null).optional(),
 })
 
 // ---------------------------------------------------------------------------

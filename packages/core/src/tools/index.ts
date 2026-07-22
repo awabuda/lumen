@@ -279,7 +279,18 @@ export class ToolRegistry {
       // taken, skip and move on — the first registration
       // wins, and an existing operator-side tool takes
       // priority over a toolset default.
-      if (this.tools.has(name)) continue
+      // P23.10 (fix #19) — log at debug level when a name
+      // collides, naming the duplicate so an operator can
+      // resolve the conflict without guessing which
+      // toolset owned the tool. The first-wins policy is
+      // preserved (silent skip on conflict).
+      if (this.tools.has(name)) {
+        // eslint-disable-next-line no-console
+        console.debug(
+          `ToolRegistry.materializeToolset: skipping duplicate tool "${name}" from toolset "${toolset.id}"`,
+        )
+        continue
+      }
       // We have to set the underlying map's entry; the
       // public `register` would re-check the name and
       // throw on a name we just composed. Use a fresh

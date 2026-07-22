@@ -157,12 +157,25 @@ export abstract class BaseSkillSource {
   public abstract discover(ctx?: SkillContext): Promise<BaseSkill[]>
 }
 
-/** Minimal glob matcher used for skill path triggers. */
+/** Minimal glob matcher used for skill path triggers.
+ *
+ * P23.10 (fix #36, partial) — when the pattern contains
+ * `*` segments, use a partial match (no `^` / `$` anchors)
+ * so `'*foo*'` matches `'myfoobar'`. When the pattern has
+ * no `*`, the full-match anchors are preserved (a literal
+ * path trigger should not match a substring). The bug was
+ * that all patterns were anchored, so `'foo*'` could not
+ * match `'foobar/baz'`.
+ */
 export const globLikeMatch = (pattern: string, value: string): boolean => {
   if (pattern === '*') return true
   const escaped = pattern
     .split('*')
     .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     .join('.*')
-  return new RegExp(`^${escaped}$`).test(value)
+  // P23.10 (fix #36) — anchor only when there are no `*`
+  // segments (i.e. the pattern is a literal). With `*`
+  // segments, the match is a substring search.
+  const regex = pattern.includes('*') ? new RegExp(escaped) : new RegExp(`^${escaped}$`)
+  return regex.test(value)
 }

@@ -77,15 +77,31 @@ const SUB_AGENT_SYSTEM_PROMPT = (goal: string): string =>
     'Do not ask clarifying questions — make your best judgment.',
   ].join('\n')
 
-/** Build a new ToolRegistry containing only the named tools. */
+/** Build a new ToolRegistry containing only the named tools.
+ *
+ * P23.10 (fix #12) — when an `allowedTools` entry has no
+ * match in the source registry, emit a warning via the
+ * optional logger. Pre-P23.10 the entry was silently
+ * dropped, which masked configuration typos (e.g. a model
+ * emitting 'reed_file' instead of 'read_file') and produced
+ * a sub-agent with fewer tools than the caller intended.
+ */
 const buildRestrictedRegistry = (
   source: ToolRegistry,
   allowed: ReadonlyArray<string>,
+  logger?: { readonly warn: (msg: string, context?: Record<string, unknown>) => void },
 ): ToolRegistry => {
   const restricted = new ToolRegistry()
   for (const name of allowed) {
     const tool = source.get(name)
-    if (tool) restricted.register(tool)
+    if (tool) {
+      restricted.register(tool)
+    } else {
+      logger?.warn('buildRestrictedRegistry: allowedTools entry has no match', {
+        name,
+        availableTools: source.names(),
+      })
+    }
   }
   return restricted
 }
@@ -104,9 +120,11 @@ const buildAgent = (
     readonly model?: string
   },
   parentMiddleware?: ReadonlyArray<AgentMiddleware>,
+  // P23.10 (fix #12) — forward logger to buildRestrictedRegistry.
+  logger?: { readonly warn: (msg: string, context?: Record<string, unknown>) => void },
 ): Agent => {
   const tools = options.allowedTools
-    ? buildRestrictedRegistry(parent.tools, options.allowedTools)
+    ? buildRestrictedRegistry(parent.tools, options.allowedTools, logger)
     : parent.tools
 
   const baseConfig: AgentConfig = {
@@ -138,6 +156,11 @@ export const createSubAgent = (
   parent: AgentConfig,
   options: SubAgentOptions,
   parentMiddleware?: ReadonlyArray<AgentMiddleware>,
+  // P23.10 (fix #12) — optional logger forwarded to
+  // buildRestrictedRegistry so an unknown allowedTools
+  // entry surfaces a warning. Optional to preserve the
+  // pre-P23.10 positional signature.
+  logger?: { readonly warn: (msg: string, context?: Record<string, unknown>) => void },
 ): SubAgentRunner => {
   const parsed = SubAgentOptionsSchema.parse(options)
   const agent = buildAgent(
@@ -149,6 +172,7 @@ export const createSubAgent = (
       model: parsed.model,
     },
     parentMiddleware,
+    logger,
   )
   const runOptions: AgentRunOptions = {
     userMessage: parsed.goal,

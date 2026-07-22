@@ -41,9 +41,34 @@ export type Hook = (event: HookEvent, ctx: HookContext) => void | Promise<void>
  * Registry of hooks. Hooks are called in registration order.
  * Failures in one hook do not affect others.
  */
+import type { BaseLogger } from '../logging/index.js'
+
+/** Options for {@link HookRegistry}. */
+export interface HookRegistryOptions {
+  /**
+   * P23.10 (fix #46) — optional logger. When set, hook
+   * exceptions are routed through `logger.error` instead of
+   * `console.error`. The default behaviour (no logger) keeps
+   * the previous `console.error` call so callers that never
+   * thread a logger continue to see hook bugs.
+   */
+  readonly logger?: BaseLogger
+}
+
 export class HookRegistry {
   private readonly hooks: Array<{ id: number; hook: Hook }> = []
   private nextId = 0
+  /** P23.10 (fix #46) — see {@link HookRegistryOptions}. */
+  private readonly logger?: BaseLogger
+
+  public constructor(options: HookRegistryOptions = {}) {
+    // P23.10 (fix #46) — accept an optional logger. Without
+    // an explicit constructor the default no-arg constructor
+    // would silently drop `{ logger }`, leaving `this.logger`
+    // always undefined and every dispatch falling back to
+    // `console.error`.
+    this.logger = options.logger
+  }
 
   /** Register a hook. Returns an unregister function. */
   public register(hook: Hook): () => void {
@@ -64,9 +89,19 @@ export class HookRegistry {
         await hook(event, ctx)
       } catch (err) {
         // Swallow — agent must be robust to hook bugs.
-        // Production code should also log this.
-        // eslint-disable-next-line no-console
-        console.error('[lumen/hooks] hook threw:', err)
+        // P23.10 (fix #46) — route through the optional
+        // logger so the error lands in agent.log rather than
+        // the untraceable console.
+        if (this.logger) {
+          this.logger.error('hook threw', {
+            error: err instanceof Error ? err.message : String(err),
+            errorName: err instanceof Error ? err.name : 'UnknownError',
+            hookEvent: event.kind,
+          })
+        } else {
+          // eslint-disable-next-line no-console
+          console.error('[lumen/hooks] hook threw:', err)
+        }
       }
     }
   }

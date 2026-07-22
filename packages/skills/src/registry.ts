@@ -62,24 +62,31 @@ export class SkillRegistry {
 
   /** Score and return active skills, sorted by descending score. */
   public async activate(ctx: SkillContext): Promise<ActivatedSkill[]> {
-    const out: ActivatedSkill[] = []
-    for (const skill of this.skills.values()) {
-      const activation = await skill.shouldActivate(ctx)
-      if (activation.active) out.push({ skill, activation })
-    }
-    return out.sort(
-      (a, b) => b.activation.score - a.activation.score || a.skill.id.localeCompare(b.skill.id),
+    // P23.10 (fix #35) — score every skill in parallel. The
+    // shouldActivate() check is read-only against the skill's
+    // own configuration + the ctx; there is no shared mutable
+    // state between skills, so Promise.all is safe.
+    const evaluated = await Promise.all(
+      [...this.skills.values()].map(async (skill) => ({
+        skill,
+        activation: await skill.shouldActivate(ctx),
+      })),
     )
+    return evaluated
+      .filter((e) => e.activation.active)
+      .map((e) => ({ skill: e.skill, activation: e.activation }))
+      .sort(
+        (a, b) => b.activation.score - a.activation.score || a.skill.id.localeCompare(b.skill.id),
+      )
   }
 
   /** Apply all active skills and return their instruction payloads. */
   public async applyActive(ctx: SkillContext): Promise<SkillApplication[]> {
     const active = await this.activate(ctx)
-    const out: SkillApplication[] = []
-    for (const item of active) {
-      out.push(await item.skill.apply(ctx))
-    }
-    return out
+    // P23.10 (fix #35) — same parallel rationale: apply()
+    // is read-only against ctx and writes only to the
+    // returned array, so Promise.all is safe.
+    return await Promise.all(active.map((item) => item.skill.apply(ctx)))
   }
 
   /** Number of registered skills. */
