@@ -403,7 +403,16 @@ export class ProviderPool extends BaseProviderPool {
     if (candidates.length === 0) {
       throw new ConfigError('ProviderPool has no registered providers')
     }
-    let lastError: unknown
+    // P23.11 (fix #24) — initialise `lastError` so the PoolExhaustedError
+    // attribution below always carries a real ProviderError. Pre-P23.11
+    // the variable was declared but never assigned; if a candidate
+    // somehow exited the loop without throwing and without producing a
+    // non-empty head, `lastError` was undefined when we hit the throw,
+    // and the attribution chain dropped the actual failure cause.
+    let lastError: unknown = new ProviderError(
+      'ProviderPool.stream: no provider produced a usable stream',
+      { providerId: '(none)', retryable: true },
+    )
     for (const provider of candidates) {
       let firstEvent: StreamEvent | undefined
       const iter = provider.stream(request, options)

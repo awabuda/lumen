@@ -133,6 +133,16 @@ export class TerminalTool extends BaseTool {
   private readonly sandbox: ShellSandbox
 
   /**
+   * P23.11 (fix #59) — cache the resolved `ShellSandboxConfig` so
+   * `sandboxTimeoutMs()` reflects the operator-configured budget
+   * (e.g. `ShellSandboxConfig.timeoutMs`) instead of the hardcoded
+   * 30s fallback. The sandbox itself owns the actual abort timer;
+   * this field is only consulted by `execute()` to fill in a
+   * per-call `timeoutMs` when the agent did not pass one.
+   */
+  private readonly sandboxConfig: ShellSandboxConfig
+
+  /**
    * @param sandboxConfig The sandbox config. If absent, the default
    *   `default` strategy is used. The tool does **not** mutate
    *   the config — it stores the resolved sandbox for the lifetime
@@ -155,6 +165,7 @@ export class TerminalTool extends BaseTool {
         : defaultShellSandboxConfig({
             workspaceDir: opts.workspaceDir,
           })
+    this.sandboxConfig = sandboxConfig
     this.sandbox = resolveSandbox(sandboxConfig)
   }
 
@@ -182,7 +193,7 @@ export class TerminalTool extends BaseTool {
       }
     }
 
-    const cwd = parsed.cwd ? require('node:path').resolve(ctx.cwd, parsed.cwd) : ctx.cwd
+    const cwd = parsed.cwd ? path.resolve(ctx.cwd, parsed.cwd) : ctx.cwd
 
     let outcome: import('./sandbox.js').ShellSandboxOutcome
     try {
@@ -237,14 +248,16 @@ export class TerminalTool extends BaseTool {
   }
 
   /**
-   * Pull the configured timeout from the sandbox at execution time
-   * so an operator can change it between agent runs without
-   * recreating the tool. Default 30s.
+   * Pull the configured timeout from the cached sandbox config so an
+   * operator can change it via `ShellSandboxConfig.timeoutMs` and
+   * have it take effect on the next tool call. Default 30s.
+   *
+   * P23.11 (fix #59) — was hardcoded `30_000`; now reads
+   * `this.sandboxConfig.timeoutMs`. `NoneSandbox` callers (no
+   * configured sandbox) still fall through to the 30s default via
+   * `defaultShellSandboxConfig`'s own default.
    */
   private sandboxTimeoutMs(): number {
-    // The DefaultSandbox already holds the timeout; we don't have
-    // a way to ask it back. Hardcode the default here as a fallback
-    // for the NoneSandbox case.
-    return 30_000
+    return this.sandboxConfig.timeoutMs
   }
 }

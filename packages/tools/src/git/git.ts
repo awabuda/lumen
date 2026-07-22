@@ -168,19 +168,45 @@ export class GitTool extends BaseTool {
   protected async execute(input: unknown, ctx: ToolContext): Promise<GitOutput> {
     const parsed = input as GitInput
 
+    // P23.11 (fix #60) — short-circuit when the caller's signal
+    // has already aborted. Pre-P23.11 the spawn proceeded anyway
+    // and only the post-spawn kill flipped the exit code, wasting
+    // a child process per aborted `git` call. Returning a
+    // structured "aborted" output keeps the agent loop consistent
+    // with the signal-aborted contract documented in `BaseTool`.
+    if (ctx.signal.aborted) {
+      return {
+        op: parsed.op,
+        data: { error: 'aborted', truncated: false },
+        raw: '',
+        exitCode: null,
+      }
+    }
+
     // Per-op argv construction. We hand-build argv instead of
     // passing a string to `sh -c` so a malicious `ref` value
     // (`"; rm -rf #"`) cannot escape into a shell command.
     const argv = this.argvFor(parsed)
+    // P23.11 (fix #36) — instead of `{ ...process.env, ...env }`
+    // (which leaks every host env var including SSH_AUTH_SOCK and
+    // GPG_KEY into the git child), start from a curated allowlist
+    // and only forward vars that are present on the agent side.
+    // The two git-specific overrides always win. PATH is forwarded
+    // when present so the spawned `git` binary resolves; LUMEN_*
+    // vars thread through so the operator can correlate runs;
+    // everything else stays at git's compiled-in defaults.
     const env: Record<string, string> = {
+      PATH: process.env.PATH ?? '',
+      HOME: process.env.HOME ?? '',
       // Force git to never touch the user's interactive config.
       // The agent runs in an unattended context; the user's
       // `core.editor` is `vim` and we do not want git blocking
       // on an editor prompt.
       GIT_TERMINAL_PROMPT: '0',
       GIT_EDITOR: ':',
-      // Lumen's own env (e.g. LUMEN_SESSION) flows through
-      // automatically via the sandbox.
+    }
+    for (const [k, v] of Object.entries(process.env)) {
+      if (k.startsWith('LUMEN_') && typeof v === 'string') env[k] = v
     }
 
     const { spawn } = await import('node:child_process')
@@ -190,7 +216,11 @@ export class GitTool extends BaseTool {
     return new Promise((resolve) => {
       const child = spawn(execArgv[0]!, execArgv.slice(1), {
         cwd,
-        env: { ...process.env, ...env },
+        // P23.11 (fix #36) — feed the curated env to the spawn rather
+        // than `{ ...process.env, ...env }`. Pre-P23.11 the spread of
+        // `process.env` leaked every host env var (SSH_AUTH_SOCK,
+        // GPG_AGENT_INFO, ...) into the spawned git child.
+        env,
         stdio: ['ignore', 'pipe', 'pipe'],
         signal: ctx.signal,
       })
