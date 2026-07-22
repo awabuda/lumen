@@ -141,4 +141,59 @@ describe('createContextCompressionMiddleware', () => {
     })
     expect(out).toHaveLength(1 + 7)
   })
+
+  // P23.12 (fix #26) — the slice counters on the middleware
+  // state schema track every compression run, even when the
+  // test calls beforeModel with a fresh state (slice sits at
+  // `initialState`).
+  it('P23.12 — exposes compressionCount / totalMessagesCompressed / lastCompressedAt on the state schema', async () => {
+    const { createContextCompressionMiddleware } = await import(
+      '../src/agent/middleware/context-compression.js'
+    )
+    const m = createContextCompressionMiddleware({ maxMessages: 5, keepLastN: 2 })
+    expect(m.stateSchema).toBeDefined()
+    // The shape is enforced via Zod — the agent reads it through
+    // ctx.stateView[name], the test calls beforeModel with a
+    // synthetic stateView to drive the counters.
+    const initial = m.initialState
+    expect(initial.compressionCount).toBe(0)
+    expect(initial.totalMessagesCompressed).toBe(0)
+
+    let captured: { count: number; total: number; last: number | undefined } = {
+      count: 0,
+      total: 0,
+      last: undefined,
+    }
+    const ctxWithView = {
+      sessionId: 's',
+      iteration: 1,
+      startedAt: 0,
+      state: {},
+      control: { continueAfterModel: false },
+      stateView: {
+        'context-compression': {
+          current: initial,
+          set: (next: { compressionCount: number; totalMessagesCompressed: number; lastCompressedAt?: number }) => {
+            captured = {
+              count: next.compressionCount,
+              total: next.totalMessagesCompressed,
+              last: next.lastCompressedAt,
+            }
+          },
+        },
+      },
+    } as unknown as Parameters<typeof m.beforeModel>[1]
+
+    const beforeModel = m.beforeModel!
+    await beforeModel(longHistory(10), ctxWithView)
+    // The compression fires when message count > 5; toCompress = 8.
+    expect(captured.count).toBe(1)
+    expect(captured.total).toBe(8)
+    // lastCompressedAt is `Date.now()`; in practice always > 0,
+    // but the strict `> 0` guard catches the "field not set"
+    // regression if anyone removes the assignment later.
+    expect(captured.last).toBeDefined()
+    expect(typeof captured.last).toBe('number')
+    expect(captured.last).toBeGreaterThan(0)
+  })
 })

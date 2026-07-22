@@ -75,6 +75,31 @@ const defaultSummarise = (msgs: ReadonlyArray<Message>): string => {
 }
 
 /**
+ * P23.12 — state schema for the context-compression middleware
+ * (fix #26). Tracks how many compression runs have fired, the
+ * most recent compression timestamp, and the total number of
+ * messages collapsed across the lifetime of an agent run.
+ * The fields live on the middleware state slice so operators
+ * can inspect post-run via the agent's `middlewareState` view
+ * (P23.3) or, for CLI auditing, the new `lumen run --report
+ * compression` flag (P24 follow-up).
+ */
+const ContextCompressionStateSchema = z
+  .object({
+    /** Number of times `beforeModel` actually fired compression. */
+    compressionCount: z.number().int().min(0),
+    /** Wall-clock ms of the most recent compression. */
+    lastCompressedAt: z.number().int().min(0).optional(),
+    /** Cumulative number of messages collapsed into summaries. */
+    totalMessagesCompressed: z.number().int().min(0),
+  })
+  .strict()
+
+export type ContextCompressionState = z.infer<
+  typeof ContextCompressionStateSchema
+>
+
+/**
  * Create a context-compression middleware.
  *
  * Algorithm:
@@ -85,10 +110,17 @@ const defaultSummarise = (msgs: ReadonlyArray<Message>): string => {
  *      a single summary string.
  *   4. Build a system-role message carrying the summary, prepend
  *      it to `toKeep`, and return that as the new messages array.
+ *
+ * P23.12 (fix #26) — every compression run mutates the
+ * middleware's own state slice via `ctx.stateView[name].set()`
+ * (P23.3 surface) so the counters above stay accurate across
+ * the agent's lifetime. Pre-P23.12 the slice was empty so
+ * debugging "how often has this run compressed" required
+ * reverse-engineering the model-call sequence.
  */
 export const createContextCompressionMiddleware = (
   options: ContextCompressionOptions = {},
-): AgentMiddleware<Record<string, never>> => {
+): AgentMiddleware<ContextCompressionState> => {
   const parsed = ContextCompressionOptionsSchema.parse(options)
   const maxMessages = parsed.maxMessages ?? DEFAULT_MAX_MESSAGES
   const keepLastN = parsed.keepLastN ?? DEFAULT_KEEP_LAST_N
@@ -101,9 +133,12 @@ export const createContextCompressionMiddleware = (
 
   return {
     name: 'context-compression',
-    stateSchema: z.object({}).strict(),
-    initialState: {},
-    beforeModel: async (messages) => {
+    stateSchema: ContextCompressionStateSchema,
+    initialState: {
+      compressionCount: 0,
+      totalMessagesCompressed: 0,
+    },
+    beforeModel: async (messages, ctx) => {
       if (messages.length <= maxMessages) {
         return messages
       }
@@ -113,6 +148,34 @@ export const createContextCompressionMiddleware = (
       const summaryMessage: Message = {
         role: 'system',
         content: summary,
+      }
+      // P23.12 — bump the slice counters via the typed state
+      // surface. `stateView` is built by `Agent.buildStateView`
+      // (P23.3); our key is the middleware `name`. We read the
+      // current value, compute the next, and write it back
+      // through `set()`. `BeforeModelHook` does not currently
+      // have a state channel in its return type, so we mutate
+      // the slice via the side effect rather than the return.
+      const slice = ctx.stateView?.['context-compression']
+      if (slice !== undefined) {
+        const cur = (slice.current ?? {}) as ContextCompressionState
+        const previousTotal =
+          typeof cur.totalMessagesCompressed === 'number'
+            ? cur.totalMessagesCompressed
+            : 0
+        slice.set({
+          compressionCount:
+            (typeof cur.compressionCount === 'number'
+              ? cur.compressionCount
+              : 0) + 1,
+          // Always set `lastCompressedAt` on every compression
+          // run. Skipping it (the spread conditional in an
+          // earlier draft) leaves the field `undefined`, which
+          // is indistinguishable from "no compression yet" and
+          // defeats the post-run audit story.
+          lastCompressedAt: Date.now(),
+          totalMessagesCompressed: previousTotal + toCompress.length,
+        })
       }
       return [summaryMessage, ...toKeep]
     },
