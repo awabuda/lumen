@@ -66,6 +66,40 @@ export class Budget {
     }
   }
 
+  /**
+   * P23.12 (fix #71) — quick-access token counter used by the
+   * `/cost` slash command. The "used" half of the budget
+   * name; the limit is exposed via {@link BudgetState.tokensLimit}.
+   */
+  public tokensConsumed(): number {
+    return this.tokensUsed
+  }
+
+  /**
+   * P23.12 (fix #71) — quick-access cost-in-USD counter used
+   * by the `/cost` slash command.
+   */
+  public costUsdConsumed(): number {
+    return this.costUsedUsd
+  }
+
+  /**
+   * P23.12 (fix #71) — quick-access wall-clock elapsed counter
+   * used by the `/cost` slash command.
+   */
+  public timeMsConsumed(): number {
+    return Date.now() - this.startedAt
+  }
+
+  /**
+   * P23.12 (fix #71) — alias for `snapshot().tokensUsed` kept
+   * to make the `/cost` formatter read like an English
+   * sentence. Existing callers (`Budget.used`) keep working.
+   */
+  public get used(): number {
+    return this.tokensUsed
+  }
+
   /** True if any limit is exceeded. Does not throw. */
   public isExceeded(): boolean {
     return (

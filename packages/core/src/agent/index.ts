@@ -303,6 +303,14 @@ export class Agent {
   // async-generator's return value (TypeScript generators cannot
   // be awaited, only `for await`-ed). Reset to `undefined` on entry.
   private lastRunResult: AgentRunResult | undefined
+  /**
+   * P23.12 (fix #71) — the {@link Budget} from the most recent
+   * completed run. Persisted across calls so `/cost` can render
+   * a summary without having to thread the budget out via a
+   * hook. Reset on every new `executeLoop` entry; only the
+   * final state survives. Exposed via {@link budgetSnapshot}.
+   */
+  private lastBudget: Budget | undefined
 
   constructor(config: AgentConfig) {
     this.provider = config.provider
@@ -334,6 +342,24 @@ export class Agent {
       throw new Error('Agent.run: executeLoop returned without setting lastRunResult')
     }
     return this.lastRunResult!
+  }
+
+  /**
+   * P23.12 (fix #71) — return a snapshot of the most recent
+   * completed run's {@link Budget} state. Used by the `/cost`
+   * slash command in the chat TUI; the same data is also
+   * surfaced as the `Budget.timeMsConsumed` / `costUsdConsumed`
+   * getters wired by P23.6. Returns `undefined` if no run has
+   * completed yet (the CLI synthesises the
+   * "no runs yet" hint in that case).
+   *
+   * Stable for the most recent successful `run()` or
+   * `streamRun()`; reset on every new entry. Aborted runs
+   * still surface the partial counters because the budget is
+   * captured on every `addTokens` / `addCost` call.
+   */
+  public budgetSnapshot(): Budget | undefined {
+    return this.lastBudget
   }
 
   /**
@@ -477,6 +503,9 @@ export class Agent {
     })
 
     this.lastRunResult = undefined
+    // P23.12 (fix #71) — capture the budget so `budgetSnapshot()`
+    // can render it later without re-running the model.
+    this.lastBudget = budget
 
     if (this.memory) {
       await this.memory.createSession({ id: sessionId, title: options.userMessage.slice(0, 80) })
