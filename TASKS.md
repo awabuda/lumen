@@ -1019,3 +1019,55 @@ P19–P20 + P21 全部已 push 到 `origin/main`（v0.14.0 tag 已发布，72 co
 7. Hermes public surface for permission modes is **unverified** at the link level (the nav item exists; the destination page 404s); the same caveat as P19.5 and P21 design bases
 
 ### P22 4-framework comparison（完整表见 `docs/P22-DESIGN.md` §3）
+
+---
+
+## P23 — bug.md audit fix sweep (2026-07-21 to 2026-07-22)
+
+> **P23 是 P22 完成 + bug.md 审计报告之后的"修正型 sweep"。** 2026-07-15
+> 的代码审查留下了 73 条按 P0/P1/P2/P3 优先级的 audit 项
+> （`bug.md`），其中 P0/P1 的安全 + 中间件 parity 类已在 P22.6 完成，
+> P23 系列是 bug.md 中所有可作的非 FEATURE_GAP 项的 commit-by-commit
+> 收口。**FEATURE_GAP 类项（#9、#10、#37、#38、#39 等）保留在 bug.md
+> 作为 P24+ 提案**，不在本 sweep 范围内。
+
+### P23 task identity
+
+- **范围**：bug.md 中 41 个 CORRECT 类项 + #14（已在 P23.2 顺手）+ #15（已在 P23.3 顺手）+ #25/#41（跨包，已在 P23.9）
+- **不**在范围（FEATURE_GAP / 未来 P-ticket 提案）：#9（浏览器）、#10（Computer Use）、#37（子代理隔离）、#38（auto-dispatch）、#39（Explore/Plan/General-purpose 子代理）、#40（路径规则）、#41 升级版的 hooks lifecycle（只修了 #41 双截断）、#43（worktree）、#44（多渠道）、#45 的 vision（只修了 createTrace 抛 ValidationError）、#46-50 等 IDE / 主动执行 / 视觉
+- **完成 criteria**：bug.md 中标 [x] 的所有 fix 在 lumen 主分支 landing，并以 commit hash 标记
+
+### P23 Commits
+- [x] **P23 design lock** — `docs: P23 design lock — bug.md audit fix sweep` *(commit `e16d932`)* — Added the bug.md audit-fix-sweep paragraph above. Design-only pass; no package API change.
+- [x] **P23.0 + P23.1** — `fix(core): P23.0 — streamRun middleware parity + sessionId + parallel tool-call deltas` *(commit `a849afb`)* and `refactor(core): P23.1 — extract executeLoop() shared by run/streamRun` *(commit `1b5745e`)* — `streamRun` now goes through the same middleware chain as `run` (bug.md #1, the P0 priority item); `Agent.dispatchToolCall` passes the real `sessionId` (bug.md #7) instead of an empty string; `tool_call_delta` now keys by `ev.id` (bug.md #18) so parallel tool-call deltas no longer overwrite each other. `executeLoop()` extraction (~140 lines) deduplicates the `run` / `streamRun` paths (bug.md #11) into a single helper.
+- [x] **P23.2** — `fix(sub-agent): P23.2 — sub-agent inherits parent middleware (fix #2 + #14)` *(commit `f11a82b`)* — `createSubAgent` / `createSubAgentFromSpec` route through `createAgent` when the parent's middleware list is non-empty, so the sub-agent inherits permission / interrupt / plan / reflection / auto-mode middleware. Pre-P23.2 a parent with strict permissions spawned an unrestricted child.
+- [x] **P23.3** — `fix(middleware): P23.3 — middleware state via MiddlewareStateView.set() (fix #4 + #15)` *(commit `e68c610`)* — `plan` and `reflection` middleware mutate state through `MiddlewareStateView.set()` (the typed, schema-validated, append-only surface introduced in P19.0.3). Previous code cast and mutated the merge result, violating P19+ rule 12 and allowing cross-middleware writes.
+- [x] **P23.4** — `fix(reflection): P23.4 — reflection reads full conversation history (fix #5)` *(commit `4b30e7e`)* — `ReflectionMiddleware.afterModel` now receives the full message history (not just the latest assistant message), so `ruleBasedReflectMessages` can count assistant / tool / error signals across the run.
+- [x] **P23.5** — `fix(checkpoint): P23.5 — checkpoint save failures now log a structured warning (fix #7)` *(commit `f369f53`)* — `saveCheckpointBestEffort` writes a structured logger warning instead of an empty `catch {}` block. Added `packages/core/test/checkpoint-failure-logging.test.ts` (5 cases).
+- [x] **P23.6** — `fix(budget): P23.6 — wire cost and time limits (fix #8)` *(commit `bcf1501`)* — `Agent.run` and `Agent.streamRun` thread the caller-provided cost and time budgets through `Budget.addCost` and a deadline check; `Budget` now exposes `timeMsConsumed` and `costUsdConsumed`. Added `packages/core/test/budget-cost-time.test.ts` (6 cases).
+- [x] **P23.7** — `fix(parallel): P23.7 — parallel tool dispatch + ParallelSubAgent real streaming (fix #9 + #23)` *(commit `71316da`)* — `AgentRunOptions.parallelTools` (default off for back-compat) wraps the tool loop in `Promise.all` for model-issued parallel tool calls (bug.md #17 partial — paths still serialize when the flag is off). `ParallelSubAgent.stream()` yields each task as it completes instead of awaiting `Promise.allSettled` (bug.md #8).
+- [x] **P23.8** — `fix(memory): P23.8 — memory correctness (fix #20, #21, #22, #32)` *(commit `b4b62fb`)* — `SqliteStoreConfig.dimensions` is now a real schema field; `SqliteVecBackend.upsertBatch` runs inside `db.transaction(...)`; the FNV-1a 32-bit rowid hash is replaced with a 64-bit hash to halve the birthday-bound collision rate at 100k facts.
+- [x] **P23.9** — `fix(quality): P23.9 — small correctness fixes (fix #11, #25, #26, #27, #28, #29, #30, #31, #32, #41)` *(commit `76c5cfc`)* — `mergeArgs` uses a `Symbol` for the raw-string slot; FTS5 tokenisation preserves CJK + accented characters; `persistExtractedFacts` parallelises the dedup + put path; `HttpMcpTransport` lazy-validates `fetch`; the OpenAI-compatible stream generates a tool-call id when the upstream omits one; `PlanSchema` enforces mutex on `approvedAt` / `rejectedAt`; `ClusterOptionsSchema` is exported; `MinimalProvider` tracks `BaseProvider.chat`'s real signature; `createProviderEmbedder` forwards `dimensions`; `WebFetchTool.execute` drops the redundant `text.slice(0, parsed.maxBytes)`.
+- [x] **P23.10** — `fix(tools+security): P23.10 — toolset, security, skill-quality fixes (fix #12, #13, #19, #33, #35, #36, #45, #46)` *(commit `cd89661`)* — `buildRestrictedRegistry` warns on unknown `allowedTools`; `ProviderPoolOptionsSchema` exposes the `circuit` field; `ToolRegistry.materializeToolset` logs duplicate tool names; `IntervalCron.run` / `OnceCron.run` add `_running` re-entry guards; `SkillRegistry.activate` and `applyActive` run in parallel via `Promise.all`; `globLikeMatch` drops the `^` / `$` anchors when the pattern contains `*`; `createTrace` throws `ValidationError`; `HookRegistry` accepts an optional `BaseLogger` via the constructor (and HookRegistry now has the explicit `constructor(options)` so the option survives). Added `packages/core/test/p23-tools-security.test.ts` (15 cases).
+
+### P23 push status
+P22.7 + P23 全 12 commits 已 ship 到本地 main（v0.16.0 之上）。`v0.16.0` 在 P22 完成时已发布。
+
+### P23 Backlog (P24+ candidates)
+
+bug.md 中尚未修的项按特征分类：
+
+- **INCORRECT（doc 修正）**: 暂无新增
+- **FEATURE_GAP（新能力提案 — P24+ ticket）**: #9 浏览器、#10 Computer Use、#37 子代理上下文隔离、#38 auto-dispatch、#39 内置子代理（Explore/Plan/General-purpose）、#40 路径作用域规则、#41 升级 Hooks 生命周期、#42 `/compact` CLI 指令、#43 worktree 隔离、#44 多渠道适配器、#45 vision 多模态、#46 People-aware Memory、#47 MCP fail-closed、#48 并行 MCP 初始化、#49 Background Task、#50 Agent View、#51 Proactive Execution、#52 Manifest-first、#53 Permission Modes 扩展、#54 apply_patch 增强
+- **性能 / O(n) 类（独立 P-ticket 候选）**: #48 rowid hash 已修，#62 RingBuffer、#63 SessionGate 反向索引
+- **剩余 P3 项（按需捡取）**: #55 sync-async 包装、#58 path 模块重复导入、#59 sandboxTimeoutMs 硬编码、#60 信号已中止检查、#64 DuckDuckGo HTML 解析、#67 Skill 参数化、#68 失败降级本地模型、#69 `/loop` 指令、#70 `/init` 指令、#71 `/cost` 指令、#72 重试语义、#73 Event Bus
+- **特别说明**: #11 / #25 / #26 / #27 / #28 / #29 / #30 / #31 / #32 / #41 已在 P23.9；#4 / #5 / #7 / #8 / #9 / #12 / #13 / #15 / #17 / #18 / #19 / #20 / #21 / #22 / #23 / #33 / #35 / #36 / #45 / #46 已在 P23.2–P23.10 散落修复。
+
+### P23 关键决策（2026-07-22）
+
+1. **P23 = bug.md 收口**（不是新功能；不在 4-framework race）
+2. 完成 criteria：bug.md 中所有 CORRECT + PARTIAL 项 100% commit；INCORRECT 改 doc；FEATURE_GAP 留 P24+
+3. "全部修复" = CORRECT + PARTIAL；**不**修 INCORRECT（改 doc）/ **不**修 FEATURE_GAP（开 P+ 提案）
+4. 不引入新抽象 / 不改公共 API surface
+5. 不依赖 LLM call（纯 IO + Zod + structured logging + state 转换）
+6. tier 隔离保留（core 不 import skills；改动 `core/src/...` 同时改 `skills/src/...` 不打破 P19+ rule 1）
