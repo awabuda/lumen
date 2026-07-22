@@ -9,6 +9,14 @@
 > P24+ 提案（FEATURE_GAP，按 user preference rule 不入 P23
 > sweep）。详见 TASKS.md 的 P23 / P23.11 段 + 提交日志
 > `git log --grep="P23"`。
+> 
+> **状态（2026-07-22 update）**：P23.12 batch 增 ship 4 项 (#64 #69 #70
+> #71 — DuckDuckGo HTML tokenizer, /loop /cost /init slash
+> commands + ProjectAnalyzer)，于是 bug.md 中真 ship **55+4=59
+> 项**（含 silently-shipped 同 surface 的 #3 #16 #17 #18 #34
+> #56 #57 #61 #65 #66 共 9 项）。剩余 14 项为 FEATURE_GAP (= 不
+> 入 P23 sweep，按 user rule)。最新 commit hash:
+> `git log --grep="P23" --no-merges`。
 
 ---
 
