@@ -1098,3 +1098,28 @@ bug.md 中尚未修的项按特征分类：
 4. 不引入新抽象 — `#67 skill expansion`、`#72 callToolWithRetry` 均为 helper function（符合 P19+ rule 15），非抽象类
 5. **bash slash command 实现**: P23.11 只注册 SKILL.md 触发面（filesystem discoverable），不 wire 到 CLI composition root；CLI wiring 是 P24+ 任务
 6. `#70 /init` 同源 — ProjectAnalyzer 是 P24 follow-up（涉及 npm-registry + 深度 fs walk）
+
+---
+
+## P24 — bug.md FEATURE_GAP first sweep (design lock landed)
+
+> **P24 = bug.md FEATURE_GAP items that close with the
+> existing `tools` / `mcp` packages.** P24.0 lands bug.md
+> #9 (browser automation) + #48 (parallel MCP init) +
+> #47 (fail-closed MCP). P24.4 defers #10 (Computer Use)
+> because it requires a native dep beyond the
+> `better-sqlite3`-only guardrail (P22.7 §3). The
+> remaining 11 FEATURE_GAP items (#37 #38 #39 #40 #43 #44
+> #49 #50 #51 #52 #53 #54) defer to P25+ each as a separate
+> design lock.
+
+- [x] **P24.0 design lock** — `docs: P24.0 design lock — browser + parallel MCP + fail-closed` *(this commit)* — `docs/P24-DESIGN.md` (4-framework fetch verification on 2026-07-22: Claude Code News release post confirms Computer Use is a *separate* Anthropic feature and browser automation remains a FEATURE_GAP; Playwright 1.x docs (`browser` / `browser-contexts` / native TypeScript API); LangGraph 1.0 sub-agents (no change); OpenClaw (Next.js hydration shell, unreachable)). Decisions: #9 ships a single `web_browser` tool at `@lumen/tools/src/web/browser/index.ts` with `goto` / `act` / `extract` / `screenshot` operations (single-tool, NOT tool-set, for permission story); #48 swaps `McpRegistry.loadAll` to `Promise.all` with per-promise `try/catch`; #47 introduces a `mcp.security.failClosed` config flag (default `true`). `#10 Computer Use` deferred — see §3.
+
+### P24.0 关键决策（2026-07-22）
+
+1. **P24.0 = bug.md FEATURE_GAP first batch**（按 user preference rule "开 P+ 提案" 而非 "全部修复"）
+2. 完成 criteria：FEATURE_GAP item 进入 P24+ 才算 closure；#10 显式 P24.4 deferred（native dep 超出 P22.7 §3 护栏）
+3. **browser tool 是单个 `web_browser` 而非 tool-set** — 把 permission story 收敛到一个 tool descriptor（`op` discriminator），operators 可以 allow `web_browser.act` only 而 deny `web_browser.goto`
+4. **`Promise.all` + per-promise `catch` 而非 `Promise.allSettled`** — fast-fail on unrecoverable transport errors；如遇 latency regression 则切到 `allSettled`
+5. **`mcp.security.failClosed` default `true`** — opt-out 而非 opt-in 的安全姿势
+6. **P25+ backlog**：每 FEATURE_GAP item 各开一 design lock
