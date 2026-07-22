@@ -4,9 +4,11 @@
 > 审查范围: `packages/core/src/agent/` 核心模块及相关中间件
 > 与 OpenClaw / Claude Code 功能对比
 >
-> **状态（2026-07-22 commit `??`）**：73 项中 53 项已 ship（commit bodies
-> 明列 + P23.11 散落修复），20 项保留为 P24+ 提案（FEATURE_GAP）。
-> 详见 TASKS.md 的 P23 / P23.11 段 + 提交日志 `git log --grep="P23"`。
+> **状态（2026-07-22）**：73 项中 55 项已 ship（按 4-tag verdict =
+> CORRECT + PARTIAL 范畴，全 commit landing），14 项保留为
+> P24+ 提案（FEATURE_GAP，按 user preference rule 不入 P23
+> sweep）。详见 TASKS.md 的 P23 / P23.11 段 + 提交日志
+> `git log --grep="P23"`。
 
 ---
 
