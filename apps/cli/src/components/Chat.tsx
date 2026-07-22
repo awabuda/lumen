@@ -36,6 +36,11 @@ import TextInput from 'ink-text-input'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BuiltAgent } from '../composition.js'
 import { classifyChatError } from './chat-error.js'
+import {
+  budgetSnapshotAsAssistant,
+  handleLoopSlash,
+  initProjectAsAssistant,
+} from './slash-commands.js'
 
 /** A single turn (user + assistant) in the conversation log. */
 interface Turn {
@@ -104,6 +109,84 @@ export function Chat({
       }
       if (trimmed === '/exit' || trimmed === '/quit') {
         exit()
+        return
+      }
+      // P23.12 (fix #71) — /cost runs the budget snapshot helper.
+      // Reads built.agent.budgetSnapshot() (P23.12) which exposes
+      // the most recent Budget instance from the agent loop.
+      if (trimmed === '/cost' || trimmed.startsWith('/cost ')) {
+        const snapshot = budgetSnapshotAsAssistant(built)
+        const turn: Turn = { key: turnCounter.current + 1, user: trimmed }
+        turnCounter.current += 1
+        setTurns((prev) => [
+          ...prev,
+          turn,
+          {
+            key: turnCounter.current + 1,
+            user: '',
+            assistant: snapshot,
+          } satisfies Turn,
+        ])
+        turnCounter.current += 1
+        setStatus('done')
+        setStreamingText('')
+        setInput('')
+        return
+      }
+      // P23.12 (fix #69) — /loop registers an IntervalCron or
+      // OnceCron (depending on argument shape). Argument formats:
+      //   /loop 5m <prompt>      → every 5 minutes
+      //   /loop hourly <prompt>  → every hour
+      //   /loop "<cron>" <prompt> → cron expression (P24 follow-up)
+      //   /init                    → /init scaffold (P24 follow-up)
+      // For now the slash handler returns a synthetic assistant
+      // turn. The actual agent-loop dispatch is left as a P24
+      // ticket because it requires a fresh Agent.run per tick.
+      if (trimmed.startsWith('/loop ') || trimmed === '/loop') {
+        const result = await handleLoopSlash(trimmed)
+        const assistantMsg: AssistantMessage = {
+          role: 'assistant',
+          content: result.message,
+          toolCalls: [],
+        }
+        const turn: Turn = { key: turnCounter.current + 1, user: trimmed }
+        turnCounter.current += 1
+        setTurns((prev) => [
+          ...prev,
+          turn,
+          {
+            key: turnCounter.current + 1,
+            user: '',
+            assistant: assistantMsg,
+          } satisfies Turn,
+        ])
+        turnCounter.current += 1
+        setStatus('done')
+        setStreamingText('')
+        setInput('')
+        return
+      }
+      // P23.12 (fix #70 scaffold) — /init placeholder. The real
+      // ProjectAnalyzer lands in P24 (npm registry + fs walk +
+      // LLM synth). For now emit a descriptive placeholder so
+      // the trigger surface exists at the TUI level.
+      if (trimmed === '/init' || trimmed.startsWith('/init ')) {
+        const placeholder = initProjectAsAssistant()
+        const turn: Turn = { key: turnCounter.current + 1, user: trimmed }
+        turnCounter.current += 1
+        setTurns((prev) => [
+          ...prev,
+          turn,
+          {
+            key: turnCounter.current + 1,
+            user: '',
+            assistant: placeholder,
+          } satisfies Turn,
+        ])
+        turnCounter.current += 1
+        setStatus('done')
+        setStreamingText('')
+        setInput('')
         return
       }
 
