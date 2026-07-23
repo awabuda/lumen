@@ -13,6 +13,7 @@ import {
   buildComputerPrompt,
   computerCommand,
   formatDryRun,
+  formatDryRunJson,
   resolveComputerRunOptions,
   type ComputerCommandOptions,
 } from '../src/commands/computer.js'
@@ -147,6 +148,63 @@ describe('P27.2 — resolveComputerRunOptions + formatDryRun', () => {
         expect(
           formatDryRun(resolveComputerRunOptions(baseOptions())),
         ).toContain('lumen computer (dry run)')
+      })
+    } finally {
+      process.stdout.write = origWrite
+    }
+  })
+})
+
+describe('P27.3 — lumen computer --dry-run --json', () => {
+  it('emits valid JSON parseable by JSON.parse', () => {
+    mockedRunCommand.mockReset()
+    mockedRunCommand.mockResolvedValue(0)
+    const captured: string[] = []
+    const origWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = ((chunk: unknown) => {
+      captured.push(typeof chunk === 'string' ? chunk : String(chunk))
+      return true
+    }) as typeof process.stdout.write
+    try {
+      const code = computerCommand({
+        ...baseOptions(),
+        dryRun: true,
+        dryRunJson: true,
+      })
+      return code.then((c) => {
+        expect(c).toBe(0)
+        expect(mockedRunCommand).not.toHaveBeenCalled()
+        const out = captured.join('')
+        // The JSON output must round-trip through JSON.parse.
+        const parsed = JSON.parse(out)
+        expect(parsed.webBrowser).toBe(true)
+        expect(parsed.approveOn).toEqual(['web_browser'])
+        expect(typeof parsed.prompt).toBe('string')
+        expect(parsed.prompt).toContain(PROMPT_PREFIX_FRAGMENT)
+        // formatDryRunJson is also exported for direct use.
+        const direct = formatDryRunJson(
+          resolveComputerRunOptions(baseOptions()),
+        )
+        expect(JSON.parse(direct).webBrowser).toBe(true)
+      })
+    } finally {
+      process.stdout.write = origWrite
+    }
+  })
+
+  it('--json does NOT change the run path (runCommand still not called)', () => {
+    mockedRunCommand.mockReset()
+    mockedRunCommand.mockResolvedValue(0)
+    const origWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = ((_chunk: unknown) => true) as typeof process.stdout.write
+    try {
+      return computerCommand({
+        ...baseOptions(),
+        dryRun: true,
+        dryRunJson: true,
+      }).then((c) => {
+        expect(c).toBe(0)
+        expect(mockedRunCommand).not.toHaveBeenCalled()
       })
     } finally {
       process.stdout.write = origWrite

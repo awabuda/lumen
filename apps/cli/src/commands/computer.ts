@@ -63,6 +63,12 @@ export interface ComputerCommandOptions {
    * (potentially expensive) agent run.
    */
   dryRun?: boolean
+  /**
+   * Pair with `--dry-run`: emit the resolved options as
+   * JSON instead of the human-readable multi-line text.
+   * Useful for scripts and CI pipelines.
+   */
+  dryRunJson?: boolean
 }
 
 const PROMPT_PREFIX = [
@@ -139,6 +145,27 @@ export const formatDryRun = (options: RunCommandOptions): string => {
 }
 
 /**
+ * JSON variant of the dry-run summary. Used by
+ * `--dry-run --json`; pure helper. Operators running
+ * the subcommand from a script can pipe the JSON
+ * output into `jq` for further processing.
+ */
+export const formatDryRunJson = (options: RunCommandOptions): string => {
+  // Stable key order so the JSON output is deterministic
+  // for diff-friendly scripts.
+  const obj = {
+    prompt: options.prompt,
+    webBrowser: options.webBrowser === true,
+    approveOn: options.approveOn ?? null,
+    interruptOn: options.interruptOn ?? null,
+    webBrowserExe: options.webBrowserExe ?? null,
+    webBrowserAllowedDomains: options.webBrowserAllowedDomains ?? null,
+    model: options.model ?? null,
+  }
+  return JSON.stringify(obj, null, 2)
+}
+
+/**
  * The `lumen computer` subcommand body. Thin composition
  * over `runCommand`; the only "new" surface is the
  * prefixed prompt + the default `--web-browser` /
@@ -152,7 +179,11 @@ export const computerCommand = async (
 ): Promise<number> => {
   const runOptions = resolveComputerRunOptions(options)
   if (options.dryRun === true) {
-    process.stdout.write(`${formatDryRun(runOptions)}\n`)
+    if (options.dryRunJson === true) {
+      process.stdout.write(`${formatDryRunJson(runOptions)}\n`)
+    } else {
+      process.stdout.write(`${formatDryRun(runOptions)}\n`)
+    }
     return 0
   }
   return runCommand(runOptions)

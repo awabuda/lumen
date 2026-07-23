@@ -396,6 +396,7 @@ program
   )
   .option('--no-prefix', 'Disable the prompt-prefix hint that explains the web_browser availability')
   .option('--dry-run', 'Resolve the options and print a one-line summary without invoking the agent loop')
+  .option('--json', 'Pair with --dry-run: emit JSON instead of human-readable text')
   .option('--quiet', 'Suppress non-error output (used by the test suite)')
   .action(async (prompt: string, opts: Record<string, unknown>) => {
     const { computerCommand } = await import('./commands/computer.js')
@@ -428,6 +429,7 @@ program
       approveOn: splitNames(opts.approveOn as string | undefined),
       noPrefix: opts.prefix === false,
       dryRun: opts.dryRun === true,
+      dryRunJson: opts.json === true,
       quiet: opts.quiet === true,
     })
     process.exit(code)
