@@ -1160,3 +1160,14 @@ bug.md 中尚未修的项按特征分类：
 3. **#10 维持 P24.5 deferral** — 三个 re-open 条件 (ABI detector stable / pure-JS impl / hermetic sandbox drop) 都没满足
 4. **#45 只扩展 Message schema** — provider API 已经接受 image content blocks; lum en 这层 schema 是 missing piece
 5. **#46 只加 people 表** — 没有 cross-encoder 之前, helper 是 structured store 不是 People-aware surface
+
+- [x] **P26.1 — vision schema pinned (Pass-3 audit catch on #45)** — `fix(message): P26.1 — pin vision schema (#45 already shipped)` *(commit `ee6e982`)* — Pass-3 audit caught that P26.0 §1.2 was wrong: the UserMessage schema ALREADY accepts `string | ContentPart[]` where ContentPart is a discriminated union on `type` including `image` (URL or base64). The provider layer (`@lumen/llm`) already translates this shape into the OpenAI / Anthropic request format. P26.1 ships 8 tests pinning the public surface so a future refactor cannot silently remove multimodal support.
+- [x] **P26.2 — People-aware memory helper + schema (fix #46 data layer)** — `feat(memory): P26.2 — People-aware memory helper + schema (fix #46 data layer)` *(commit `106f642`)* — `PersonRecordSchema` + `createPerson` / `incrementMention` / `addAlias` / `addRelationship` / `findPersonByHandle` / `PeopleRegistry`. The cross-encoder surface is a P27+ ticket; the data layer is the precondition. 18 tests.
+
+### P26 final update (2026-07-23)
+
+1. **P26.0 §1.2 假设错** — Pass-3 audit 暴露 vision schema 已 ship。
+2. **#10 维持 deferred** — P22.7 §3 三个 re-open 条件均未满足。
+3. **#46 People-aware memory helper ship** — structured store only, cross-encoder 是 P27+。
+4. **bug.md 真 ship count: 71 / 73** (P26.1 surface-pin + P26.2 helper + 9 silently-shipped + pass-2 #26 + P23.11 + P23.12 + P24 + P25 sweep)。
+5. **余 2 项 deferred = [#10 Computer Use + P24.5 deferral doc]**。
