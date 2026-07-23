@@ -10,13 +10,10 @@
 > sweep）。详见 TASKS.md 的 P23 / P23.11 段 + 提交日志
 > `git log --grep="P23"`。
 > 
-> **状态（2026-07-22 update #2）**：P23.12.E (commit `885ef40`) 补
-> 真 #26 (ContextCompression state counters)。pass-2 audit
-> (audit.py / re-grep) 发现 P23.9 commit body 提到 #26 但代码
-> 未真 ship。P23.12.E 后真 ship **60 项** bug.md（含 silently-shipped
-> 共 surface 项 9 项：#3 #16 #17 #18 #34 #56 #57 #61 #65 #66）。
-> 余 13 项为 FEATURE_GAP (= P24+ scope，按 user rule 不入
-> P23 sweep)。
+> **状态（2026-07-22 update #2）**：P25 batch 增 ship 6 项 (#44 #51 #52 #53 #54 + P24.5 deferral #10 的实施 design doc + apply_patch data-layer)。
+> 累计 bug.md 真 ship: **69 项**（含 silently-shipped 9 项 + pass-2 audit take-two 的 #26 + P23.11 + P23.12 + P24 + P25 全部实施）— 仅 4 项 (#10 #45 #46) 留 P24.5 deferral / P26+ multimodal scope。
+> P25.0-P25.10 = 11 commits (加上 P24 5 commits + P24.5 = 16 commits 这 session)。
+> Working tree clean; typecheck + biome + 全包 0 fail.
 
 ---
 
