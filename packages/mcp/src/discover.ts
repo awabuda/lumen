@@ -93,28 +93,46 @@ export const connectMcpServer = async (
  *
  * Returns connected server details so the caller can close them on
  * shutdown. Failed servers are logged and skipped (not thrown).
+ *
+ * P24.2 (fix #48) — this function used to loop sequentially over
+ * `servers`, which made startup latency grow linearly with the
+ * server count. We now build an array of per-server promises
+ * with each one wrapping its own `try` / `catch` so a single
+ * bad server does NOT abort the others. The `Promise.all`
+ * itself never rejects because every per-promise rejection
+ * is caught and turned into a stderr warning — same contract
+ * as the pre-P24.2 loop, just parallel.
  */
 export const connectAllMcpServers = async (
   servers: Array<{ name: string } & McpServerConfig>,
   registry: ToolRegistry,
   options?: { timeoutMs?: number },
 ): Promise<DiscoveredMcpServer[]> => {
-  const connected: DiscoveredMcpServer[] = []
-
-  for (const serverConfig of servers) {
+  // Build the per-server tasks first. Each task is independent;
+  // failures stay isolated. `Promise.all` (NOT `allSettled`)
+  // because every per-promise rejection is caught and converted
+  // to a stderr warning here, so the outer promise never sees
+  // a rejection. If we later switch to `allSettled` to expose
+  // partial failures, the contract stays the same.
+  const tasks = servers.map(async (serverConfig): Promise<DiscoveredMcpServer | null> => {
     try {
       const discovered = await connectMcpServer(serverConfig.name, serverConfig, options)
+      // Register the server's tools. We do this inside the
+      // task so that an unrelated server's failure can't
+      // race the registration.
       for (const tool of discovered.tools) {
         registry.register(tool)
       }
-      connected.push(discovered)
+      return discovered
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       process.stderr.write(`[lumen mcp] failed to connect to "${serverConfig.name}": ${message}\n`)
+      return null
     }
-  }
+  })
 
-  return connected
+  const settled = await Promise.all(tasks)
+  return settled.filter((s): s is DiscoveredMcpServer => s !== null)
 }
 
 /**
