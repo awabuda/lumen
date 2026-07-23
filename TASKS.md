@@ -1175,3 +1175,13 @@ bug.md 中尚未修的项按特征分类：
 ### P27 — bug.md #10 workaround as first-class CLI (P24.5 §2 hardening)
 
 - [x] **P27.0 design lock** — `docs: P27.0 design lock — lumen computer subcommand` *(this commit)* — `docs/P27-DESIGN.md`. 4-framework fetch verification on 2026-07-23: Claude Code / LangChain / OpenClaw / Hermes all do NOT ship a Computer Use subcommand; the workaround pattern (P24.5 §2) is the dominant industry shape. P27 ships a first-class CLI shortcut (`lumen computer <prompt>`) on top of the existing `web_browser` tool (P24.1) and `--approve-on web_browser` flag. NO native-dep change; P22.7 §3 guardrail stays intact. #10 stays on P28+ backlog.
+
+
+- [x] **P27.1 — `lumen computer` subcommand (fix #10 workaround as first-class CLI)** — `feat(cli): P27.1 — lumen computer subcommand (bug.md #10 workaround as first-class CLI)` *(commit `885fb16`)* — Thin composition over `lumen run` (P22.2) that pre-applies `--web-browser --approve-on web_browser` and prepends a one-line hint to the prompt. Native-dep-free; uses the existing P24.1 `web_browser` tool. 8 tests; `lumen computer --help` shows the new subcommand. P22.7 §3 guardrail stays intact.
+
+### P27 final update (2026-07-23)
+
+1. **P27.0 + P27.1 = bug.md #10 真 ship path** — via P24.5 §2 workaround 显式 elevated 到 first-class CLI。
+2. **P22.7 §3 guardrail 不动** — #10 native-dep 路径继续 deferred; P27.1 是 workaround, 不是 fix。
+3. **bug.md 真 ship count: 72 / 73** (P27.1 增 1 真 ship 路径；剩 1 项 = P24.5 deferral doc 本身)。
+4. **P28+ 候选** = 真正的 native Computer Use (需 user 撤销 P22.7 §3 或 vendor pure-JS impl)。

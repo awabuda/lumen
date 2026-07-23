@@ -10,8 +10,8 @@
 > sweep）。详见 TASKS.md 的 P23 / P23.11 段 + 提交日志
 > `git log --grep="P23"`。
 > 
-> **状态（2026-07-23 final v2）**：P26.1 + P26.2 实施落地（Pass-3 audit catch）。P26.1 = #45 vision schema 实际已 ship（Pass-3 暴露 P26.0 §1.2 假设错）+ 8 测试 pin surface。P26.2 = #46 People-aware memory helper + schema ship（18 tests）。bug.md 真 ship count: **71 / 73** (含 1 P24.5 docs + 1 P26.1 surface-pin test + 11 P24 + 5 P25 + 1 P26.2 feature + 9 silently-shipped + pass-2 take-two #26 + P23.11 + P23.12 sweep)。**余 2 项 deferred = [#10 Computer Use + P24.5 deferral doc]** — 全部 explicit P27+ backlog。
-> P22.7 + P23 + P23.11 + P23.12 + P24 + P25 + P26.0-P26.2 = 32+ commits 这 8-series sweep。working tree clean; typecheck + biome + 全包 1379+ tests 0 fail.
+> **状态（2026-07-23 final v3）**：P27.1 ship `lumen computer` subcommand = bug.md #10 真 ship path (via P24.5 §2 workaround elevated to first-class CLI)。bug.md 真 ship count: **72 / 73** (P27.1 + 11 P24 + 5 P25 + 1 P26.1 + 1 P26.2 + 9 silently-shipped + pass-2 #26 + P23.11 + P23.12 + P22.7 sweep + 1 P24.5 docs)。**余 1 项 deferred = P24.5 deferral doc 本身** (not a bug.md item, 是设计 note)。
+> P22.7 + P23 + P23.11 + P23.12 + P24 + P25 + P26.0-P26.2 + P27.0-P27.1 = 33+ commits 这 9-series sweep。working tree clean; typecheck + biome + 全包 1387+ tests 0 fail. `lumen computer --help` 工作.
 
 ---
 
