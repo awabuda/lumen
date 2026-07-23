@@ -1225,3 +1225,21 @@ bug.md 中尚未修的项按特征分类：
 2. **P22.7 §3 guardrail 不动** — Playwright 已是 P24.1 dep, 不算新 native dep。hosted CUA model 端是 P29+ provider-layer 工作。
 3. **bug.md 真 ship count: 73 / 73** — P28.1 + P28.2 把 #10 真 fix path 完整 ship 出来。`lumen computer` (P27.x) 是 first-class CLI workaround; `lumen run --computer-use` 是真 coordinate-based tool。
 4. **P29+ 候选** = hosted CUA model provider-layer work (Anthropic Computer Use / OpenAI CUA); 也要 consider #45 cross-encoder (P26.1 surface 已有, encoder 是 P29+ vendor 选择)。
+
+
+- [x] **P28.3 — e2e sanity for `--computer-use` flag** — `test(cli): P28.3 — e2e sanity for --computer-use flag` *(commit `2755c47`)* — 3 hermetic tests: flag appears in `--help`; `lumen run --computer-use` without a prompt errors on missing prompt, not unknown option; help description mentions the `dangerous` risk class.
+- [x] **Pass-5 audit (post-P28.3)** — `/tmp/lumen-audit/audit5.py` 验证 **8/8 P27-P28 ship 全部 code-level 存在**: P28.1 tool + provider, P28.2 composition + flag, P28.3 e2e test, P27.1 subcommand, P27.2 dry-run, P27.3 json. Zero false positives.
+
+### P29 — hosted-model provider layer + cross-encoder for #46 (handbook)
+
+- [x] **P29.0 design lock** — `docs: P29.0 design lock — hosted-model provider layer + cross-encoder for #46` *(this commit)* — `docs/P29-DESIGN.md`. 4-framework fetch verification on 2026-07-23: Anthropic Computer Use API, OpenAI CUA, OSS IBM-CUA, CLIP cross-encoder. P29 ships 0 code by design; the per-path P-tickets (P29.1 P29.2 P29.3 P29.4) ship their own design locks + implementation commits gated on user vendor decisions. P22.7 §3 guardrail stays intact — both P29.1 (HTTP) and P29.2 (pure-JS CLIP) are native-dep-free.
+
+### P29 critical decisions (2026-07-23, post-P28.3)
+
+1. **P28.3 真 ship path = 73/73** — Pass-5 audit verifies 8/8 P27-P28 items.
+2. **P29 = handbook for the 2 remaining vendor decisions**:
+   - P29.1 = which hosted CUA model (Anthropic / OpenAI / OSS).
+   - P29.2 = which cross-encoder (pure-JS CLIP / OpenAI text-embedding).
+3. **P22.7 §3 guardrail 仍 intact** — both paths are HTTP or pure-JS; no new native dep.
+4. **P29.x = gated on user vendor decisions** — user picks the model + encoder; P29.1-P29.4 then ship.
+5. **P30+ 候选** = real agent-loop integration of CUA + cross-encoder.
