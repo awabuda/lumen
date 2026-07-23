@@ -10,6 +10,72 @@ Test counts are point-in-time totals across the monorepo. The pre-1.0 series
 (`0.x.y`) does not promise API stability; breaking changes are recorded as
 **Changed** entries with a note about the migration path.
 
+## [0.17.0] — 2026-07-23 — P23 + P23.11 + P23.12 + P24 + P25 + P26 (bug.md audit + FEATURE_GAP sweep)
+
+> **Multi-series sweep.** 17 commits across P23.0-P23.10
+> (bug.md audit fixes), P23.11 (pool/tools/memory/skills
+> polish), P23.12 (web/tokenizer/CLI shell), P24
+> (browser + parallel MCP + fail-closed MCP), P25
+> (sub-agent context / auto-dispatch / SKILL.md /
+> worktree / background tasks / agent view / apply_patch
+> / proactive / manifest / permission modes / channel
+> interface), and P26.0 (design-only umbrella for the
+> final 3 deferred items). Net effect on `bug.md`: 60/73
+> ship-count after P22.7 → **69/73 after P25.6** → final
+> banner at P26.0. The 4 remaining items are explicitly
+> deferred under either the P22.7 §3 native-dep guardrail
+> (#10 Computer Use) or the P26+ multimodal surface
+> (#45 vision / #46 People-aware memory).
+
+### Added
+
+  - **P24.1** `@lumen/tools` `web_browser` tool — Playwright-backed single
+    composite tool with `goto` / `act` / `extract` / `screenshot`
+    operations. Opt-in via `createBrowserTools()` and the
+    `--web-browser` CLI flag; risk class `approval-required`.
+  - **P24.2** `@lumen/mcp` `connectAllMcpServers` runs in parallel
+    (Promise.all with per-promise try/catch).
+  - **P24.3** `@lumen/mcp` fail-closed MCP registry —
+    `McpSecurityOptions` with `failClosed: true` (default) and per-server
+    `allowServerIds` whitelist.
+  - **P24.4** CLI `--web-browser` flag forwarded through
+    `RunCommandOptions` to `buildAgent`.
+  - **P25.1** SubAgentContext isolation (#37) — typed append-only slice
+    with `history` / `memo` / `createdAtMs` / `lastWriteMs` fields.
+  - **P25.1** auto-dispatch router helpers (#38) — `nullRouter` +
+    `heuristicSubAgentRouter`.
+  - **P25.1** built-in sub-agent SKILL.md (#39) — `explore` /
+    `plan` / `general-purpose` prompts in
+    `packages/skills/skills/`.
+  - **P25.2** worktree isolation helpers (#43) —
+    `createWorktree` + `runInWorktree`.
+  - **P25.3** `BackgroundTaskRegistry` (#49) — spawn / await /
+    cancel / list lifecycle.
+  - **P25.4** Agent View (#50) — `snapshotAgentView` +
+    `formatAgentView` helpers.
+  - **P25.5** apply_patch (#54) — V4A patch parser +
+    applier with strict Zod schemas.
+  - **P25.7** Permission Modes (#53) — `default` /
+    `acceptEdits` / `auto` / `bypassPermissions`.
+  - **P25.8** Manifest-first config (#52) — `lumen` block
+    of `package.json` as a project hint surface.
+  - **P25.9** Proactive Agent wrapper (#51) — wake-up +
+    decision + exit lifecycle + `exceedsHourlyBudget`
+    rate guard.
+  - **P25.10** Message Channel interface (#44 data layer)
+    — `ChannelMessage` / `ChannelSend` Zod schemas +
+    `MessageChannel` interface + `NullChannel` for
+    tests.
+
+### Documentation
+
+  - **P24.0 / P25.0 / P26.0** design-locks at
+    `docs/P24-DESIGN.md` / `docs/P25-DESIGN.md` /
+    `docs/P26-DESIGN.md`. Each follows the P22.7 §0
+    4-framework-fetch + 6-question-audit pattern.
+  - **P24.5-DEFER-NOTE.md** documents the Computer Use
+    (#10) deferral and the three re-open conditions.
+
 ## [0.12.0] — 2026-06-30 — P19+ middleware 范式 design lock (no code shipped)
 
 > **Design-only pass.** This version reserves the 0.12.0 slot for the
