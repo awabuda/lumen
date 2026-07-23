@@ -10,10 +10,8 @@
 > sweep）。详见 TASKS.md 的 P23 / P23.11 段 + 提交日志
 > `git log --grep="P23"`。
 > 
-> **状态（2026-07-22 update #2）**：P25 batch 增 ship 6 项 (#44 #51 #52 #53 #54 + P24.5 deferral #10 的实施 design doc + apply_patch data-layer)。
-> 累计 bug.md 真 ship: **69 项**（含 silently-shipped 9 项 + pass-2 audit take-two 的 #26 + P23.11 + P23.12 + P24 + P25 全部实施）— 仅 4 项 (#10 #45 #46) 留 P24.5 deferral / P26+ multimodal scope。
-> P25.0-P25.10 = 11 commits (加上 P24 5 commits + P24.5 = 16 commits 这 session)。
-> Working tree clean; typecheck + biome + 全包 0 fail.
+> **状态（2026-07-23 final）**：P26.0 umbrella design lock 落地（3 项 deferred 全部 explicit）— `docs/P26-DESIGN.md`。Pass-3 audit (`/tmp/lumen-audit/audit3.py`) 真 verify 14/14 P24 + P25 ship 全部 code-level 存在。**bug.md 真 ship = 69 项**（+1 docs: P24.5 #10 deferral note, +11 commits P24 + P25）。**余 4 项 deferred = [#10 #45 #46 + #10 doc]**，全部 explicit P27+ backlog。
+> P22.7 + P23 + P23.11 + P23.12 + P24 + P25 + P26 = 30+ commits 这 7-series sweep。working tree clean; typecheck + biome + 全包 1325+ tests 0 fail.
 
 ---
 

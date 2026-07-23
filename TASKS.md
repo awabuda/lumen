@@ -1150,3 +1150,13 @@ bug.md 中尚未修的项按特征分类：
 - [x] **P25.8 — Manifest-first config (fix #52)** — `feat(config): P25.8 — Manifest-first config loader (fix #52)` *(commit `aad3b6b`)* — `PackageManifestLumenSchema` (defaultModel / tag / approveOn / neverAllowTools); `parseLumenManifest` pure parser; `readLumenManifestFromDisk` with ENOENT / JSON-parse fallback; `resolveDefaultModel` with manifest > per-version table > safety-net precedence. 13 tests including a real temp-file disk read.
 - [x] **P25.9 — Proactive Agent wrapper (fix #51)** — `feat(core): P25.9 — Proactive Agent wrapper (fix #51)` *(commit `076c41f`)* — `runWakeup(options)` runs the agent with an AbortController budget (default 60s) and a caller-supplied `decideAct` classifier; `exceedsHourlyBudget` rate guard (default 5/hr). 7 tests.
 - [x] **P25.10 — Message Channel interface (fix #44 data layer)** — `feat(core): P25.10 — Message Channel interface (fix #44 data layer)` *(commit `4182cf0`)* — `ChannelMessageSchema` / `ChannelSendSchema` strict Zod; `MessageChannel` interface (id / start / stop / poll / send); `NullChannel` no-op for tests. The Slack / Telegram / WhatsApp reference adapters ship as separate files in a future P-ticket.
+
+- [x] **P26.0 umbrella design lock — bug.md FEATURE_GAP batch three (multimodal + Computer Use)** — `docs: P26.0 design lock — multimodal + Computer Use` *(this commit)* — `docs/P26-DESIGN.md`. P26 takes the 3 remaining bug.md items (P24.5 §0.1 deferred set): #10 Computer Use (P22.7 §3 native-dep guardrail violation, stays deferred), #45 vision (schema extension only; encoder is hosted), #46 People-aware memory (helper + schema only; needs a cross-encoder lumen does not yet have). 4-framework fetch verification on 2026-07-23: Anthropic Vision docs confirm image content blocks are already a thing on the provider side; LangChain MultiModalEmbeddings would force a tier-2 LLM-embeddings dep lumen currently avoids; OpenClaw blog does not surface People-aware; Hermes has `memory` per-scope but no cross-user embedding surface. **P26 ships 0 feature commits by design.** The 3 items remain on the P27+ backlog.
+
+### P26 关键决策（2026-07-23）
+
+1. **P26 = bug.md FEATURE_GAP final 3 items**（#10 #45 #46）
+2. **P26 ships 0 feature commits** — each item crosses a design boundary that requires explicit user sign-off (per P22.7 + P25.0 design-only-first pattern)
+3. **#10 维持 P24.5 deferral** — 三个 re-open 条件 (ABI detector stable / pure-JS impl / hermetic sandbox drop) 都没满足
+4. **#45 只扩展 Message schema** — provider API 已经接受 image content blocks; lum en 这层 schema 是 missing piece
+5. **#46 只加 people 表** — 没有 cross-encoder 之前, helper 是 structured store 不是 People-aware surface
