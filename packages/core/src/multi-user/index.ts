@@ -445,3 +445,14 @@ export class MultiUserRuntime {
     return this.policy.check({ user, tool, ...(input !== undefined ? { input } : {}) })
   }
 }
+
+// P25.1 (bug.md #37) — sub-agent context isolation.
+export {
+  SubAgentContextSchema,
+  type SubAgentContext,
+  filterToSubAgent,
+  createSubAgentContext,
+  appendToSubAgent,
+  memoSet,
+} from './sub-context.js'
+
