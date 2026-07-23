@@ -19,6 +19,50 @@ export interface DiscoveredMcpServer {
 }
 
 /**
+ * P24.3 (fix #47) — fail-closed MCP server registration.
+ *
+ * Pre-P24.3 every server in `config.mcp.servers` was accepted
+ * without any operator-side gate. A misconfigured `mcpServers`
+ * entry was a security incident.
+ *
+ * `connectAllMcpServers` now accepts an optional
+ * {@link McpSecurityOptions} block:
+ *
+ *   - `failClosed: true` (default) — refuse to connect any
+ *     server whose name is not on the explicit `allowServerIds`
+ *     list. If `allowServerIds` is absent, EVERY server is
+ *     rejected (fail-closed posture).
+ *   - `failClosed: false` — legacy / opt-out behaviour; every
+ *     server is allowed. The CLI surfaces a stderr warning
+ *     when this is set so operators know what they did.
+ *   - `allowServerIds` — optional explicit allow-list. When
+ *     `failClosed: true` AND `allowServerIds` is set, only
+ *     those IDs are allowed.
+ */
+export interface McpSecurityOptions {
+  /** Default `true` per P24.3. */
+  readonly failClosed?: boolean
+  /** Explicit allow-list of server ids. Empty / absent means
+   *  "no servers allowed" when failClosed is true. */
+  readonly allowServerIds?: ReadonlyArray<string>
+}
+
+/**
+ * Decide whether a server id is allowed by the security policy.
+ * Extracted so tests can pin the policy and the CLI can call
+ * it from `lumen doctor` to render the active policy.
+ */
+export const isServerIdAllowed = (
+  id: string,
+  security: McpSecurityOptions = {},
+): boolean => {
+  // failClosed defaults to true. Legacy opt-out is `false`.
+  if (security.failClosed === false) return true
+  const allow = security.allowServerIds ?? []
+  return allow.includes(id)
+}
+
+/**
  * Connect to one MCP server and discover its tools.
  *
  * Returns the connected client and proxy tools. The caller is responsible
@@ -107,7 +151,26 @@ export const connectAllMcpServers = async (
   servers: Array<{ name: string } & McpServerConfig>,
   registry: ToolRegistry,
   options?: { timeoutMs?: number },
+  security: McpSecurityOptions = {},
 ): Promise<DiscoveredMcpServer[]> => {
+  // P24.3 (fix #47) — fail-closed gate. Refuse to connect
+  // any server whose id is not on the explicit allow-list.
+  // The gate fires BEFORE the per-server task starts so a
+  // disallowed server never even spawns a child process or
+  // opens a TCP connection.
+  const isClosed = security.failClosed !== false
+  if (isClosed && security.allowServerIds === undefined) {
+    process.stderr.write(
+      `[lumen mcp] fail-closed mode is on (default) and no allowServerIds are configured — skipping all ${servers.length} configured server(s). Add \`mcp.security.allowServerIds: [...]' to your config to opt in.\n`,
+    )
+    return []
+  }
+  if (!isClosed && security.failClosed === false) {
+    process.stderr.write(
+      `[lumen mcp] warn: MCP fail-closed posture is OFF. Every configured server is allowed regardless of id. Set \`mcp.security.failClosed: true' (default) to require an explicit allow-list.\n`,
+    )
+  }
+
   // Build the per-server tasks first. Each task is independent;
   // failures stay isolated. `Promise.all` (NOT `allSettled`)
   // because every per-promise rejection is caught and converted
@@ -115,6 +178,14 @@ export const connectAllMcpServers = async (
   // a rejection. If we later switch to `allSettled` to expose
   // partial failures, the contract stays the same.
   const tasks = servers.map(async (serverConfig): Promise<DiscoveredMcpServer | null> => {
+    // P24.3 — the security gate is the first line in the task
+    // so a disallowed id never reaches `connectMcpServer`.
+    if (isClosed && !isServerIdAllowed(serverConfig.name, security)) {
+      process.stderr.write(
+        `[lumen mcp] refuse: server "${serverConfig.name}" is not on the operator's allowServerIds list (fail-closed is on). Add the id to \`mcp.security.allowServerIds' to permit it.\n`,
+      )
+      return null
+    }
     try {
       const discovered = await connectMcpServer(serverConfig.name, serverConfig, options)
       // Register the server's tools. We do this inside the

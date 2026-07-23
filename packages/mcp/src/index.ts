@@ -31,6 +31,8 @@ export {
 export {
   closeAllMcpServers,
   connectAllMcpServers,
+  isServerIdAllowed,
+  type McpSecurityOptions,
   connectMcpServer,
   type DiscoveredMcpServer,
 } from './discover.js'
