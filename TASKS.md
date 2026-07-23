@@ -1123,3 +1123,24 @@ bug.md 中尚未修的项按特征分类：
 4. **`Promise.all` + per-promise `catch` 而非 `Promise.allSettled`** — fast-fail on unrecoverable transport errors；如遇 latency regression 则切到 `allSettled`
 5. **`mcp.security.failClosed` default `true`** — opt-out 而非 opt-in 的安全姿势
 6. **P25+ backlog**：每 FEATURE_GAP item 各开一 design lock
+
+### P25.0 umbrella design lock — bug.md FEATURE_GAP batch two (12 items)
+
+- [x] **P25.0** — `docs: P25.0 umbrella design lock — bug.md FEATURE_GAP batch two (multi-axis capabilities)` *(this commit)* — `docs/P25-DESIGN.md`. 4-framework fetch verification on 2026-07-23: Claude Code News release post (`enabling-claude-code-to-work-more-autonomously`, re-fetched 2026-07-23) confirms the sub-agent frontmatter surface (`permissionMode`, `maxTurns`, `skills`, `mcpServers`, `hooks`, `memory`, `effort`, `isolation`, `background`) is the direct precedent for #37 #38 #39 #43 #49 #50 #53; Hermes Agent docs (`hermes-agent.nousresearch.com/docs/`) covers the cron + mcp + skills + apply_patch shape (#49 #54). LangGraph subgraphs + LangChain middleware reused from P23 §0.3. OpenClaw is the precedent for #52. The 12 remaining FEATURE_GAP items decompose into 5 buckets (team / hooks+worktree / channels+view / config+permission / apply_patch); each bucket ships as one P25.x ticket (P25.1-P25.5) + backfill (P25.6). Out of scope: #10 (per `docs/P24.5-DEFER-NOTE.md`), #45 #46 (P26+ multimodal candidates).
+
+### P24 implementation summary
+
+- [x] **P24.1** — `feat(tools): P24.1 — web_browser tool` *(commit `aef6a7e`)* — single composite `web_browser` tool at `@lumen/tools/src/web/browser/index.ts` (Playwright-backed, 4 ops: goto / act / extract / screenshot; opt-in via `createBrowserTools()`, NOT in `createDefaultTools` because `approval-required` risk).
+- [x] **P24.2** — `feat(mcp): P24.2 — connectAllMcpServers runs in parallel` *(commit `4e90bec`)* — serial loop swapped for `Promise.all` with per-promise try/catch.
+- [x] **P24.3** — `feat(mcp+security): P24.3 — fail-closed MCP registry` *(commit `96ec872`)* — `McpSecurityOptions` parameter with `failClosed: true` default + `allowServerIds` list.
+- [x] **P24.4** — `feat(cli): P24.4 — --web-browser flag for lumen run` *(commit `6cee2b6`)* — `BuildOptions.webBrowser*` fields + CLI flags forwarded via `RunCommandOptions`.
+- [x] **P24.5** — `docs: P24.5 — Computer Use (#10) deferral note` *(commit `58b3ca5`)* — explicit deferral: Computer Use needs a native dep beyond `better-sqlite3` (P22.7 §3 guardrail).
+
+### P25 critical decisions (2026-07-23)
+
+1. **P25 = bug.md FEATURE_GAP batch two**（接 P24 sweep 后的 12 remaining）
+2. **5 buckets by shared plumbing** — team / hooks+worktree / channels+view / config+permission / apply_patch
+3. **Helper function > abstract class** (P19+ rule 15) — `#53` extends the existing permission enum rather than introducing a new abstract base
+4. **No new native deps** (P22.7 §3) — `#43 worktree` reuses the existing git dep
+5. **`#10 Computer Use` 已 defer to P24.5 文档** — 不在 P25 范围内
+6. **`#45 #46 multimodal` → P26+** — 没有 multimodal embedding surface 前不 ship
