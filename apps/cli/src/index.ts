@@ -366,6 +366,72 @@ program
   })
 
 program
+  .command('computer')
+  .description(
+    'P27.1 (bug.md #10) — drive a headless Chromium browser. ' +
+      'Thin wrapper over `lumen run` that pre-applies ' +
+      '`--web-browser --approve-on web_browser` and prepends ' +
+      'a one-line hint to the prompt. Native-dep-free ' +
+      '(per P24.5 §2 workaround); uses the P24.1 ' +
+      '`web_browser` tool under the hood.',
+  )
+  .argument('<prompt>', 'The prompt for the agent (e.g. "navigate to example.com and screenshot the homepage")')
+  .option('--model <id>', 'Override the model id')
+  .option('--config <path>', 'Path to a Lumen YAML config file')
+  .option('--cwd <path>', 'Override the working directory')
+  .option('--api-key <key>', 'Override the API key')
+  .option('--base-url <url>', 'Override the API base URL')
+  .option('--memory-path <path>', 'Override the SQLite memory database path')
+  .option('--no-memory', 'Run without wiring a memory store')
+  .option('--no-mcp', 'Skip MCP server discovery and connection')
+  .option('--permissions <path>', 'Path to a YAML tool-permission policy file (P22.2)')
+  .option('--approve-on <names>', 'Comma-separated tool names to pre-approve (default: web_browser)')
+  .option(
+    '--web-browser-exe <path>',
+    'Override the Chromium executable path',
+  )
+  .option(
+    '--web-browser-allowed-domains <list>',
+    'Comma-separated domain allow-list (wildcards `*.example.com` accepted)',
+  )
+  .option('--no-prefix', 'Disable the prompt-prefix hint that explains the web_browser availability')
+  .option('--quiet', 'Suppress non-error output (used by the test suite)')
+  .action(async (prompt: string, opts: Record<string, unknown>) => {
+    const { computerCommand } = await import('./commands/computer.js')
+    const splitNames = (raw: string | undefined): ReadonlyArray<string> | undefined =>
+      raw === undefined || raw.length === 0
+        ? undefined
+        : raw
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0)
+    const code = await computerCommand({
+      prompt,
+      ...(opts.model !== undefined ? { model: opts.model as string } : {}),
+      ...(opts.config !== undefined ? { configPath: opts.config as string } : {}),
+      ...(opts.cwd !== undefined ? { cwd: opts.cwd as string } : {}),
+      ...(opts.apiKey !== undefined ? { apiKey: opts.apiKey as string } : {}),
+      ...(opts.baseUrl !== undefined ? { baseUrl: opts.baseUrl as string } : {}),
+      ...(opts.memoryPath !== undefined ? { memoryPath: opts.memoryPath as string } : {}),
+      ...(opts.memory === false ? { noMemory: true } : {}),
+      ...(opts.mcp === false ? { noMcp: true } : {}),
+      ...(opts.permissions !== undefined
+        ? { permissionsPath: opts.permissions as string }
+        : {}),
+      ...(opts.webBrowserExe !== undefined
+        ? { webBrowserExe: opts.webBrowserExe as string }
+        : {}),
+      ...(opts.webBrowserAllowedDomains !== undefined
+        ? { webBrowserAllowedDomains: splitNames(opts.webBrowserAllowedDomains as string) }
+        : {}),
+      approveOn: splitNames(opts.approveOn as string | undefined),
+      noPrefix: opts.prefix === false,
+      quiet: opts.quiet === true,
+    })
+    process.exit(code)
+  })
+
+program
   .command('model')
   .description('Inspect configured LLM models and providers')
   .argument('[subcommand]', '"list" (default), "show <name>", or "providers"', 'list')
