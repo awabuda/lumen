@@ -1243,3 +1243,16 @@ bug.md 中尚未修的项按特征分类：
 3. **P22.7 §3 guardrail 仍 intact** — both paths are HTTP or pure-JS; no new native dep.
 4. **P29.x = gated on user vendor decisions** — user picks the model + encoder; P29.1-P29.4 then ship.
 5. **P30+ 候选** = real agent-loop integration of CUA + cross-encoder.
+
+
+- [x] **P29.1 — `ComputerUseModel` interface + Anthropic + Stub** — `feat(llm): P29.1 — ComputerUseModel interface + Anthropic + Stub` *(commit `5a29ad7`)* — Interface in `@lumen/llm/src/computer-use/index.ts` with `ComputerActionSchema` (click / type / key / scroll / wait / stop) + `ComputerActionHistoryEntrySchema` + `ComputerUseModelInputSchema`. `AnthropicComputerUseModel` (stub for now; P29.1.1 replaces with real fetch) + `StubComputerUseModel` (pure-JS no-op for tests). 13 tests. The OpenAI CUA and OSS IBM-CUA adapters ship as separate P29.1.x commits once the user picks the vendor.
+- [x] **Pass-6 audit (post-P29.1)** — `/tmp/lumen-audit/audit6.py` 验证 **5/5 P29.1 items code-level 存在** (interface, AnthropicComputerUseModel, StubComputerUseModel, ComputerActionSchema, export). Zero false positives.
+
+### P29 critical decisions (2026-07-23, post-P29.1)
+
+1. **P29.1 ships interface + Anthropic stub + StubComputerUseModel** — 1 真 ship commit, ~290 lines.
+2. **P22.7 §3 guardrail 不动** — Anthropic CUA is HTTP, OSS CUA is OpenAI-compatible HTTP, Stub is pure-JS. 0 新 native dep.
+3. **OpenAI + OSS adapters** = P29.1.x follow-ups, gated on user vendor 选型.
+4. **Agent-loop integration** = P29.3 (P29.1 + P28.1 联合 wire).
+5. **P29.2 cross-encoder for #46** = separate decision.
+6. **bug.md 真 ship count 维持 73 / 73** — P29 ships additive data layer, no new bug.md fix.
