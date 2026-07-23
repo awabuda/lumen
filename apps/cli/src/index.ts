@@ -41,6 +41,18 @@ program
     '--web-browser-allowed-domains <list>',
     'Comma-separated domain allow-list (wildcards `*.example.com` accepted). The agent refuses to navigate to a host not on this list.',
   )
+  .option(
+    '--computer-use',
+    'P28.2 (bug.md #10 Path A) — register the coordinate-based `computer_use` tool. Off by default because the tool is `dangerous` risk; pair with `--approve-on computer_use` to use without prompts.',
+  )
+  .option(
+    '--computer-use-exe <path>',
+    'Override the Chromium executable path used by the `computer_use` tool.',
+  )
+  .option(
+    '--computer-use-allowed-domains <list>',
+    'Comma-separated domain allow-list for the `computer_use` screenshot anchor (rare; default is "no enforcement").',
+  )
   .option('--interrupt-on <names>', 'Comma-separated tool names to interrupt on (HITL)')
   .option(
     '--approve-on <names>',
@@ -425,6 +437,12 @@ program
         : {}),
       ...(opts.webBrowserAllowedDomains !== undefined
         ? { webBrowserAllowedDomains: splitNames(opts.webBrowserAllowedDomains as string) }
+        : {}),
+      ...(opts.computerUseExe !== undefined
+        ? { computerUseExe: opts.computerUseExe as string }
+        : {}),
+      ...(opts.computerUseAllowedDomains !== undefined
+        ? { computerUseAllowedDomains: splitNames(opts.computerUseAllowedDomains as string) }
         : {}),
       approveOn: splitNames(opts.approveOn as string | undefined),
       noPrefix: opts.prefix === false,

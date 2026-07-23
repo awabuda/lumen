@@ -98,6 +98,21 @@ export interface CliAgentOptions {
   /** Optional domain allow-list (see `WebBrowserTool.allowedDomains`). */
   webBrowserAllowedDomains?: ReadonlyArray<string>
   /**
+   * P28.2 (bug.md #10 Path A) — opt-in coordinate-based
+   * `computer_use` tool. The CLI does NOT register it by
+   * default (it has `dangerous` risk). When the
+   * operator passes `--computer-use`, the tool lands in
+   * the agent's tool palette.
+   */
+  computerUse?: boolean
+  /** Optional override for the Chromium executable
+   *  path used by the `computer_use` tool. */
+  computerUseExe?: string
+  /** Optional domain allow-list for the coordinate-based
+   *  tool's screenshot anchor (rare; default is "no
+   *  enforcement"). */
+  computerUseAllowedDomains?: ReadonlyArray<string>
+  /**
    * Override the per-server connect timeout (ms). Defaults
    * to 5000 — long enough to spawn stdio servers, short
    * enough that a single misbehaving server can't hang the
@@ -258,8 +273,33 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
         }
         const Ctor = browser.constructor as new (opts: typeof browserOpts) => typeof browser
         tools.register(new Ctor(browserOpts))
-      }
-    }
+        }
+
+        // P28.2 (bug.md #10 Path A) — opt-in coordinate-based
+        // computer_use tool. Off by default (dangerous
+        // risk). The flag is FALSE by default because
+        // computer_use is `dangerous` and only well-scoped
+        // operators should enable it.
+        if (options.computerUse === true) {
+        const { createComputerTools } = await import('@lumen/tools')
+        const computerTools = createComputerTools()
+        if (computerTools.length > 0 && computerTools[0] !== undefined) {
+          const computer = computerTools[0]
+          const computerOpts: {
+            executablePath?: string
+            allowedDomains?: ReadonlyArray<string>
+          } = {}
+          if (options.computerUseExe !== undefined) {
+            computerOpts.executablePath = options.computerUseExe
+          }
+          if (options.computerUseAllowedDomains !== undefined) {
+            computerOpts.allowedDomains = options.computerUseAllowedDomains
+          }
+          const Ctor2 = computer.constructor as new (opts: typeof computerOpts) => typeof computer
+          tools.register(new Ctor2(computerOpts))
+        }
+        }
+        }
   }
 
   const hooks = new HookRegistry()

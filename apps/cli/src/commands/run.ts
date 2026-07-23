@@ -26,8 +26,21 @@ export interface RunCommandOptions {
    *  runs. */
   memoryPath?: string
   noMemory?: boolean
-  /** Skip MCP server discovery + connection. */
+  /** Disable MCP server discovery. */
   noMcp?: boolean
+  /**
+   * P28.2 (bug.md #10 Path A) — opt-in coordinate-based
+   * `computer_use` tool. Maps to `BuildOptions.computerUse`;
+   * consumed by `buildAgent` to register `computer_use`
+   * on the registry when true. Off by default because
+   * the tool is `dangerous` risk.
+   */
+  computerUse?: boolean
+  /** Override the Chromium executable path (used by the
+   *  `computer_use` tool). */
+  computerUseExe?: string
+  /** Optional domain allow-list for `computer_use`. */
+  computerUseAllowedDomains?: ReadonlyArray<string>
   /** P24.4 (bug.md #9) — opt-in browser automation.
    *  Maps to `BuildOptions.webBrowser`; consumed by
    *  `buildAgent` to register `web_browser` on the
