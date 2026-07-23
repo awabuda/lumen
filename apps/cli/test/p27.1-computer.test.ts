@@ -11,6 +11,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   buildComputerPrompt,
+  computerCommand,
+  formatDryRun,
+  resolveComputerRunOptions,
   type ComputerCommandOptions,
 } from '../src/commands/computer.js'
 
@@ -110,5 +113,43 @@ describe('P27.1 — computerCommand wiring', () => {
     mockedRunCommand.mockResolvedValue(2)
     const code = await computerCommand(baseOptions())
     expect(code).toBe(2)
+  })
+})
+
+describe('P27.2 — resolveComputerRunOptions + formatDryRun', () => {
+  it('resolveComputerRunOptions returns the same shape that computerCommand would pass', () => {
+    const resolved = resolveComputerRunOptions(baseOptions())
+    expect(resolved.webBrowser).toBe(true)
+    expect(resolved.approveOn).toEqual(['web_browser'])
+    expect(resolved.prompt).toContain(PROMPT_PREFIX_FRAGMENT)
+  })
+
+  it('dry-run does NOT invoke runCommand and prints a summary line', () => {
+    mockedRunCommand.mockReset()
+    mockedRunCommand.mockResolvedValue(0)
+    const captured: string[] = []
+    const origWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = ((chunk: unknown) => {
+      captured.push(typeof chunk === 'string' ? chunk : String(chunk))
+      return true
+    }) as typeof process.stdout.write
+    try {
+      const code = computerCommand({ ...baseOptions(), dryRun: true })
+      // The function is async; we need to await it.
+      return code.then((c) => {
+        expect(c).toBe(0)
+        expect(mockedRunCommand).not.toHaveBeenCalled()
+        const out = captured.join('')
+        expect(out).toContain('lumen computer (dry run)')
+        expect(out).toContain('webBrowser:    true')
+        expect(out).toContain('approveOn:     web_browser')
+        // formatDryRun is also exported for direct use.
+        expect(
+          formatDryRun(resolveComputerRunOptions(baseOptions())),
+        ).toContain('lumen computer (dry run)')
+      })
+    } finally {
+      process.stdout.write = origWrite
+    }
   })
 })

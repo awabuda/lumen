@@ -55,6 +55,14 @@ export interface ComputerCommandOptions {
   noMcp?: boolean
   /** Mute stderr (used by the unit test). */
   quiet?: boolean
+  /**
+   * Resolve the options and print a one-line summary
+   * without invoking the agent loop. The pre-flight
+   * check is useful when the operator wants to confirm
+   * the resolved flag set before committing to a
+   * (potentially expensive) agent run.
+   */
+  dryRun?: boolean
 }
 
 const PROMPT_PREFIX = [
@@ -71,28 +79,21 @@ export const buildComputerPrompt = (userPrompt: string): string =>
   `${PROMPT_PREFIX}\n\n${userPrompt}`
 
 /**
- * The `lumen computer` subcommand body. Thin composition
- * over `runCommand`; the only "new" surface is the
- * prefixed prompt + the default `--web-browser` /
- * `--approve-on web_browser` flag set.
+ * Resolve the RunCommandOptions the subcommand WOULD
+ * pass, without invoking the agent loop. Pure helper so
+ * the unit test can pin the exact shape and so
+ * `lumen computer --dry-run` can print a one-line
+ * summary.
  */
-export const computerCommand = async (
+export const resolveComputerRunOptions = (
   options: ComputerCommandOptions,
-): Promise<number> => {
-  // Default approve-on is `['web_browser']` so the
-  // operator does not have to remember the exact tool
-  // name. Operators can pass an explicit list to override.
+): RunCommandOptions => {
   const approveOn = options.approveOn ?? (['web_browser'] as const)
   const interruptOn = options.interruptOn ?? []
-  // Pre-apply the prompt prefix unless the operator
-  // explicitly disabled it. We do NOT auto-wrap with
-  // any other tooling; the operator's prompt is the
-  // source of truth, the prefix is documentation.
   const prompt = options.noPrefix === true
     ? options.prompt
     : buildComputerPrompt(options.prompt)
-
-  const runOptions: RunCommandOptions = {
+  return {
     prompt,
     ...(options.model !== undefined ? { model: options.model } : {}),
     ...(options.configPath !== undefined ? { configPath: options.configPath } : {}),
@@ -114,6 +115,45 @@ export const computerCommand = async (
     ...(options.webBrowserAllowedDomains !== undefined
       ? { webBrowserAllowedDomains: options.webBrowserAllowedDomains }
       : {}),
+  }
+}
+
+/** Render a resolved-options summary. Used by
+ *  `--dry-run`; pure helper. */
+export const formatDryRun = (options: RunCommandOptions): string => {
+  const lines = [
+    'lumen computer (dry run)',
+    `  prompt:        ${JSON.stringify(options.prompt).slice(0, 80)}${options.prompt.length > 80 ? '…' : ''}`,
+    `  webBrowser:    ${options.webBrowser === true ? 'true' : 'false'}`,
+    `  approveOn:     ${options.approveOn?.join(', ') ?? '(default)'}`,
+    `  interruptOn:   ${options.interruptOn?.join(', ') ?? '(none)'}`,
+    ...(options.webBrowserExe !== undefined
+      ? [`  webBrowserExe: ${options.webBrowserExe}`]
+      : []),
+    ...(options.webBrowserAllowedDomains !== undefined
+      ? [`  allowed:       ${options.webBrowserAllowedDomains.join(', ')}`]
+      : []),
+    ...(options.model !== undefined ? [`  model:         ${options.model}`] : []),
+  ]
+  return lines.join('\n')
+}
+
+/**
+ * The `lumen computer` subcommand body. Thin composition
+ * over `runCommand`; the only "new" surface is the
+ * prefixed prompt + the default `--web-browser` /
+ * `--approve-on web_browser` flag set.
+ *
+ * `dryRun: true` resolves the same options and prints a
+ * one-line summary without invoking the agent loop.
+ */
+export const computerCommand = async (
+  options: ComputerCommandOptions & { readonly dryRun?: boolean },
+): Promise<number> => {
+  const runOptions = resolveComputerRunOptions(options)
+  if (options.dryRun === true) {
+    process.stdout.write(`${formatDryRun(runOptions)}\n`)
+    return 0
   }
   return runCommand(runOptions)
 }
