@@ -38,3 +38,15 @@ export {
   DEFAULT_PROFILE,
   type LoadConfigWithProfileOptions,
 } from './profile.js'
+
+// P25.8 (bug.md #52) — manifest-first config.
+export {
+  PackageManifestLumenSchema,
+  PackageManifestSchema,
+  parseLumenManifest,
+  readLumenManifestFromDisk,
+  resolveDefaultModel,
+  DEFAULT_MODEL_PER_VERSION,
+  type PackageManifestLumen,
+  type PackageManifest,
+} from './manifest.js'
