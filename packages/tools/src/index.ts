@@ -167,8 +167,55 @@ export function createDefaultTools(): BaseTool[] {
     ...createGitTools(),
     ...createMetaTools(),
     ...createGithubTools(),
+    // P24.1 (bug.md #9) — browser automation is **opt-in**,
+    // not part of the default palette. Operators who want it
+    // add `...createBrowserTools()` themselves. The risk class
+    // (`approval-required`) is high enough that bundling it
+    // into `createDefaultTools` would make every `lumen run`
+    // open a browser.
   ]
 }
+
+/**
+ * P24.1 (bug.md #9) — opt-in browser tool. Single composite
+ * `web_browser` tool backed by Playwright; see
+ * `web/browser/index.ts` for the surface. Operators wire it
+ * into the registry explicitly because browser automation is
+ * a high-risk capability (P22.0 default `approval-required`).
+ */
+export function createBrowserTools(): BaseTool[] {
+  // Eager-imported: operators who call this have already
+  // opted in; we want the Playwright dep loaded for them.
+  // Users who never call this still pay zero Playwright cost.
+  const { WebBrowserTool } = createBrowserModule()
+  return [new WebBrowserTool()]
+}
+
+/** Internal: lazy module reference to avoid Playwright's load
+ *  cost for operators that never wire `web_browser`. */
+const createBrowserModule = (): {
+  // biome-ignore lint/suspicious/noExplicitAny: dynamic import
+  readonly WebBrowserTool: any
+} => {
+  // Synchronous require-equivalent: ESM modules expose named
+  // exports at import time. The Playwright import in
+  // web/browser/index.ts is itself lazy (`await import('playwright')`)
+  // so this top-level import is cheap.
+  // We use createRequire because the existing tools build is
+  // ESM (see package.json type=module).
+  // biome-ignore lint/suspicious/noExplicitAny: dynamic load
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('./web/browser/index.js')
+}
+
+void createBrowserModule
+
+ /**
+  * P24.1 (bug.md #9) — opt-in browser tool. Single composite
+  *
+   * Composition root for the CLI: a single import gives the agent the
+   * whole tool palette ready for {@link ToolRegistry.registerAll}.
+   */
 
 /**
  * Build the meta / utility tools (date, env, whoami).
