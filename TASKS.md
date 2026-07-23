@@ -1196,3 +1196,21 @@ bug.md 中尚未修的项按特征分类：
 2. **P22.7 §3 guardrail 不动** — #10 native-dep 路径继续 deferred; P27.1 + P27.2 是 workaround, 不是 fix
 3. **唯一 deferred = P24.5 deferral doc 本身** (设计 note, 不是 bug.md item)
 4. **P28+ 候选** = 真 native Computer Use (需 user 撤销 P22.7 §3 或 vendor pure-JS impl)
+
+
+### P28 — beyond `lumen computer` (native-dep path for bug.md #10)
+
+- [x] **P28.0 design lock** — `docs: P28.0 design lock — beyond lumen computer (the native-dep path for bug.md #10)` *(this commit)* — `docs/P28-DESIGN.md`. 4-framework fetch verification on 2026-07-23: Anthropic / OpenAI Computer Use APIs are both hosted-model; the canonical native-dep-free shape is "hosted model + Playwright driver" (Playwright is already a P24.1 dep). P28 names three explicit paths (A: hosted + Playwright, B: drop P22.7 §3 + ship Selenium/nut.js, C: hybrid with auto-ABI-drift detector). P28.0 ships 0 code commits by design; the per-path P-tickets are P28.1 - P28.8.
+
+### P28 critical decisions (2026-07-23)
+
+1. **P28.0 = handbook for P28.1+** — no code change
+2. **P22.7 §3 guardrail stays** in P28.0; only user 跨 sweep 决策 can change
+3. **Recommended next step = Path A** (cheapest): hosted Anthropic/OpenAI CUA + Playwright driver, ~3 commits
+4. **bug.md 真 ship 路径 通过 P27.1 `lumen computer`** — 不依赖 P28 implementation
+5. **P29+ 候选** = 真 native-dep Computer Use (P28.1+ P28.x)
+
+### P27.3 polish (2026-07-23)
+
+- [x] **P27.3 — `lumen computer --json`** — `feat(cli): P27.3 — lumen computer --json (script-friendly dry-run)` *(commit `fe7cdbf`)* — `formatDryRunJson` pure helper + `--json` CLI flag pairs with `--dry-run` for script-friendly JSON output. 2 new tests; e2e confirmed via `node apps/cli/dist/index.js computer "..." --dry-run --json`.
+- [x] **Pass-4 audit (post-P27.2)** — 17/17 真 ship verified via `/tmp/lumen-audit/audit4.py`. Zero false positives. The 1 remaining deferred item is the P24.5 deferral note itself (documentation artefact, not a bug.md code item).
