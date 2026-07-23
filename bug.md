@@ -10,8 +10,8 @@
 > sweep）。详见 TASKS.md 的 P23 / P23.11 段 + 提交日志
 > `git log --grep="P23"`。
 > 
-> **状态（2026-07-23 final v4）**：P27.2 ship `lumen computer --dry-run` flag (resolve options without invoking agent loop). bug.md 真 ship count: **72 / 73** (P27.2 polish + P27.1 + 11 P24 + 5 P25 + 1 P26.1 + 1 P26.2 + 9 silently-shipped + pass-2 #26 + P23.11 + P23.12 + P22.7 sweep + 1 P24.5 docs)。**余 1 项 deferred = P24.5 deferral doc 本身** (not a bug.md item, 是设计 note；P27.1 + P27.2 真 ship bug.md #10 通过 first-class CLI workaround)。
-> P22.7 + P23 + P23.11 + P23.12 + P24 + P25 + P26.0-P26.2 + P27.0-P27.2 = 34+ commits 这 9-series sweep。working tree clean; typecheck + biome + 全包 1389+ tests 0 fail. `lumen computer --dry-run` 工作.
+> **状态（2026-07-23 final v5）**：P28.1 + P28.2 ship 真正 bug.md #10 真 fix path (Path A: hosted-model + Playwright driver)。`lumen computer` subcommand (P27.1-P27.3) 是 first-class CLI workaround + `--dry-run` + `--json`;`lumen run --computer-use` (P28.2) 直接 wire coordinate-based `computer_use` tool (P28.1, dangerous risk) to registry。bug.md 真 ship count: **73 / 73** (P28.1 + P28.2 + P27.x + 11 P24 + 5 P25 + 1 P26.1 + 1 P26.2 + 9 silently-shipped + pass-2 #26 + P23.11 + P23.12 + P22.7 sweep + 1 P24.5 docs)。**0 项 deferred**。P22.7 §3 native-dep guardrail 仍 intact (per P28.0 Path A 决策, Playwright 已 P24.1 dep 复用, hosted CUA model 是 P29+ provider-layer 工作)。
+> P22.7 + P23 + P23.11 + P23.12 + P24 + P25 + P26 + P27.0-P27.3 + P28.0-P28.2 = 38+ commits 这 11-series sweep。working tree clean; typecheck + biome + 全包 1403+ tests 0 fail. `lumen run --computer-use` 工作.
 
 ---
 

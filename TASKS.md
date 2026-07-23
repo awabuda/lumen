@@ -1214,3 +1214,14 @@ bug.md 中尚未修的项按特征分类：
 
 - [x] **P27.3 — `lumen computer --json`** — `feat(cli): P27.3 — lumen computer --json (script-friendly dry-run)` *(commit `fe7cdbf`)* — `formatDryRunJson` pure helper + `--json` CLI flag pairs with `--dry-run` for script-friendly JSON output. 2 new tests; e2e confirmed via `node apps/cli/dist/index.js computer "..." --dry-run --json`.
 - [x] **Pass-4 audit (post-P27.2)** — 17/17 真 ship verified via `/tmp/lumen-audit/audit4.py`. Zero false positives. The 1 remaining deferred item is the P24.5 deferral note itself (documentation artefact, not a bug.md code item).
+
+
+- [x] **P28.1 — `computer_use` tool (Path A data layer)** — `feat(tools): P28.1 — computer_use tool (bug.md #10 Path A)` *(commit `5aed4b1`)* — single composite tool at `@lumen/tools/src/computer-use/index.ts` with `screenshot` / `click` / `type` / `key` / `move` / `scroll` ops. Coordinate-based surface (vs. `web_browser` selector-based). Playwright-backed default provider (`PlaywrightComputerUseProvider`). Risk: `dangerous`. 13 tests (12 + 1 LUMEN_BROWSER_E2E-skipped).
+- [x] **P28.2 — `lumen run --computer-use` flag (Path A CLI)** — `feat(cli): P28.2 — --computer-use flag for lumen run (bug.md #10 Path A)` *(commit `744eacc`)* — wires the P28.1 tool into `buildAgent` via `BuildOptions.computerUse*`. Three flags: `--computer-use`, `--computer-use-exe <path>`, `--computer-use-allowed-domains <list>`. Risk-class: `dangerous`; pairs with `--approve-on computer_use` for zero-prompt automation.
+
+### P28 critical decisions (2026-07-23, post-ship)
+
+1. **Path A 真 ship (P28.1 + P28.2)** — 1 commit on tool, 1 commit on CLI wire. Total 2 真 ship commits, ~700 lines.
+2. **P22.7 §3 guardrail 不动** — Playwright 已是 P24.1 dep, 不算新 native dep。hosted CUA model 端是 P29+ provider-layer 工作。
+3. **bug.md 真 ship count: 73 / 73** — P28.1 + P28.2 把 #10 真 fix path 完整 ship 出来。`lumen computer` (P27.x) 是 first-class CLI workaround; `lumen run --computer-use` 是真 coordinate-based tool。
+4. **P29+ 候选** = hosted CUA model provider-layer work (Anthropic Computer Use / OpenAI CUA); 也要 consider #45 cross-encoder (P26.1 surface 已有, encoder 是 P29+ vendor 选择)。
