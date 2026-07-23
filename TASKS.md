@@ -1171,3 +1171,7 @@ bug.md 中尚未修的项按特征分类：
 3. **#46 People-aware memory helper ship** — structured store only, cross-encoder 是 P27+。
 4. **bug.md 真 ship count: 71 / 73** (P26.1 surface-pin + P26.2 helper + 9 silently-shipped + pass-2 #26 + P23.11 + P23.12 + P24 + P25 sweep)。
 5. **余 2 项 deferred = [#10 Computer Use + P24.5 deferral doc]**。
+
+### P27 — bug.md #10 workaround as first-class CLI (P24.5 §2 hardening)
+
+- [x] **P27.0 design lock** — `docs: P27.0 design lock — lumen computer subcommand` *(this commit)* — `docs/P27-DESIGN.md`. 4-framework fetch verification on 2026-07-23: Claude Code / LangChain / OpenClaw / Hermes all do NOT ship a Computer Use subcommand; the workaround pattern (P24.5 §2) is the dominant industry shape. P27 ships a first-class CLI shortcut (`lumen computer <prompt>`) on top of the existing `web_browser` tool (P24.1) and `--approve-on web_browser` flag. NO native-dep change; P22.7 §3 guardrail stays intact. #10 stays on P28+ backlog.
