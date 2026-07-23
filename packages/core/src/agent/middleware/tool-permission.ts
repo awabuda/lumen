@@ -84,11 +84,57 @@ export const ToolPermissionRuleSchema = z
  *  from `./auto-mode.ts`; the inferred autoMode type carries
  *  the full set of fields (neverAllowTools, hardDenyPatterns,
  *  allowPatterns, softDenyPatterns). */
+/**
+ * P25.7 (bug.md #53) — permission mode enum. Mirrors Claude
+ * Code's surface (default / acceptEdits / auto /
+ * bypassPermissions). The mode is a *top-level* policy
+ * field; the rule list (existing `rules` block) is
+ * orthogonal — both feed the dispatch decision.
+ *
+ * Why a small enum and not an abstract `BaseMode` class:
+ * the modes are a pure data classification; no behaviour
+ * to inherit.
+ */
+export const PermissionModeSchema = z.enum([
+  'default',
+  'acceptEdits',
+  'auto',
+  'bypassPermissions',
+])
+export type PermissionMode = z.infer<typeof PermissionModeSchema>
+
+/** Default mode when no mode is set on the policy. */
+export const DEFAULT_PERMISSION_MODE: PermissionMode = 'default'
+
+/**
+ * Resolution helper: the policy's effective mode for a
+ * given tool call. Today the mode is a single global
+ * value (Claude Code parity); future P-tickets may add
+ * tool-name or pattern overrides.
+ *
+ * `bypassPermissions` returns `allow` for every input,
+ * short-circuiting the rule list. Operators opt into
+ * bypassPermissions explicitly; we DO NOT default to it.
+ */
+export const effectiveMode = (
+  policy: ToolPermissionPolicy,
+): PermissionMode => policy.mode ?? DEFAULT_PERMISSION_MODE
+
+/** Pure predicate: does the mode skip rule evaluation? */
+export const modeBypassesRules = (mode: PermissionMode): boolean =>
+  mode === 'bypassPermissions'
+
 /** Top-level policy file. */
 export const ToolPermissionPolicySchema = z
   .object({
     /** Schema version. Bump when the shape changes. */
     version: z.literal(1),
+    /**
+     * P25.7 (bug.md #53) — permission mode. Defaults to
+     * `'default'` when omitted (back-compat with the
+     * pre-P25.7 schema). See {@link PermissionModeSchema}.
+     */
+    mode: PermissionModeSchema.optional(),
     /** Decision when no rule matches. */
     default: ToolPermissionDecisionSchema,
     /** Ordered list of rules; first match wins. */
