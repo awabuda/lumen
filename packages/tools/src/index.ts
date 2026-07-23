@@ -274,3 +274,52 @@ export {
   runInWorktree,
   type Worktree,
 } from './git/worktree.js'
+
+// P28.1 (bug.md #10 Path A) — coordinate-based computer_use.
+export {
+  ComputerUseTool,
+  ComputerUseInputSchema,
+  ComputerUseOutputSchema,
+  ComputerUseInputError,
+  PlaywrightComputerUseProvider,
+  type ComputerUseProvider,
+  type ComputerUseInput,
+  type ComputerUseOutput,
+  type ComputerUseOp,
+  type ComputerUseToolOptions,
+} from './computer-use/index.js'
+
+/**
+ * P28.1 (bug.md #10 Path A) \u2014 opt-in `computer_use` tool.
+ * Single composite tool backed by Playwright; coordinate-
+ * based surface (screenshot / click / type / key / move /
+ * scroll). Operators wire it into the registry explicitly
+ * because computer_use is `dangerous` risk.
+ */
+export function createComputerTools(): BaseTool[] {
+  // Re-use the Playwright dep that P24.1 already added.
+  // The CUA model side is the provider layer's job
+  // (P28.2 follow-up); the tool itself is a local
+  // Playwright driver.
+  const { ComputerUseTool } = createComputerModule()
+  return [new ComputerUseTool()]
+}
+
+/** Internal: lazy module reference so users that never
+ *  opt in never pay the Playwright load cost. */
+const createComputerModule = (): {
+  ComputerUseTool: typeof import('./computer-use/index.js').ComputerUseTool
+} => {
+  // The TypeScript ESM build supports synchronous
+  // top-level imports, so the dynamic-import dance
+  // used by createBrowserModule is unnecessary here.
+  // We re-import the module via a side-effect-free
+  // require so the build is portable.
+  // biome-ignore lint/suspicious/noExplicitAny: dynamic load
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('./computer-use/index.js') as {
+    ComputerUseTool: typeof import('./computer-use/index.js').ComputerUseTool
+  }
+}
+
+void createComputerModule
