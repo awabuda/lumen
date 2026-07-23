@@ -103,3 +103,19 @@ export {
   StreamParseError,
   isRetryableStatus,
 } from './errors.js'
+
+// P29.1 (bug.md #10 Path A) — Computer Use model interface
+// + Anthropic reference + Stub for tests. The OpenAI
+// and OSS adapters ship as separate P29.1.x commits
+// once the user picks the vendor.
+export {
+  AnthropicComputerUseModel,
+  ComputerActionSchema,
+  ComputerActionHistoryEntrySchema,
+  ComputerUseModelInputSchema,
+  StubComputerUseModel,
+  type ComputerAction,
+  type ComputerActionHistoryEntry,
+  type ComputerUseModel,
+  type ComputerUseModelInput,
+} from './computer-use/index.js'
