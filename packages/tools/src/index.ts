@@ -267,3 +267,10 @@ export {
   type ChunkStrategy,
   type TextChunk,
 } from './text/chunker.js'
+
+// P25.2 (bug.md #43) — worktree isolation helpers.
+export {
+  createWorktree,
+  runInWorktree,
+  type Worktree,
+} from './git/worktree.js'
