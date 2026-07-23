@@ -123,3 +123,15 @@ export {
   type RetrieveInput,
   type RetrieveResult,
 } from './rag.js'
+
+// P26.2 (bug.md #46) — people-aware memory helper.
+export {
+  PersonRecordSchema,
+  createPerson,
+  incrementMention,
+  addAlias,
+  addRelationship,
+  findPersonByHandle,
+  PeopleRegistry,
+  type PersonRecord,
+} from './people.js'
