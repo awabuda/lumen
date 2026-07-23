@@ -28,6 +28,16 @@ export interface RunCommandOptions {
   noMemory?: boolean
   /** Skip MCP server discovery + connection. */
   noMcp?: boolean
+  /** P24.4 (bug.md #9) — opt-in browser automation.
+   *  Maps to `BuildOptions.webBrowser`; consumed by
+   *  `buildAgent` to register `web_browser` on the
+   *  registry when true. Off by default because the tool
+   *  is `approval-required`. */
+  webBrowser?: boolean
+  /** Override the Chromium executable path. */
+  webBrowserExe?: string
+  /** Optional domain allow-list. */
+  webBrowserAllowedDomains?: ReadonlyArray<string>
   /**
    * P20.1.3: tool names whose dispatch throws AbortError.
    * Forwarded to `buildAgent({ interruptOn })`; empty array is

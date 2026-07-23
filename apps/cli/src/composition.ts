@@ -41,7 +41,10 @@ import { OpenAICompatibleProvider } from '@lumen/llm'
 import { type DiscoveredMcpServer, closeAllMcpServers, connectAllMcpServers } from '@lumen/mcp'
 import { SqliteStore } from '@lumen/memory'
 import { defaultSkillsPath } from '@lumen/skills'
-import { createFilesystemTools } from '@lumen/tools'
+import {
+  createBrowserTools,
+  createFilesystemTools,
+} from '@lumen/tools'
 import { loadSkillRegistry } from './commands/skills.js'
 import { loadPermissionPolicyFromFile } from './permissions-loader.js'
 import { buildKeywordTriggerFn } from './skill-trigger-adapter.js'
@@ -79,6 +82,21 @@ export interface CliAgentOptions {
    * `true` to run the agent with only the built-in tools.
    */
   noMcp?: boolean
+  /**
+   * P24.4 (bug.md #9) — opt-in browser automation. The CLI
+   * does NOT register `web_browser` by default (it has
+   * `approval-required` risk and is high-trust-only). When
+   * the operator passes `--web-browser`, the tool lands in
+   * the agent's tool palette. The flag may be paired with
+   * `webBrowserExe` to point at a system Chrome path (the
+   * default is the bundled Playwright driver, which is
+   * available on the dev sandbox).
+   */
+  webBrowser?: boolean
+  /** Override the Chromium executable path. */
+  webBrowserExe?: string
+  /** Optional domain allow-list (see `WebBrowserTool.allowedDomains`). */
+  webBrowserAllowedDomains?: ReadonlyArray<string>
   /**
    * Override the per-server connect timeout (ms). Defaults
    * to 5000 — long enough to spawn stdio servers, short
@@ -224,6 +242,23 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
   if (!options.noTools) {
     for (const t of createFilesystemTools()) {
       tools.register(t)
+    }
+    // P24.4 (bug.md #9) — opt-in browser automation.
+    // The flag is FALSE by default because web_browser is
+    // approval-required; operators enable it via
+    // `--web-browser` on `lumen run`.
+    if (options.webBrowser === true) {
+      const browserTools = createBrowserTools()
+      if (browserTools.length > 0 && browserTools[0] !== undefined) {
+        const browser = browserTools[0]
+        const browserOpts: { executablePath?: string; allowedDomains?: ReadonlyArray<string> } = {}
+        if (options.webBrowserExe !== undefined) browserOpts.executablePath = options.webBrowserExe
+        if (options.webBrowserAllowedDomains !== undefined) {
+          browserOpts.allowedDomains = options.webBrowserAllowedDomains
+        }
+        const Ctor = browser.constructor as new (opts: typeof browserOpts) => typeof browser
+        tools.register(new Ctor(browserOpts))
+      }
     }
   }
 

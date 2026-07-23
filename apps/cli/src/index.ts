@@ -29,6 +29,18 @@ program
   .option('--memory-path <path>', 'Override the SQLite memory database path')
   .option('--no-memory', 'Run without wiring a memory store')
   .option('--no-mcp', 'Skip MCP server discovery and connection')
+  .option(
+    '--web-browser',
+    'P24.4 (bug.md #9) — register the `web_browser` tool (Playwright-backed). Off by default because the tool is approval-required.',
+  )
+  .option(
+    '--web-browser-exe <path>',
+    'Override the Chromium executable path passed to Playwright (defaults to the bundled driver; operators in hermetic sandboxes may want to point this at the system Chrome binary).',
+  )
+  .option(
+    '--web-browser-allowed-domains <list>',
+    'Comma-separated domain allow-list (wildcards `*.example.com` accepted). The agent refuses to navigate to a host not on this list.',
+  )
   .option('--interrupt-on <names>', 'Comma-separated tool names to interrupt on (HITL)')
   .option(
     '--approve-on <names>',
@@ -98,6 +110,12 @@ program
           : undefined,
       enableSkillTrigger: opts.enableSkillTrigger === true,
       skillsPath: opts.skillsPath as string | undefined,
+      // P24.4 (bug.md #9) — opt-in browser tool flags.
+      webBrowser: opts.webBrowser === true,
+      webBrowserExe: opts.webBrowserExe as string | undefined,
+      webBrowserAllowedDomains: splitNames(
+        opts.webBrowserAllowedDomains as string | undefined,
+      ),
     })
     process.exit(code)
   })
