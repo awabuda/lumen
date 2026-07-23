@@ -1185,3 +1185,14 @@ bug.md 中尚未修的项按特征分类：
 2. **P22.7 §3 guardrail 不动** — #10 native-dep 路径继续 deferred; P27.1 是 workaround, 不是 fix。
 3. **bug.md 真 ship count: 72 / 73** (P27.1 增 1 真 ship 路径；剩 1 项 = P24.5 deferral doc 本身)。
 4. **P28+ 候选** = 真正的 native Computer Use (需 user 撤销 P22.7 §3 或 vendor pure-JS impl)。
+
+
+- [x] **P27.2 — `lumen computer --dry-run`** — `feat(cli): P27.2 — lumen computer --dry-run (resolve without invoking)` *(commit `a53460f`)* — pre-flight check that prints the resolved options without invoking the agent loop. `resolveComputerRunOptions` + `formatDryRun` are exported pure helpers. 2 new tests; e2e confirmed via `node apps/cli/dist/index.js computer "..." --dry-run`.
+- [x] **P27 backfill** — `docs: P27 backfill` *(commit `c1aa540`)* — bug.md status banner refreshed to 72/73 ship-count; P22.7 §3 native-dep guardrail stays intact.
+
+### P27 final state (2026-07-23)
+
+1. **bug.md 真 ship: 72 / 73** (P27.x 真 ship 路径)
+2. **P22.7 §3 guardrail 不动** — #10 native-dep 路径继续 deferred; P27.1 + P27.2 是 workaround, 不是 fix
+3. **唯一 deferred = P24.5 deferral doc 本身** (设计 note, 不是 bug.md item)
+4. **P28+ 候选** = 真 native Computer Use (需 user 撤销 P22.7 §3 或 vendor pure-JS impl)
