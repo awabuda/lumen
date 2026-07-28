@@ -40,6 +40,19 @@ export { atomicWriteFile } from './fs/write-file.js'
 export { PatchTool, PatchInputSchema, PatchOutputSchema } from './fs/patch.js'
 export type { PatchInput, PatchOutput } from './fs/patch.js'
 
+// P25.5 + P30.B2 — V4A apply_patch parser + applier. The
+// standalone `lumen apply-patch <file>` CLI subcommand
+// (apps/cli/src/commands/apply-patch.ts) consumes these
+// directly; the in-loop PatchTool ships the same parser
+// for the agent path. See packages/tools/test/p25.5 for
+// the parser + applier unit tests.
+export {
+  PatchParseError,
+  applyPatchPlan,
+  parsePatch,
+} from './patch/apply.js'
+export type { PatchApplier, PatchApplyResult, PatchHunk, PatchPlan } from './patch/apply.js'
+
 export { ListDirTool, ListDirInputSchema, ListDirOutputSchema } from './fs/list-dir.js'
 export type { ListDirInput, ListDirOutput, ListDirEntry } from './fs/list-dir.js'
 
@@ -210,12 +223,12 @@ const createBrowserModule = (): {
 
 void createBrowserModule
 
- /**
-  * P24.1 (bug.md #9) — opt-in browser tool. Single composite
-  *
-   * Composition root for the CLI: a single import gives the agent the
-   * whole tool palette ready for {@link ToolRegistry.registerAll}.
-   */
+/**
+ * P24.1 (bug.md #9) — opt-in browser tool. Single composite
+ *
+ * Composition root for the CLI: a single import gives the agent the
+ * whole tool palette ready for {@link ToolRegistry.registerAll}.
+ */
 
 /**
  * Build the meta / utility tools (date, env, whoami).

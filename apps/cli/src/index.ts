@@ -125,9 +125,7 @@ program
       // P24.4 (bug.md #9) — opt-in browser tool flags.
       webBrowser: opts.webBrowser === true,
       webBrowserExe: opts.webBrowserExe as string | undefined,
-      webBrowserAllowedDomains: splitNames(
-        opts.webBrowserAllowedDomains as string | undefined,
-      ),
+      webBrowserAllowedDomains: splitNames(opts.webBrowserAllowedDomains as string | undefined),
     })
     process.exit(code)
   })
@@ -387,7 +385,10 @@ program
       '(per P24.5 §2 workaround); uses the P24.1 ' +
       '`web_browser` tool under the hood.',
   )
-  .argument('<prompt>', 'The prompt for the agent (e.g. "navigate to example.com and screenshot the homepage")')
+  .argument(
+    '<prompt>',
+    'The prompt for the agent (e.g. "navigate to example.com and screenshot the homepage")',
+  )
   .option('--model <id>', 'Override the model id')
   .option('--config <path>', 'Path to a Lumen YAML config file')
   .option('--cwd <path>', 'Override the working directory')
@@ -397,17 +398,23 @@ program
   .option('--no-memory', 'Run without wiring a memory store')
   .option('--no-mcp', 'Skip MCP server discovery and connection')
   .option('--permissions <path>', 'Path to a YAML tool-permission policy file (P22.2)')
-  .option('--approve-on <names>', 'Comma-separated tool names to pre-approve (default: web_browser)')
   .option(
-    '--web-browser-exe <path>',
-    'Override the Chromium executable path',
+    '--approve-on <names>',
+    'Comma-separated tool names to pre-approve (default: web_browser)',
   )
+  .option('--web-browser-exe <path>', 'Override the Chromium executable path')
   .option(
     '--web-browser-allowed-domains <list>',
     'Comma-separated domain allow-list (wildcards `*.example.com` accepted)',
   )
-  .option('--no-prefix', 'Disable the prompt-prefix hint that explains the web_browser availability')
-  .option('--dry-run', 'Resolve the options and print a one-line summary without invoking the agent loop')
+  .option(
+    '--no-prefix',
+    'Disable the prompt-prefix hint that explains the web_browser availability',
+  )
+  .option(
+    '--dry-run',
+    'Resolve the options and print a one-line summary without invoking the agent loop',
+  )
   .option('--json', 'Pair with --dry-run: emit JSON instead of human-readable text')
   .option('--quiet', 'Suppress non-error output (used by the test suite)')
   .action(async (prompt: string, opts: Record<string, unknown>) => {
@@ -429,12 +436,8 @@ program
       ...(opts.memoryPath !== undefined ? { memoryPath: opts.memoryPath as string } : {}),
       ...(opts.memory === false ? { noMemory: true } : {}),
       ...(opts.mcp === false ? { noMcp: true } : {}),
-      ...(opts.permissions !== undefined
-        ? { permissionsPath: opts.permissions as string }
-        : {}),
-      ...(opts.webBrowserExe !== undefined
-        ? { webBrowserExe: opts.webBrowserExe as string }
-        : {}),
+      ...(opts.permissions !== undefined ? { permissionsPath: opts.permissions as string } : {}),
+      ...(opts.webBrowserExe !== undefined ? { webBrowserExe: opts.webBrowserExe as string } : {}),
       ...(opts.webBrowserAllowedDomains !== undefined
         ? { webBrowserAllowedDomains: splitNames(opts.webBrowserAllowedDomains as string) }
         : {}),
@@ -660,7 +663,6 @@ program
   })
 
 // `lumen init [--force] [--path <file>]`
-//
 // P22.3: write a starter `~/.lumen/permissions.yaml` so the
 // operator can `lumen run --permissions` immediately. The starter
 // ships with `default: ask` and a least-privilege rule set
@@ -677,6 +679,36 @@ program
     const code = await initCommand({
       force: opts.force === true,
       path: opts.path as string | undefined,
+    })
+    process.exit(code)
+  })
+
+// `lumen apply-patch <file> [--dry-run]`
+//
+// P30.B2: read a V4A patch from <file>, parse it, and apply
+// it via the filesystem applier. Pairs with the P25.5
+// `applyPatchPlan` parser/applier from @lumen/tools (the
+// in-loop PatchTool ships the same parser for the agent
+// path; this CLI is the standalone surface for scripts
+// and CI).
+//
+// Exit codes: 0 = all applied, 1 = some failed, 2 = usage
+// error (missing file, parse error).
+program
+  .command('apply-patch')
+  .description('Apply a V4A patch file to disk (P30.B2)')
+  .argument('<file>', 'Path to a V4A patch file')
+  .option('--dry-run', 'Parse + plan but do not touch the filesystem')
+  .option(
+    '--cwd <dir>',
+    'Directory relative to which file paths in the patch are resolved (default: process.cwd())',
+  )
+  .action(async (file: string, opts: Record<string, unknown>) => {
+    const { applyPatchCommand } = await import('./commands/apply-patch.js')
+    const code = await applyPatchCommand({
+      path: file,
+      dryRun: opts.dryRun === true,
+      ...(opts.cwd !== undefined ? { cwd: opts.cwd as string } : {}),
     })
     process.exit(code)
   })
