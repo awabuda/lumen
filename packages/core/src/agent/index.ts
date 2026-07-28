@@ -43,6 +43,8 @@ import type {
   ToolResult,
 } from '../message/index.js'
 import type { BaseProvider } from '../message/provider.js'
+import type { RetryConfig } from '../retry.js'
+import { callToolWithRetry } from '../tool-retry.js'
 import type { ToolRegistry } from '../tools/index.js'
 import {
   type MiddlewareContext,
@@ -141,6 +143,19 @@ export interface AgentRunOptions {
    * one turn and there's no dependency between them.
    */
   readonly parallel?: boolean
+  /**
+   * P30.A4 — retry config for tool calls. When set, every
+   * tool call goes through `callToolWithRetry` with this
+   * config. When `undefined` (the default), tool calls run
+   * exactly once — the pre-P30.A4 behaviour.
+   *
+   * Use cases: sandbox timeouts, transient I/O, rate-limit
+   * failures surfaced through tool errors. The default
+   * `shouldRetry` predicate retries on `ProviderError` with
+   * `retryable === true`; pass a custom `shouldRetry` to
+   * retry on other error types (e.g. `ToolError`).
+   */
+  readonly toolRetry?: RetryConfig
 }
 
 export interface AgentRunResult {
@@ -709,7 +724,14 @@ export class Agent {
           const startedAtList = responseMessage.toolCalls.map(() => Date.now())
           const settled = await Promise.all(
             responseMessage.toolCalls.map((call, idx) =>
-              this.callToolWithMiddleware(middleware, call, signal, ctx, sessionId).then(
+              this.callToolWithMiddleware(
+                middleware,
+                call,
+                signal,
+                ctx,
+                sessionId,
+                options.toolRetry,
+              ).then(
                 (result) => ({ idx, result, ok: true as const }),
                 (err) => ({ idx, err, ok: false as const }),
               ),
@@ -757,6 +779,7 @@ export class Agent {
               signal,
               ctx,
               sessionId,
+              options.toolRetry,
             )
             const durationMs = Date.now() - startedAt
             await this.hooks.dispatch(
@@ -1119,8 +1142,10 @@ export class Agent {
     signal: AbortSignal | undefined,
     ctx: MiddlewareContext,
     sessionId: string,
+    toolRetry: RetryConfig | undefined,
   ): Promise<ToolResult> {
-    let call = async (): Promise<ToolResult> => this.dispatchToolCall(toolCall, signal, sessionId)
+    let call = async (): Promise<ToolResult> =>
+      this.dispatchToolCall(toolCall, signal, sessionId, toolRetry)
 
     for (const m of [...middleware].reverse()) {
       if (!m.raw.wrapToolCall) continue
@@ -1193,6 +1218,7 @@ export class Agent {
     call: ToolCall,
     signal: AbortSignal | undefined,
     sessionId: string,
+    toolRetry: RetryConfig | undefined,
   ): Promise<ToolResult> {
     const tool = this.tools.get(call.name)
     if (!tool) {
@@ -1202,21 +1228,42 @@ export class Agent {
         content: `Tool "${call.name}" is not registered`,
       }
     }
+    const ctx: import('../tools/index.js').ToolContext = {
+      cwd: this.cwd,
+      signal: signal ?? new AbortController().signal,
+      // P23.0: thread the real sessionId so the tool can scope
+      // audit logs and per-session resources. Pre-refactor this
+      // was hard-coded to `''` (bug #6 in bug.md).
+      sessionId,
+      log: {
+        debug: (msg, meta) => this.logger.debug(msg, meta),
+        info: (msg, meta) => this.logger.info(msg, meta),
+        warn: (msg, meta) => this.logger.warn(msg, meta),
+        error: (msg, meta) => this.logger.error(msg, meta),
+      },
+    }
+    // P30.A4 — when the caller passes a `toolRetry` config, route
+    // the call through `callToolWithRetry` for transient-failure
+    // resilience. Pre-P30.A4 the helper existed but the main
+    // dispatch path always ran the tool exactly once. The default
+    // behaviour (no toolRetry) is unchanged. The RetryConfig
+    // `shouldRetry` signature is `(err, attempt) => boolean`; the
+    // callToolWithRetry wrapper narrows to `(err) => boolean` and
+    // forwards the attempt count internally.
+    const callOnce = async (): Promise<unknown> => tool.call(call.arguments, ctx)
     try {
-      const output = await tool.call(call.arguments, {
-        cwd: this.cwd,
-        signal: signal ?? new AbortController().signal,
-        // P23.0: thread the real sessionId so the tool can scope
-        // audit logs and per-session resources. Pre-refactor this
-        // was hard-coded to `''` (bug #6 in bug.md).
-        sessionId,
-        log: {
-          debug: (msg, meta) => this.logger.debug(msg, meta),
-          info: (msg, meta) => this.logger.info(msg, meta),
-          warn: (msg, meta) => this.logger.warn(msg, meta),
-          error: (msg, meta) => this.logger.error(msg, meta),
-        },
-      })
+      const output = toolRetry
+        ? await callToolWithRetry(tool, call.arguments, ctx, {
+            ...toolRetry,
+            // Narrow the 2-arg RetryConfig predicate to the
+            // 1-arg callToolWithRetry predicate; the attempt
+            // number is still respected via the wrapper's
+            // internal withRetry().
+            shouldRetry: toolRetry.shouldRetry
+              ? (err: unknown) => toolRetry.shouldRetry!(err, 0)
+              : undefined,
+          })
+        : await callOnce()
       return {
         toolCallId: call.id,
         isError: false,
