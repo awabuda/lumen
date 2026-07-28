@@ -490,7 +490,7 @@ export class SqliteStore extends BaseVectorMemoryStore {
   }
 
   /**
-   * Search implementation. Three strategies, in priority order:
+   * Search implementation. Two paths, in priority order:
    *
    *   1. **FTS5 path** — if `query.text` is set, hit the FTS
    *      virtual table and join back to `records` for the
@@ -499,10 +499,18 @@ export class SqliteStore extends BaseVectorMemoryStore {
    *      text. The score is the count of matched dimensions
    *      divided by the number of dimensions the query asked
    *      for (a 0-1 "what fraction matched" number).
-   *   3. **Vector path** — placeholder. We just scan the
-   *      candidate set and compute cosine. A real ANN index
-   *      lives in a subclass; this implementation does not
-   *      pretend to be one.
+   *
+   * P30.A5 — both paths also apply a **cosine-similarity
+   * boost** when `query.embedding` is set: each candidate
+   * score is `Math.max(baseScore, cosine(record.embedding,
+   * query.embedding))`. Pre-P30.A5 the JSDoc said "vector
+   * path — placeholder" but the boost was already wired in
+   * both paths; the comment lagged the code. The JSDoc now
+   * matches the implementation. For the standalone
+   * `vectorSearch(embedding, k)` entry point, see the
+   * separate method on this class — it goes through the
+   * configured vector backend (`BruteForceVectorBackend` by
+   * default, `sqlite-vec` if the extension is available).
    */
   private searchSync(query: MemoryQuery): ReadonlyArray<MemorySearchResult> {
     const minTrust = query.minTrust ?? 0
