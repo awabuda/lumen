@@ -36,6 +36,7 @@ import TextInput from 'ink-text-input'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BuiltAgent } from '../composition.js'
 import { classifyChatError } from './chat-error.js'
+import { analyzeCurrentProject } from './project-analyzer.js'
 import {
   budgetSnapshotAsAssistant,
   handleLoopSlash,
@@ -93,9 +94,18 @@ export function Chat({
   // they had typed so Down-arrow can restore it.
   const draftRef = useRef<string>('')
 
+  // P30.A2 — when the operator typed `/init`, the `submit`
+  // function rewrites `trimmed` to a multi-line synthesis
+  // prompt before it reaches the regular streamRun path.
+  // The turn that gets rendered below should still display
+  // `/init` as the user label, not the full prompt. This
+  // ref carries the override from the rewrite site to the
+  // turn-creation site. Cleared after each submit.
+  const initLabelRef = useRef<string | null>(null)
+
   const submit = useCallback(
     async (prompt: string) => {
-      const trimmed = prompt.trim()
+      let trimmed = prompt.trim()
       if (status === 'thinking' || trimmed.length === 0) return
 
       // Slash commands. We only handle the ones that affect UI
@@ -165,28 +175,73 @@ export function Chat({
         setInput('')
         return
       }
-      // P23.12 (fix #70 scaffold) — /init placeholder. The real
-      // ProjectAnalyzer lands in P24 (npm registry + fs walk +
-      // LLM synth). For now emit a descriptive placeholder so
-      // the trigger surface exists at the TUI level.
+      // P30.A2 — /init now actually synthesizes a CLAUDE.md
+      // via a real agent run. The factsheet from
+      // `analyzeCurrentProject` is the input to a one-shot
+      // mini-summarization pass; the model is asked to write
+      // a CLAUDE.md that combines the factsheet with
+      // project-specific guidance.
+      //
+      // The TUI displays the user-typed `/init` as the turn
+      // label and the streaming model output as the assistant
+      // message; we just inject a synthetic prompt and let
+      // the regular streamRun path handle the rest.
+      //
+      // If the user typed `/init --factsheet-only` (or the
+      // short form `/init factsheet`), we keep the pre-P30.A2
+      // behaviour: a synthetic assistant turn with the
+      // factsheet inline. Useful for operators who want to
+      // see what the analyzer found without spending a model
+      // call.
       if (trimmed === '/init' || trimmed.startsWith('/init ')) {
-        const placeholder = initProjectAsAssistant()
-        const turn: Turn = { key: turnCounter.current + 1, user: trimmed }
-        turnCounter.current += 1
-        setTurns((prev) => [
-          ...prev,
-          turn,
-          {
-            key: turnCounter.current + 1,
-            user: '',
-            assistant: placeholder,
-          } satisfies Turn,
-        ])
-        turnCounter.current += 1
-        setStatus('done')
-        setStreamingText('')
-        setInput('')
-        return
+        const rest = trimmed.replace(/^\/init\s*/, '').trim()
+        if (rest === 'factsheet' || rest === '--factsheet-only') {
+          const placeholder = initProjectAsAssistant()
+          const turn: Turn = { key: turnCounter.current + 1, user: trimmed }
+          turnCounter.current += 1
+          setTurns((prev) => [
+            ...prev,
+            turn,
+            {
+              key: turnCounter.current + 1,
+              user: '',
+              assistant: placeholder,
+            } satisfies Turn,
+          ])
+          turnCounter.current += 1
+          setStatus('done')
+          setStreamingText('')
+          setInput('')
+          return
+        }
+        // Synthesize path: rewrite the user message and let
+        // the regular streamRun path handle the rest. The
+        // factsheet is appended inline; the model is told
+        // to write to a CLAUDE.md file in the cwd.
+        const { factsheet } = analyzeCurrentProject()
+        const synthPrompt = [
+          'You are a project initialization assistant. The operator typed `/init` in the lumen TUI.',
+          '',
+          'Synthesize a CLAUDE.md file from the factsheet below. The file should:',
+          '  1. Summarize the project (1-2 paragraphs) — what it is, what language/framework, what package manager.',
+          '  2. List the canonical commands (test, build, lint, typecheck) verbatim from the scripts section.',
+          '  3. Note the top-level directory layout (src / test / docs / etc.).',
+          '  4. End with a "## Operator notes" section the operator can fill in.',
+          '',
+          'Write the file to `./CLAUDE.md` (relative to the cwd) using the write_file tool. Do NOT print the full CLAUDE.md in the chat — the file on disk is the deliverable. After writing, reply with a one-line summary of what you wrote.',
+          '',
+          'FACTSHEET:',
+          '',
+          factsheet,
+        ].join('\n')
+        // Replace the user-typed input with the synthesis
+        // prompt. We stash the original label in a closure
+        // variable so the turn rendered below can show `/init`
+        // instead of the multi-line prompt.
+        initLabelRef.current = '/init'
+        trimmed = synthPrompt
+        // Don't `return` — fall through to the regular
+        // streamRun path.
       }
 
       // Push to history (most-recent first, dedup consecutive).
@@ -199,7 +254,9 @@ export function Chat({
 
       turnCounter.current += 1
       const myKey = turnCounter.current
-      const turn: Turn = { key: myKey, user: trimmed }
+      const turnLabel = initLabelRef.current ?? trimmed
+      const turn: Turn = { key: myKey, user: turnLabel }
+      initLabelRef.current = null
       setTurns((prev) => [...prev, turn])
       setStatus('thinking')
       setStreamingText('')

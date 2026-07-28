@@ -122,4 +122,24 @@ describe('P23.12 — fix #70: /init — analyzeCurrentProject', () => {
     expect(msg.content).toMatch(/factsheet from /)
     expect(msg.content).toMatch(/## Package manager/)
   })
+
+  it('returns a ProjectAnalyzerResult with detected packageManager + scripts + dirs (P30.A2)', async () => {
+    // P30.A2 — the /init synthesize path reads the structured
+    // `detected` field from analyzeCurrentProject to feed the
+    // LLM. We do not assert the exact values (lumen is itself
+    // the cwd under test) — just that the three fields are
+    // present and well-typed.
+    const { analyzeCurrentProject: reAnalyze } = await import(
+      '../src/components/project-analyzer.js'
+    )
+    const result = reAnalyze()
+    expect(result.factsheet).toMatch(/^# /)
+    expect(result.detected).toBeDefined()
+    expect(result.detected.topLevelDirs).toBeInstanceOf(Array)
+    // packageManager is `undefined` when no lockfile marker
+    // is found, or a `{ manager, source }` object. Both
+    // shapes are valid.
+    const pm = result.detected.packageManager
+    expect(pm === undefined || typeof pm === 'object').toBe(true)
+  })
 })
