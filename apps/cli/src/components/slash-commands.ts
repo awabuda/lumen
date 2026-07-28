@@ -1,5 +1,5 @@
 /**
- * P23.12 slash commands.
+ * P23.12 + P30.A1 slash commands.
  *
  * bug.md #69 (loop), #71 (cost), #70 (init scaffold). The TUI
  * sees the user's input as a prompt; we intercept leading
@@ -8,20 +8,34 @@
  * single-shot question (cost snapshot, project scan) or a
  * background registration (cron loop).
  *
+ * P30.A1 — `/loop` now actually fires the agent loop on every
+ * tick. Pre-P30.A1 the registered job just wrote a stderr
+ * line; the TUI captured the registration message and forgot
+ * about the cron. Now every tick calls
+ * `built.agent.streamRun({ prompt })` and collects the final
+ * assistant text. The cron expression path (5-field
+ * `* * * * *`) now uses `CronExpressionCron` from
+ * `@lumen/core` instead of returning a "not yet wired" notice.
+ *
  * Public surface:
  *   - formatBudgetSnapshot(built) -> string
- *   - handleLoopSlash(raw) -> { message, entry? }
+ *   - handleLoopSlash(raw, built?) -> { message, entry? }
  *   - initProjectAsAssistant() -> AssistantMessage
+ *   - initProjectAndSynthesize(built) -> AssistantMessage (P30.A2)
  *
  * Each handler is a pure async function returning a string
  * message plus an optional cron entry. State (the loop
- * registry) is intentionally module-scoped for the lifetime
- * of the TUI session; tests reset it via
- * __resetSlashStateForTests.
+ * registry + the live crons) is intentionally module-scoped
+ * for the lifetime of the TUI session; tests reset it via
+ * __resetSlashStateForTests. The `built` parameter is
+ * optional for back-compat with the pre-P30.A1 test surface
+ * (where `handleLoopSlash` ran without an agent); when
+ * omitted, the registered cron job is a no-op that writes a
+ * stderr line, preserving the "registration only" behaviour.
  */
 
 import type { AssistantMessage } from '@lumen/core'
-import { IntervalCron } from '@lumen/core'
+import { CronExpressionCron, IntervalCron } from '@lumen/core'
 import type { BuiltAgent } from '../composition.js'
 import { analyzeCurrentProject } from './project-analyzer.js'
 
@@ -63,15 +77,20 @@ export const budgetSnapshotAsAssistant = (built: BuiltAgent): AssistantMessage =
 
 export interface LoopEntry {
   readonly id: string
-  readonly kind: 'interval' | 'once'
+  readonly kind: 'interval' | 'cron'
   readonly intervalMs?: number
-  readonly at?: number
   readonly cronExpr?: string
   readonly prompt: string
   readonly message: string
 }
 
+interface LiveCron {
+  readonly entry: LoopEntry
+  readonly stop: () => void
+}
+
 const loopRegistry: LoopEntry[] = []
+const liveCrons: Map<string, LiveCron> = new Map()
 
 const intervalLabel = (ms: number): string => {
   const sec = Math.round(ms / 1000)
@@ -138,12 +157,53 @@ const parseLoopArgs = (
 }
 
 /**
+ * Run the registered prompt through the agent and collect the
+ * final assistant text. We deliberately consume the streaming
+ * events into a string instead of forwarding them to the TUI
+ * (which is busy serving the human's own input) — the cron
+ * tick runs in the background and only its result is logged.
+ *
+ * When `built` is `undefined` (test path, or caller without
+ * an agent), we degrade to a stderr-only "tick" log so the
+ * scheduler can still be exercised in isolation.
+ */
+const fireAgentForCron = async (
+  built: BuiltAgent | undefined,
+  loopId: string,
+  prompt: string,
+): Promise<void> => {
+  if (built === undefined) {
+    process.stderr.write(`[loop] ${loopId} tick at ${new Date().toISOString()} → ${prompt}\n`)
+    return
+  }
+  let lastText = ''
+  try {
+    for await (const ev of built.agent.streamRun({ userMessage: prompt })) {
+      if (ev.type === 'text:delta') {
+        lastText += ev.delta
+      } else if (ev.type === 'run:end') {
+        process.stderr.write(
+          `[loop] ${loopId} run-end at ${new Date().toISOString()}: ${lastText.slice(0, 200)}\n`,
+        )
+        return
+      }
+    }
+  } catch (err) {
+    process.stderr.write(
+      `[loop] ${loopId} error: ${err instanceof Error ? err.message : String(err)}\n`,
+    )
+  }
+}
+
+/**
  * Handle /loop. Returns the assistant message to drop into
  * the chat log plus the cron entry so the caller can start
- * it.
+ * it. P30.A1: every tick now fires the agent loop, not just
+ * writes a stderr line.
  */
 export const handleLoopSlash = async (
   raw: string,
+  built?: BuiltAgent,
 ): Promise<{ readonly message: string; readonly entry?: LoopEntry }> => {
   const parsed = parseLoopArgs(raw)
   if (!parsed.ok) {
@@ -153,15 +213,39 @@ export const handleLoopSlash = async (
   const cronExpr = parsed.cronExpr
   const prompt = parsed.prompt
   if (cronExpr !== undefined) {
-    // OnceCron at next-minute-boundary is the closest we have
-    // to a real cron expression evaluation without pulling in
-    // cron-parser. P23.12 ships the surface; full cron expr
-    // parsing is a downstream concern for the IntervalCron
-    // library — emit a clear message rather than failing
-    // silently.
-    return {
-      message: `[loop] cron expressions (${cronExpr}) are not yet wired in IntervalCron — switch the IntervalCron library first (P24 follow-up)`,
+    // P30.A1 — the cron expression path is now real. We use
+    // CronExpressionCron from @lumen/core (a 5-field `* * * * *`
+    // matcher that ticks every 30s). Each tick fires
+    // `built.agent.streamRun({ userMessage: prompt })` and logs
+    // the result. The constructor parses the expression
+    // synchronously; if it's malformed (not 5 fields, bad
+    // ranges, etc.) Zod throws a ValidationError — we surface
+    // the message and don't register a cron.
+    let cron: CronExpressionCron
+    try {
+      cron = new CronExpressionCron({
+        id,
+        expression: cronExpr,
+        job: () => fireAgentForCron(built, id, prompt),
+      })
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : 'invalid cron expression'
+      return { message: `[loop] invalid cron expression: ${reason}` }
     }
+    cron.start()
+    const entry: LoopEntry = {
+      id,
+      kind: 'cron',
+      cronExpr,
+      prompt,
+      message: `[loop] registered ${id}, cron="${cronExpr}": "${prompt}"`,
+    }
+    loopRegistry.push(entry)
+    liveCrons.set(id, {
+      entry,
+      stop: () => cron.stop(),
+    })
+    return { message: entry.message, entry }
   }
   const intervalMs = parsed.intervalMs
   if (intervalMs === undefined) {
@@ -175,24 +259,26 @@ export const handleLoopSlash = async (
     message: `[loop] registered ${id}, firing ${intervalLabel(intervalMs)}: "${prompt}"`,
   }
   loopRegistry.push(entry)
-  // Start the cron. The IntervalCron stores its history but
-  // does not fire the LLM — for the operator-facing scaffold,
-  // the registered job logs the next-fire timestamp on every
-  // tick. P24 follow-up hooks the registered prompt into
-  // agent.streamRun so the loop actually fires an agent run.
+  // P30.A1 — the IntervalCron job now actually fires the agent
+  // loop. Pre-P30.A1 the job only wrote a stderr line; the
+  // user saw a registration message but no actual work
+  // happened on each tick.
   const cron = new IntervalCron({
     id,
     intervalMs,
-    job: async () => {
-      process.stderr.write(`[loop] ${id} tick at ${new Date().toISOString()} → ${prompt}\n`)
-    },
+    job: () => fireAgentForCron(built, id, prompt),
   })
   cron.start()
+  liveCrons.set(id, {
+    entry,
+    stop: () => cron.stop(),
+  })
   return { message: entry.message, entry }
 }
 
 // ---------------------------------------------------------------------------
-// /init: project analyzer (P23.12 ships the real analyzer)
+// /init: project analyzer (P23.12 ships the analyzer; P30.A2
+// adds an LLM synth step)
 // ---------------------------------------------------------------------------
 
 export const initProjectAsAssistant = (): AssistantMessage => {
@@ -210,7 +296,12 @@ export const initProjectAsAssistant = (): AssistantMessage => {
 // ---------------------------------------------------------------------------
 
 export const __resetSlashStateForTests = (): void => {
+  for (const cron of liveCrons.values()) {
+    cron.stop()
+  }
+  liveCrons.clear()
   loopRegistry.length = 0
 }
 
 export const __loopRegistryForTests = (): ReadonlyArray<LoopEntry> => loopRegistry.slice()
+export const __liveCronIdsForTests = (): ReadonlyArray<string> => Array.from(liveCrons.keys())

@@ -8,6 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  __liveCronIdsForTests,
   __loopRegistryForTests,
   __resetSlashStateForTests,
   formatBudgetSnapshot,
@@ -76,11 +77,32 @@ describe('P23.12 — fix #69: /loop — handleLoopSlash', () => {
     expect(result.entry).toBeUndefined()
   })
 
-  it('emits a clearer message when given a cron expression (P24 follow-up)', async () => {
-    const result = await handleLoopSlash('/loop "*/5 * * * *" check')
-    expect(result.message).toMatch(/cron expressions/)
-    expect(result.message).toMatch(/P24 follow-up/)
+  it('registers a cron entry for a quoted 5-field expression (P30.A1)', async () => {
+    const result = await handleLoopSlash('/loop "*/5 * * * *" check disk space')
+    expect(result.message).toMatch(/registered loop-/)
+    expect(result.message).toMatch(/cron="\*\/5 \* \* \* \*"/)
+    expect(result.message).toMatch(/check disk space/)
+    expect(result.entry).toBeDefined()
+    expect(result.entry?.kind).toBe('cron')
+    expect(result.entry?.cronExpr).toBe('*/5 * * * *')
+    expect(result.entry?.intervalMs).toBeUndefined()
+    expect(__loopRegistryForTests().length).toBe(1)
+    // P30.A1 — the live cron registry should also have an entry
+    // (the cron has been started). The test reset hook in
+    // afterEach will stop it.
+    expect(__liveCronIdsForTests().length).toBe(1)
+  })
+
+  it('rejects malformed cron expressions (4 fields)', async () => {
+    const result = await handleLoopSlash('/loop "* * *" foo')
+    // P30.A1: the cron string is handed to CronExpressionCron
+    // at registration time, which validates "must be a 5-field
+    // expression". The Zod parse throws synchronously inside
+    // the constructor; we surface the validation error as a
+    // user-readable message and do NOT register a cron entry.
     expect(result.entry).toBeUndefined()
+    expect(result.message).toMatch(/must be a 5-field expression/)
+    expect(__loopRegistryForTests().length).toBe(0)
   })
 
   it('requires a prompt after the interval (and rejects lone "/loop 5m")', async () => {

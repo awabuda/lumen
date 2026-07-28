@@ -134,16 +134,15 @@ export function Chat({
         return
       }
       // P23.12 (fix #69) — /loop registers an IntervalCron or
-      // OnceCron (depending on argument shape). Argument formats:
-      //   /loop 5m <prompt>      → every 5 minutes
-      //   /loop hourly <prompt>  → every hour
-      //   /loop "<cron>" <prompt> → cron expression (P24 follow-up)
-      //   /init                    → /init scaffold (P24 follow-up)
-      // For now the slash handler returns a synthetic assistant
-      // turn. The actual agent-loop dispatch is left as a P24
-      // ticket because it requires a fresh Agent.run per tick.
+      // CronExpressionCron (depending on argument shape).
+      // Argument formats:
+      //   /loop 5m <prompt>            → every 5 minutes
+      //   /loop hourly <prompt>        → every hour
+      //   /loop "*/5 * * * *" <prompt> → cron expression
+      // P30.A1: every tick now actually fires the agent loop
+      // (was stderr-only pre-P30.A1).
       if (trimmed.startsWith('/loop ') || trimmed === '/loop') {
-        const result = await handleLoopSlash(trimmed)
+        const result = await handleLoopSlash(trimmed, built)
         const assistantMsg: AssistantMessage = {
           role: 'assistant',
           content: result.message,
