@@ -170,6 +170,16 @@ export {
   type SubAgentTaskResult,
 } from './agent/sub-agent-orchestration.js'
 export {
+  type LoopComputerAction,
+  type LoopComputerUseModel,
+  type ComputerUseStep,
+  ComputerUseStepSchema,
+  type ComputerUseLoopResult,
+  type RunComputerUseLoopOptions,
+  RunComputerUseLoopOptionsSchema,
+  runComputerUseLoop,
+} from './computer-use/loop.js'
+export {
   createHandoffSubAgent,
   createSupervisorSubAgent,
   HandoffSubAgent,
