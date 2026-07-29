@@ -153,14 +153,11 @@ export const runCommand = async (options: RunCommandOptions): Promise<number> =>
   }
 
   // Pre-flight: warn when no model is explicitly selected.
-  // composition.ts falls back to `gpt-4o-mini` when neither
-  // --model, config.defaultModel, LUMEN_MODEL, nor
-  // LUMEN_DEFAULT_MODEL is set, but `gpt-4o-mini` is only
-  // valid on the OpenAI endpoint. Operators on alternate
-  // endpoints (e.g. MiniMax, local llama.cpp) hit
-  // `unknown model 'gpt-4o-mini'` after a wasted connect.
-  // We surface the missing-config problem here so the user
-  // fixes it before paying the network cost.
+  // composition.ts now throws `ConfigError` instead of falling
+  // back to `gpt-4o-mini` (the OpenAI-only id that failed
+  // silently on every other OpenAI-compatible endpoint). We
+  // print a one-line hint HERE so the operator learns about
+  // the missing config before composition.ts throws.
   const hasModel =
     options.model !== undefined ||
     process.env.LUMEN_MODEL !== undefined ||
@@ -169,19 +166,21 @@ export const runCommand = async (options: RunCommandOptions): Promise<number> =>
     // Defer to composition to read config.defaultModel — we
     // can't see it without loading the config. Try, and if
     // it still doesn't resolve, print the hint.
+    let resolvedFromConfig = false
     try {
       const { loadCliConfig } = await import('../composition.js')
       const cfg = await loadCliConfig(options.configPath)
-      if (cfg.defaultModel === undefined) {
-        process.stderr.write(
-          'lumen: no model configured. Pass --model <id>, set LUMEN_MODEL (or LUMEN_DEFAULT_MODEL), ' +
-            "or add `defaultModel:` to your config. Falling back to `gpt-4o-mini` — if you're not on " +
-            'the OpenAI endpoint, the provider will reject it.\n',
-        )
-      }
+      resolvedFromConfig = cfg.defaultModel !== undefined
     } catch {
       // loadCliConfig failure is reported by buildAgent
       // downstream; no need to double-report here.
+    }
+    if (!resolvedFromConfig) {
+      process.stderr.write(
+        'lumen: no model configured. Pass --model <id>, set LUMEN_MODEL (or LUMEN_DEFAULT_MODEL), ' +
+          "or add `defaultModel:` to your config. composition.ts will throw ConfigError " +
+          "otherwise — no hard-coded fallback anymore.\n",
+      )
     }
   }
 

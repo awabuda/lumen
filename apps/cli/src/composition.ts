@@ -244,12 +244,39 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
     process.env.LUMEN_BASE_URL ??
     config.providers[0]?.baseUrl ??
     'https://api.openai.com/v1'
+  // Resolve the model from the highest-priority source
+  // down. Hard-coded `gpt-4o-mini` was removed (P-ticket
+  // 2026-07-29 audit GAP-2 follow-up): it was only valid on
+  // the OpenAI endpoint and caused silent 2013 rejections on
+  // every other OpenAI-compatible provider (MiniMax, local
+  // llama.cpp, Mistral, etc.).
+  //
+  // Resolution order:
+  //   1. CLI --model flag (per-invocation override)
+  //   2. config.defaultModel from ~/.lumen/config.yaml
+  //   3. LUMEN_MODEL env var
+  //   4. LUMEN_DEFAULT_MODEL env var (CI / one-off scripts)
+  //
+  // When none of the four resolve, fail loud with a typed
+  // ConfigError so the operator sees "no model configured"
+  // instead of "unknown model 'gpt-4o-mini'" after a wasted
+  // network round-trip. `run.ts` ALSO prints a pre-flight
+  // warning before reaching here; this throw is the
+  // belt-and-braces guard for non-`run` entrypoints (chat,
+  // computer, team run, etc.) that bypass the pre-flight.
   const model =
     options.model ??
     config.defaultModel ??
     process.env.LUMEN_MODEL ??
-    process.env.LUMEN_DEFAULT_MODEL ??
-    'gpt-4o-mini'
+    process.env.LUMEN_DEFAULT_MODEL
+  if (model === undefined || model.length === 0) {
+    throw new ConfigError(
+      'No LLM model configured. Pass --model <id>, set `defaultModel` under the `agent:` ' +
+        'config block, or set the LUMEN_MODEL (or LUMEN_DEFAULT_MODEL) environment variable. ' +
+        '(Lumen no longer ships a hard-coded default because OpenAI-only model ids fail ' +
+        'silently on every other OpenAI-compatible endpoint.)',
+    )
+  }
 
   const provider: BaseProvider = new OpenAICompatibleProvider({
     id: 'openai',

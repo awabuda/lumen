@@ -64,6 +64,23 @@ describe('modelListCommand', () => {
 })
 
 describe('modelShowCommand', () => {
+  // The audit GAP-2 follow-up env-injects LUMEN_DEFAULT_MODEL
+  // in test/setup.ts so buildAgent() doesn't throw. That has
+  // the side-effect of making every config look like it has a
+  // defaultModel. For these `default: yes/no` assertions we
+  // need a hermetic env — strip the test-wide default and
+  // restore it in afterEach.
+  let savedDefaultModel: string | undefined
+  beforeEach(() => {
+    savedDefaultModel = process.env.LUMEN_DEFAULT_MODEL
+    delete process.env.LUMEN_DEFAULT_MODEL
+  })
+  afterEach(() => {
+    if (savedDefaultModel !== undefined) {
+      process.env.LUMEN_DEFAULT_MODEL = savedDefaultModel
+    }
+  })
+
   it('prints full descriptor for a known model', async () => {
     const file = await writeConfig({
       models: [{ provider: 'openai', name: 'gpt-4o-mini', temperature: 0.3, maxTokens: 2048 }],
