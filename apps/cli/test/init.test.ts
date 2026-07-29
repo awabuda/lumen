@@ -4,7 +4,7 @@ import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { initCommand, starterPermissionPolicy } from '../src/commands/init.js'
+import { initCommand, starterConfigTemplate, starterPermissionPolicy } from '../src/commands/init.js'
 import {
   permissionsAuditCommand as audit,
   permissionsPresetCommand as preset,
@@ -69,6 +69,61 @@ describe('initCommand', () => {
     const code = await initCommand({ path: dest })
     expect(code).toBe(0)
     expect((await fs.stat(dest)).isFile()).toBe(true)
+  })
+
+  // P-2026-07-29 audit GAP-3: `lumen init --with-config` writes a
+  // starter main config alongside the permissions file. The
+  // template is intentionally commented-out — the operator has
+  // to pick a provider block, paste their key (or rely on env),
+  // and re-run `lumen doctor`.
+  it('writes the starter config when --with-config is set', async () => {
+    const permDest = path.join(workDir, 'policy.yaml')
+    const cfgDest = path.join(workDir, 'config.yaml')
+    const code = await initCommand({ path: permDest, withConfig: true, configPath: cfgDest })
+    expect(code).toBe(0)
+    expect(await fs.readFile(permDest, 'utf8')).toBe(starterPermissionPolicy())
+    expect(await fs.readFile(cfgDest, 'utf8')).toBe(starterConfigTemplate())
+    expect(stdout).toContain(permDest)
+    expect(stdout).toContain(cfgDest)
+  })
+
+  it('does NOT write the config when --with-config is omitted (back-compat)', async () => {
+    const permDest = path.join(workDir, 'policy.yaml')
+    const code = await initCommand({ path: permDest })
+    expect(code).toBe(0)
+    // The permissions file was written…
+    expect(await fs.readFile(permDest, 'utf8')).toBe(starterPermissionPolicy())
+    // …and nothing else. The init command must not silently
+    // touch ~/.lumen/config.yaml when the operator didn't
+    // opt in — that would surprise users on first install.
+    const entries = await fs.readdir(workDir)
+    expect(entries).toEqual(['policy.yaml'])
+  })
+
+  it('exits 2 when the config file already exists and --force is not set', async () => {
+    const permDest = path.join(workDir, 'policy.yaml')
+    const cfgDest = path.join(workDir, 'config.yaml')
+    await fs.writeFile(cfgDest, 'preset', 'utf8')
+    const code = await initCommand({ path: permDest, withConfig: true, configPath: cfgDest })
+    expect(code).toBe(2)
+    expect(stderr).toContain('lumen init: file already exists')
+    // Both files preserved as-is
+    expect(await fs.readFile(cfgDest, 'utf8')).toBe('preset')
+    expect((await fs.readdir(workDir)).sort()).toEqual(['config.yaml', 'policy.yaml'])
+  })
+
+  it('overwrites the config when --with-config + --force are set', async () => {
+    const permDest = path.join(workDir, 'policy.yaml')
+    const cfgDest = path.join(workDir, 'config.yaml')
+    await fs.writeFile(cfgDest, 'old-config', 'utf8')
+    const code = await initCommand({
+      path: permDest,
+      withConfig: true,
+      configPath: cfgDest,
+      force: true,
+    })
+    expect(code).toBe(0)
+    expect(await fs.readFile(cfgDest, 'utf8')).toBe(starterConfigTemplate())
   })
 })
 
