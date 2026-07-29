@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * CLI entry point. Uses commander for argument parsing and dispatches
  * to the appropriate command module. The TUI command (chat) is loaded
