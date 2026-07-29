@@ -153,12 +153,16 @@ describe('buildAgent', () => {
         // mean the registry is otherwise empty.
         expect(built.mcpServers).toEqual([])
         expect(built.tools.size).toBe(0)
-        // A `[lumen mcp] failed to connect` line should
-        // have been emitted. We don't assert on its exact
-        // wording, only that the diagnostic fired.
+        // P24.3 fail-closed gate: with the default policy
+        // (`failClosed: true`, no `allowServerIds` allow-list)
+        // the gate fires BEFORE connect and skips every
+        // configured server with a single diagnostic line.
+        // We assert the gate fired; we don't try to exercise
+        // the per-server connect path here (that has its own
+        // @lumen/mcp/test/p24.3-fail-closed.test.ts suite).
         const stderr = stderrChunks.join('')
         expect(stderr).toContain('[lumen mcp]')
-        expect(stderr).toContain('broken')
+        expect(stderr).toContain('fail-closed')
       } finally {
         process.stderr.write = origStderr
         await import('node:fs/promises').then((m) => m.rm(tmpDir, { recursive: true, force: true }))
