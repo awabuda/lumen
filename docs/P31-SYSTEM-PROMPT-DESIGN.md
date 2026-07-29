@@ -59,10 +59,11 @@
  *
  * | # | Question | Pre-P31 state | Post-P31 target |
  * | --- | --- | --- | --- |
- * | 1 | system prompt layering | single 4-line string | 7 sections + 1 dynamic, explicit cache boundary |
+ * | 1 | system prompt layering | single 4-line string | 8 stable sections + 1 dynamic (HEARTBEAT.md), explicit cache boundary |
  * | 2 | cache_control wired up | primitive exists in `anthropic.ts`, dormant | marker-aware splitter in `buildRequestBody` main path |
- * | 3 | project context (CLAUDE.md / AGENTS.md) | not loaded | walk-up to git root + case-insensitive candidate priority |
- * | 4 | skill descriptions in system | `SkillTriggerMiddleware` P20.6 injects into system prompt — partial | folded into L4 skills section |
+ * | 3 | context files (AGENTS / SOUL / USER / IDENTITY / TOOLS / BOOTSTRAP / MEMORY / HEARTBEAT) | not loaded | walk-up to git root + case-insensitive candidate priority; 7 stable + HEARTBEAT dynamic |
+ * | 4 | tool registry rendering | `ToolRegistry` schemas go to `request.tools` only, not system prompt | L8 runtime block carries `ToolRegistry` schema dump + L5 TOOLS.md usage guidance (separate roles) |
+ * | 4b | skill descriptions in system | `SkillTriggerMiddleware` P20.6 injects into system prompt — partial | L8 runtime block also carries active-skill index (next to `ToolRegistry` dump); full skill content still lazy via `skill_view` |
  * | 5 | session-level cache | none | `_cachedSystemPrompt` instance field + LRU 64 cross-session |
  * | 6 | per-turn dynamic content | merged into system prompt via `+ "\n\n" + ephemeral` (Hermes pattern) | split at marker, dynamic suffix bypasses cache_control |
  *
@@ -81,30 +82,62 @@
  *   `providerOptions.anthropicSystemBlocks` as a power-user
  *   escape hatch (already in `anthropic.ts:788-802`).
  *
- * ### 1.2 7 sections + 1 dynamic
+ * ### 1.2 8 sections + 1 dynamic (aligned with OpenClaw `CONTEXT_FILE_ORDER`)
+ *
+ * Per user direction (2026-07-29): keep the canonical
+ * context-file names that already exist in the agent
+ * ecosystem — `SOUL.md`, `USER.md`, `AGENTS.md`, `IDENTITY.md`,
+ * `HEARTBEAT.md` — and add `TOOLS.md`, `BOOTSTRAP.md`,
+ * `MEMORY.md` so the full OpenClaw 7-file priority order
+ * is honoured. lumen P31 loads all 7 stable files from
+ * `<cwd>/` (with `~/.lumen/` fallback for `SOUL.md` /
+ * `IDENTITY.md` / `USER.md`), then HEARTBEAT.md is treated
+ * as dynamic.
  *
  * | # | Section | Cache zone | Source |
  * | --- | --- | --- | --- |
- * | L1 | project | stable | `<cwd>/AGENTS.md` or `<cwd>/CLAUDE.md` (case-insensitive, walk up to git root) |
- * | L2 | identity | stable | `AgentConfig.systemPrompt` override + built-in default + optional `~/.lumen/SOUL.md` |
- * | L3 | tools | stable | `ToolRegistry` render of tool name + description + brief schema summary |
- * | L4 | skills | stable | `SkillRegistry` render of currently active skills (P20.6 `SkillTriggerMiddleware`) |
- * | L5 | memory | stable | `BaseMemoryStore` snapshot summary + relevant recall (P26.2 people-aware) |
- * | L6 | runtime | stable | cwd, git status snapshot, sandbox info, model + provider name (frozen at first turn) |
- * | **D1** | **dynamic** | **dynamic** | session_id, current time, ephemeral hints (per-turn, not cached) |
+ * | L1 | **project** (AGENTS.md) | stable | `<cwd>/AGENTS.md` or `<cwd>/CLAUDE.md` (case-insensitive, walk up to git root); matches OpenClaw `resource-loader.ts:72-89` |
+ * | L2 | **soul** (SOUL.md) | stable | `<cwd>/SOUL.md` first, fallback `~/.lumen/SOUL.md`; persona/tone |
+ * | L3 | **identity** (IDENTITY.md) | stable | `<cwd>/IDENTITY.md` first, fallback `~/.lumen/IDENTITY.md`; agent identity beyond the built-in default |
+ * | L4 | **user** (USER.md) | stable | `<cwd>/USER.md` first, fallback `~/.lumen/USER.md`; user preferences / profile |
+ * | L5 | **tools** (TOOLS.md) | stable | `<cwd>/TOOLS.md` first, fallback `~/.lumen/TOOLS.md`; tool-usage guidance (separate from `ToolRegistry` schema dump in L8) |
+ * | L6 | **bootstrap** (BOOTSTRAP.md) | stable | `<cwd>/BOOTSTRAP.md` first, fallback `~/.lumen/BOOTSTRAP.md`; first-reply instructions ("follow before normal reply") |
+ * | L7 | **memory** (MEMORY.md) | stable | `<cwd>/MEMORY.md` first, fallback `~/.lumen/MEMORY.md`; long-term memory snapshot (separate from in-session recall) |
+ * | L8 | **runtime** | stable | cwd, git status snapshot, sandbox info, model + provider name, `ToolRegistry` schema dump (frozen at first turn) |
+ * | **D1** | **heartbeat** (HEARTBEAT.md) | **dynamic** | `<cwd>/HEARTBEAT.md` first, fallback `~/.lumen/HEARTBEAT.md`; plus session_id, current time, ephemeral hints — by definition below the cache boundary |
  *
- * Section order is fixed (OpenClaw
- * `CONTEXT_FILE_ORDER` map at `system-prompt.ts:74-87` is
- * the reference; lumen uses the same priority but folds
- * SOUL.md into L2 rather than splitting it).
+ * Section order matches OpenClaw `CONTEXT_FILE_ORDER`
+ * (system-prompt.ts:74-87) with **L8 runtime = OpenClaw's
+ * tools-metadata + bootstrap-info merged** (lumen's runtime
+ * block carries cwd / git / sandbox / model — same role as
+ * OpenClaw's "Bootstrap pending" lines at system-prompt.ts:340-353).
+ * HEARTBEAT.md is mapped to OpenClaw's dynamic file
+ * (`DYNAMIC_CONTEXT_FILE_BASENAMES = new Set(["heartbeat.md"])`,
+ * system-prompt.ts:84).
+ *
+ * **Per-file lookup rule** (new in P31, not in OpenClaw):
+ * for L2/L3/L4/L5/L6/L7 the lookup is
+ * `<cwd>/<file>` first, fallback `~/.lumen/<file>`. The
+ * fallback exists because some users keep personal persona /
+ * identity / preferences in `~/.lumen/` (lumen HOME dir)
+ * rather than per-project. Project-file lookup for L1
+ * (AGENTS.md) uses walk-up to git root (no `~/.lumen/`
+ * fallback — AGENTS.md is per-project by definition).
+ *
+ * **Cross-section dedup**: if a single `<cwd>/SOUL.md`
+ * already encodes agent identity, the operator can choose
+ * to leave L3 (`IDENTITY.md`) empty and the builder skips
+ * the empty section (rather than emitting an empty
+ * heading). OpenClaw's `buildProjectContextSection` does
+ * the same skip for empty file arrays (system-prompt.ts:228-232).
  *
  * ### 1.3 cache boundary placement
  *
- * - Stable sections L1–L6 join with `\n\n`.
- * - L6 (runtime) is the LAST stable section; the boundary
+ * - Stable sections L1–L8 join with `\n\n`.
+ * - L8 (runtime) is the LAST stable section; the boundary
  *   marker follows.
- * - D1 (dynamic) appends after the marker, joined with
- *   `\n\n` if multiple dynamic fragments exist.
+ * - D1 (HEARTBEAT.md + dynamic) appends after the marker,
+ *   joined with `\n\n` if multiple dynamic fragments exist.
  * - When D1 is empty, `ensureSystemPromptCacheBoundary`
  *   still appends the marker so a future hook injection
  *   (`prependSystemPromptAdditionAfterCacheBoundary`)
@@ -146,16 +179,18 @@
  * | Path | Purpose | Status |
  * | --- | --- | --- |
  * | `packages/core/src/agent/system-prompt-boundary.ts` | `SYSTEM_PROMPT_CACHE_BOUNDARY` constant + `split` / `strip` / `ensure` / `prepend` / `sanitizeSurrogates` | NEW (P31.1) |
- * | `packages/core/src/agent/system-prompt-sections.ts` | 7 section builders + `buildSystemPrompt(ctx)` aggregator | NEW (P31.2) |
- * | `packages/core/src/agent/system-prompt-project.ts` | `loadProjectContextFile(cwd)` walk-up + case-insensitive candidate priority | NEW (P31.3) |
+ * | `packages/core/src/agent/system-prompt-sections.ts` | 8 section builders + `buildSystemPrompt(ctx)` aggregator | NEW (P31.2) |
+ * | `packages/core/src/agent/system-prompt-context-files.ts` | `loadContextFiles(cwd, lumenHome)` walks `<cwd>` for the 8 OpenClaw context files; `~/.lumen/` fallback for personal-context files (SOUL / IDENTITY / USER / TOOLS / BOOTSTRAP / MEMORY) | NEW (P31.3a) |
+ * | `packages/core/src/agent/system-prompt-project.ts` | `loadProjectContextFile(cwd)` walk-up to git root + case-insensitive AGENTS.md / CLAUDE.md candidate priority (sub-loader for L1) | NEW (P31.3b) |
  * | `packages/core/src/agent/system-prompt-cache.ts` | `cacheStablePromptPrefix` LRU + `hashStablePromptInput` SHA-256 | NEW (P31.4) |
  * | `packages/llm/src/anthropic.ts` | `buildAnthropicSystemBlocksFromString` marker-aware splitter; existing `resolveSystemBlocks(providerOptions.anthropicSystemBlocks)` retained as escape hatch | MODIFIED (P31.5) |
  * | `packages/core/src/agent/index.ts` | `Agent` gains `cachedSystemPrompt: string \| undefined` + `buildAndCacheSystemPrompt(ctx)` method | MODIFIED (P31.6) |
  * | `apps/cli/src/composition.ts` | `buildAgent` constructs `SectionContext` + invokes `buildSystemPrompt`; `--no-cache-boundary` flag for degradation | MODIFIED (P31.6) |
  * | `apps/cli/src/commands/init.ts` | `--with-claude-md` flag writes `<cwd>/CLAUDE.md` template | MODIFIED (P31.7) |
  * | `packages/core/test/system-prompt-boundary.test.ts` | 8 tests aligning with OpenClaw `system-prompt-cache-boundary.test.ts` | NEW (P31.1) |
- * | `packages/core/test/system-prompt-sections.test.ts` | 7 section builders × 3-5 tests each | NEW (P31.2) |
- * | `packages/core/test/system-prompt-project.test.ts` | 5 tests (case-insensitive / walk-up / truncation) | NEW (P31.3) |
+ * | `packages/core/test/system-prompt-sections.test.ts` | 8 section builders × 3-5 tests each | NEW (P31.2) |
+ * | `packages/core/test/system-prompt-context-files.test.ts` | 6 tests (cwd-first / `~/.lumen/` fallback / HEARTBEAT-as-dynamic routing / truncation / empty-skip) | NEW (P31.3a) |
+ * | `packages/core/test/system-prompt-project.test.ts` | 5 tests (case-insensitive / walk-up / git-root detection) | NEW (P31.3b) |
  * | `packages/core/test/system-prompt-cache.test.ts` | LRU eviction + hash determinism | NEW (P31.4) |
  * | `packages/llm/test/anthropic-marker.test.ts` | 4 tests (marker × cacheControl matrix) | NEW (P31.5) |
  *
@@ -166,11 +201,12 @@
  * | **P31.0** | `docs: P31 system prompt layering design lock` | `docs/P31-SYSTEM-PROMPT-DESIGN.md` (this file) | +260 | doc review |
  * | **P31.1** | `feat(core): system prompt cache boundary primitive` | `system-prompt-boundary.ts` + test | +150 / +150 | `pnpm --filter @lumen/core test` |
  * | **P31.2** | `feat(core): 7 section builders + aggregator` | `system-prompt-sections.ts` + test | +250 / +300 | 同上 |
- * | **P31.3** | `feat(core): AGENTS.md / CLAUDE.md project context loader` | `system-prompt-project.ts` + test | +100 / +120 | 同上 + real cwd |
- * | **P31.4** | `feat(core): LRU stable prefix cache + SHA-256 input hash` | `system-prompt-cache.ts` + test | +50 / +80 | 同上 |
- * | **P31.5** | `feat(llm): Anthropic provider marker-aware system block splitter` | `anthropic.ts` modify + test | +80 / +150 | `pnpm --filter @lumen/llm test` |
- * | **P31.6** | `feat(core): Agent.run system prompt cache + composition wiring` | `index.ts` + `composition.ts` + test | +150 / +200 | `pnpm --filter @lumen/cli test`; real `lumen run`; verify byte-stable across 2 runs |
- * | **P31.7** | `feat(cli): lumen init --with-claude-md writes project prompt template` | `init.ts` + `index.ts` + test | +50 / +80 | cli test + real init |
+ * | **P31.3** | `feat(core): 8 OpenClaw context-file loaders (cwd + `~/.lumen/` fallback)` | `system-prompt-context-files.ts` + test | +150 / +200 | 同上 + real cwd |
+ * | **P31.4** | `feat(core): AGENTS.md / CLAUDE.md project context loader (sub-loader for L1)` | `system-prompt-project.ts` + test | +100 / +120 | 同上 + real cwd + real git repo |
+ * | **P31.5** | `feat(core): LRU stable prefix cache + SHA-256 input hash` | `system-prompt-cache.ts` + test | +50 / +80 | 同上 |
+ * | **P31.6** | `feat(llm): Anthropic provider marker-aware system block splitter` | `anthropic.ts` modify + test | +80 / +150 | `pnpm --filter @lumen/llm test` |
+ * | **P31.7** | `feat(core): Agent.run system prompt cache + composition wiring` | `index.ts` + `composition.ts` + test | +150 / +200 | `pnpm --filter @lumen/cli test`; real `lumen run`; verify byte-stable across 2 runs |
+ * | **P31.8** | `feat(cli): lumen init --with-claude-md writes project prompt template` | `init.ts` + `index.ts` + test | +50 / +80 | cli test + real init |
  *
  * **Total**: 8 commits, ~830 lines implementation + ~1080
  * lines tests + ~260 lines docs, estimated 4-6 sessions.
@@ -205,17 +241,24 @@
  *
  * - `AgentConfig.systemPrompt?: string` (index.ts:71)
  *   unchanged in type; semantically now becomes the
- *   identity-section override. Existing fixtures pass.
+ *   identity-section override (folded into L3 IDENTITY.md
+ *   priority chain). Existing fixtures pass.
  * - `providerOptions.anthropicSystemBlocks` (anthropic.ts:303)
  *   unchanged in type; power-user escape hatch.
  * - `DEFAULT_SYSTEM_PROMPT` constant (index.ts:208) becomes
- *   the L2 identity fallback when `systemPrompt` is not
- *   set AND `~/.lumen/SOUL.md` is absent.
+ *   the L3 IDENTITY.md fallback when `systemPrompt` is not
+ *   set AND neither `<cwd>/IDENTITY.md` nor
+ *   `~/.lumen/IDENTITY.md` exists. Same role for L2 SOUL.md
+ *   fallback when no SOUL.md is present.
  * - `--no-cache-boundary` CLI flag opts out of marker
  *   injection (the system prompt becomes one string into
  *   the provider with `cache_control` if supported, no
  *   boundary split). Useful for providers that mishandle
  *   the marker literal.
+ * - L8 runtime block carries `ToolRegistry` schema dump
+ *   + active-skill index. Existing P20.6 `SkillTriggerMiddleware`
+ *   continues to inject; L8 just becomes the canonical
+ *   home for it (no semantic change, just relocation).
  *
  * ## 7. Open questions for review
  *
@@ -224,12 +267,10 @@
  *    providers (custom OpenAI-compatible that renders the
  *    marker verbatim). Default: ship the flag, leave
  *    off-by-default.
- * 2. **Should `~/.lumen/SOUL.md` exist at all?** Hermes
- *    has it; OpenClaw doesn't (uses `soul.md` in
- *    workspace). lumen is between — `SOUL.md` in
- *    `~/.lumen/` is per-user, not per-project. Decision:
- *    ship `SOUL.md` support in P31.6 as identity override;
- *    defer workspace `soul.md` to P31+ follow-up.
+ * 2. **Per-user vs per-project separation — confirmed by user direction (2026-07-29)**: the 8 context files split into two groups:
+ *    - **Per-project (L1 only)**: `AGENTS.md` / `CLAUDE.md`. Walk-up to git root, NO `~/.lumen/` fallback.
+ *    - **Per-user (L2–L7 stable + D1)**: `SOUL.md` / `USER.md` / `IDENTITY.md` / `TOOLS.md` / `BOOTSTRAP.md` / `MEMORY.md` / `HEARTBEAT.md`. `<cwd>/` first, `~/.lumen/` fallback.
+ *    Open question: should `~/.lumen/` fallback apply per-file (each file independently checks both locations) or all-or-nothing (either all from cwd or all from `~/.lumen/`)? Default: per-file, but flag for review after P31.3a lands.
  * 3. **Cache hit rate observability?** OpenClaw does not
  *    surface cache hit metrics. lumen could add a
  *    `cache_hits` counter to `Telemetry` (P8.3). Out of
