@@ -244,7 +244,12 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
     process.env.LUMEN_BASE_URL ??
     config.providers[0]?.baseUrl ??
     'https://api.openai.com/v1'
-  const model = options.model ?? config.defaultModel ?? process.env.LUMEN_MODEL ?? 'gpt-4o-mini'
+  const model =
+    options.model ??
+    config.defaultModel ??
+    process.env.LUMEN_MODEL ??
+    process.env.LUMEN_DEFAULT_MODEL ??
+    'gpt-4o-mini'
 
   const provider: BaseProvider = new OpenAICompatibleProvider({
     id: 'openai',
