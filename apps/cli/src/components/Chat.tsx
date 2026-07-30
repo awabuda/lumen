@@ -37,6 +37,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BuiltAgent } from '../composition.js'
 import { classifyChatError } from './chat-error.js'
 import { analyzeCurrentProject } from './project-analyzer.js'
+import { messagesToTurns } from './restore-turns.js'
 import {
   budgetSnapshotAsAssistant,
   handleLoopSlash,
@@ -90,6 +91,35 @@ export function Chat({
   const [activeSessionId, setActiveSessionId] = useState<string>('')
   const turnCounter = useRef<number>(0)
   const resumeRef = useRef<AgentCheckpoint | undefined>(initialResumeFrom)
+
+  // P32.2 — render the prior-conversation history into the
+  // `turns` state on mount. The `chat.tsx` bridge already had
+  // `findResumeCheckpoint` plumbing the latest in-progress
+  // snapshot through `initialResumeFrom`, but Chat.tsx never
+  // consumed it: pre-P32.2 the TUI always showed an empty chat
+  // log on restart, regardless of whether the SqliteCheckpoint
+  // Store had rows from previous turns. With this effect, the
+  // user reopens `lumen chat` and immediately sees their prior
+  // conversation rendered above the input box.
+  //
+  // The dependency array intentionally uses `initialResumeFrom`
+  // rather than the messages themselves so the effect only runs
+  // once on mount and on a *change* of the resumeFrom prop (e.g.
+  // after `/sessions switch` lands in P32.3 it will trigger a
+  // re-render with a different snapshot). The `messagesToTurns`
+  // helper handles all the pairing rules; this effect stays
+  // one-liner thin on purpose.
+  useEffect(() => {
+    if (initialResumeFrom === undefined) return
+    const restored = messagesToTurns(initialResumeFrom.messages)
+    if (restored.length === 0) return
+    setTurns(restored)
+    // `turnCounter` is the incrementing key source for live
+    // streaming turns; seed it past the highest restored key so
+    // a follow-up user message gets a key that does not collide
+    // with any prior turn.
+    turnCounter.current = restored.length
+  }, [initialResumeFrom])
 
   // Per-run AbortController so Ctrl+C can cancel an in-flight run.
   const abortRef = useRef<AbortController | null>(null)
