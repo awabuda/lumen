@@ -32,6 +32,7 @@
  *   - `session_id` is indexed for the list-by-session query.
  */
 
+import * as fs from 'node:fs'
 import * as path from 'node:path'
 import BetterSqlite3 from 'better-sqlite3'
 import type { Database, Statement } from 'better-sqlite3'
@@ -139,6 +140,16 @@ export class SqliteCheckpointStore implements BaseCheckpointStore {
 
   public constructor(options: SqliteCheckpointStoreOptions) {
     const resolved = options.path === ':memory:' ? ':memory:' : path.resolve(options.path)
+    if (resolved !== ':memory:') {
+      // better-sqlite3 throws `SQLITE_CANTOPEN` (driver-level) when
+      // the parent directory does not exist; the rest of the stack
+      // surfaces this as `lumen: unexpected error: Cannot open
+      // database because the directory does not exist`. mkdirSync
+      // here so chat.sqlite under $XDG_STATE_HOME or
+      // ~/.local/state/lumen works on a fresh install without
+      // asking the operator to mkdir first.
+      fs.mkdirSync(path.dirname(resolved), { recursive: true })
+    }
     this.db = new BetterSqlite3(resolved)
     if (!this.db.name.endsWith(':memory:')) {
       this.db.pragma('journal_mode = WAL')

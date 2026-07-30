@@ -40,6 +40,8 @@
  *     runs the migration script separately. We do not silently
  *     mutate a user's database on `init()`.
  */
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 import {
   BaseVectorMemoryStore,
   ConfigError,
@@ -148,6 +150,20 @@ export class SqliteStore extends BaseVectorMemoryStore {
     // buildVectorBackend can read `dimensions` (and any future
     // operator-tunable knobs).
     this.config = validated
+    // P32.1.1 — mkdirSync the parent directory before opening the
+    // handle. better-sqlite3 throws `SQLITE_CANTOPEN` (driver-level)
+    // when the directory does not exist; the rest of the stack
+    // surfaces this as `lumen: unexpected error: Cannot open
+    // database because the directory does not exist`. Readonly
+    // opens do not need the directory to exist (they require the
+    // file to exist on read), so skip in that mode to preserve
+    // the contract that a read against a missing file yields
+    // ConfigError, not a mkdir side-effect.
+    const dbPath = validated.path
+    const isInMemory = dbPath === ':memory:' || dbPath.startsWith(':memory:')
+    if (!isInMemory && !(validated.readonly ?? false)) {
+      fs.mkdirSync(path.dirname(dbPath), { recursive: true })
+    }
     this.db = new BetterSqlite3(validated.path, {
       readonly: validated.readonly ?? false,
       // better-sqlite3's `verbose` signature is a variadic

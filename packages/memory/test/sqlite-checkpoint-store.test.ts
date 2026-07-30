@@ -145,3 +145,48 @@ describe('SqliteCheckpointStore', () => {
     expect(store.id).toBe('sqlite')
   })
 })
+
+describe('SqliteCheckpointStore P32.1.1 directory auto-creation', () => {
+  /**
+   * P32.1 routed `lumen chat` to a default cwd-derived sqlite path
+   * under XDG_STATE_HOME / ~/.local/state/lumen. The very first
+   * invocation may not have those dirs yet; better-sqlite3 throws
+   * SQLITE_CANTOPEN (driver-level) when the parent dir is missing,
+   * so the constructor mkdirSync's the parent as a load-bearing
+   * invariant — not a convenience. Tests below exercise the three
+   * edges: nested missing dir (must create), single-level missing
+   * dir (must create), and the `:memory:` short-circuit (must NOT
+   * touch the filesystem).
+   */
+  it('creates nested missing parent directories before opening the file', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'lumen-checkpoint-mkdir-'))
+    try {
+      const nested = path.join(root, 'a', 'b', 'c', 'checkpoints.db')
+      // pre-condition: nothing under <root>/a exists.
+      await expect(fs.access(path.join(root, 'a'))).rejects.toBeDefined()
+      const local = new SqliteCheckpointStore({ path: nested })
+      try {
+        // After construction the file should exist with the
+        // checkpoints table ready (writes are no-op here, the
+        // DDL already ran).
+        const stat = await fs.stat(nested)
+        expect(stat.isFile()).toBe(true)
+      } finally {
+        await local.dispose()
+      }
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('skips filesystem mkdir for the :memory: short-circuit', async () => {
+    // Sanity: the in-memory store path used by every test above
+    // still works after adding the mkdirSync block — `:memory:`
+    // must not crash on a path.dirname('memory:').
+    const local = new SqliteCheckpointStore({ path: ':memory:' })
+    await local.save(cp())
+    const got = await local.get('s1-1')
+    expect(got?.id).toBe('s1-1')
+    await local.dispose()
+  })
+})
