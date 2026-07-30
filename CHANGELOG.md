@@ -10,6 +10,100 @@ Test counts are point-in-time totals across the monorepo. The pre-1.0 series
 (`0.x.y`) does not promise API stability; breaking changes are recorded as
 **Changed** entries with a note about the migration path.
 
+## [Unreleased] — P32 lumen chat persistence + session registry + cron durability
+
+> **Multi-commit sweep on `lumen chat` durability.** 7 commits
+> across P32.1 (default persistence + cwd-derived sessionId),
+> P32.1.1 (mkdirSync invariant from a user-reported regression),
+> P32.2 (mount-time history render), P32.3a/b (storage +
+> `/sessions` slash command), P32.4 (`SqliteLoopsStore` + `/loop`
+> cross-restart durability), and P32.5 (better-sqlite3 ABI drift
+> check on `lumen doctor`). Net effect: every persistent
+> surface (`chat.sqlite`, `loops.sqlite`, `~/.lumen/memory.db`)
+> survives TUI restart without manual reload, and the surface
+> regressions that blocked the implementation (the
+> "Cannot open database because the directory does not exist"
+> error, the `NODE_MODULE_VERSION` mismatch) now report at
+> `lumen doctor` instead of inside an opaque driver throw.
+
+### Added
+
+  - **P32.1** `apps/cli/src/chat-paths.ts` — `defaultChatCheckpointPath()`
+    (XDG-aware resolution: `$LUMEN_CHAT_CHECKPOINT_PATH`
+    override → `$XDG_STATE_HOME/lumen/chat.sqlite` →
+    `~/.local/state/lumen/chat.sqlite`) and `defaultChatSessionId(cwd)`
+    (cwd-derived `chat-<cwdHash-8bytes-base64url>` for stable
+    cross-launch session identity). Three new `lumen chat` flags:
+    `--session-id <id>`, `--new-session`, `--no-persist`.
+  - **P32.2** `apps/cli/src/components/restore-turns.ts` —
+    `messagesToTurns()` pure helper that folds
+    `AgentCheckpoint.messages` into `RestoredTurn[]` for the
+    Chat TUI to render at mount time. Rules: drop system
+    messages, fold tool-call loops into one assistant bubble,
+    keep the in-progress trailing user message, render
+    leading assistants with `user: ''`.
+  - **P32.3** `BaseCheckpointStore.listSessions(options?)` plus
+    `BaseCheckpointStore.deleteSession(id)` — SQLite-backed
+    and InMemory-backed. Returns `CheckpointSessionSummary[]`
+    (session id, last-created-at, checkpoint count, has-in-progress).
+  - **P32.3** `lumen chat` ships `/sessions` slash command
+    with five sub-commands: list (recent 10), list N,
+    show <id>, switch <id>, delete <id>, help. The
+    `<id>` argument is parsed as-is; the active session is
+    tagged with a `←` marker. Switch is **restart-required**
+    (writes `chat-next-session.json` + tells the user to
+    exit and relaunch with `--session-id`); deleting the
+    active session is refused.
+  - **P32.4** `packages/memory/src/sqlite-loops-store.ts` —
+    `SqliteLoopsStore` with `save` / `stop` / `recordTick` /
+    `listAll` / `listActive` / `dispose`. Persists to its own
+    `loops.sqlite` file under `$XDG_STATE_HOME/lumen/` (a
+    separate table from chat history so the two
+    lifecycles never collide). Schema: `loops(id, kind,
+    interval_ms, cron_expr, prompt, registered_at,
+    last_tick_at, stopped_at)` with `loops_active_idx` on
+    `(stopped_at, registered_at)`.
+  - **P32.4** `lumen chat` ships `/unloop <id>` slash command
+    that stops the active timer and marks the persisted row
+    inactive (`stopped_at IS NULL` becomes the filter on
+    `listActive()`). On TUI mount, `reloadPersistedLoops()`
+    re-arms every active row so closing and re-opening the
+    TUI does not silently kill the schedule.
+  - **P32.5** `apps/cli/src/native-abi.ts` —
+    `probeBetterSqlite3Abi()` opens an in-memory SQLite handle
+    to surface ABI drift as a first-class failure rather than
+    the opaque `Cannot open database because the directory
+    does not exist` error users hit on Node upgrade. `lumen
+    doctor` gains check #10:
+    `[OK] better-sqlite3 ABI matches current Node (modules=141)`
+    or `[FAIL] better-sqlite3 ABI drift: binary compiled for
+    NODE_MODULE_VERSION=X but Node is running Y. Run
+    \`pnpm rebuild:native\`.`
+
+### Changed
+
+  - **P32.5** `apps/cli/package.json` declares
+    `better-sqlite3` as a direct dependency. The runtime
+    probe in `native-abi.ts` requires the package by name;
+    without the explicit dependency pnpm's strict isolation
+    hides the transitive binary from the doctor process
+    even though the package is installed at the monorepo
+    root.
+
+### Docs / TASKS
+
+  - `TASKS.md` — this section.
+  - `CHANGELOG.md` — this `[Unreleased]` entry.
+
+### Migration from 0.17.0
+
+  - No breaking API change. Existing `lumen chat` users see
+    the new cwd-derived `chat-<hash>` sessionId in their status
+    bar on the next launch. To migrate to a fresh explicit
+    id, run `lumen chat --session-id <name>`. To restore the
+    pre-P32 behaviour (fresh uuid per launch), pass
+    `--no-persist`.
+
 ## [0.17.0] — 2026-07-23 — P23 + P23.11 + P23.12 + P24 + P25 + P26 (bug.md audit + FEATURE_GAP sweep)
 
 > **Multi-series sweep.** 17 commits across P23.0-P23.10

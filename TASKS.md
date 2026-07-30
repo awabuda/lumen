@@ -1241,8 +1241,8 @@ bug.md 中尚未修的项按特征分类：
    - P29.1 = which hosted CUA model (Anthropic / OpenAI / OSS).
    - P29.2 = which cross-encoder (pure-JS CLIP / OpenAI text-embedding).
 3. **P22.7 §3 guardrail 仍 intact** — both paths are HTTP or pure-JS; no new native dep.
-4. **P29.x = gated on user vendor decisions** — user picks the model + encoder; P29.1-P29.4 then ship.
-5. **P30+ 候选** = real agent-loop integration of CUA + cross-encoder.
+5. **P29.x = gated on user vendor decisions** — user picks the model + encoder; P29.1-P29.4 then ship.
+6. **P30+ 候选** = real agent-loop integration of CUA + cross-encoder.
 
 
 - [x] **P29.1 — `ComputerUseModel` interface + Anthropic + Stub** — `feat(llm): P29.1 — ComputerUseModel interface + Anthropic + Stub` *(commit `5a29ad7`)* — Interface in `@lumen/llm/src/computer-use/index.ts` with `ComputerActionSchema` (click / type / key / scroll / wait / stop) + `ComputerActionHistoryEntrySchema` + `ComputerUseModelInputSchema`. `AnthropicComputerUseModel` (stub for now; P29.1.1 replaces with real fetch) + `StubComputerUseModel` (pure-JS no-op for tests). 13 tests. The OpenAI CUA and OSS IBM-CUA adapters ship as separate P29.1.x commits once the user picks the vendor.
@@ -1256,3 +1256,32 @@ bug.md 中尚未修的项按特征分类：
 4. **Agent-loop integration** = P29.3 (P29.1 + P28.1 联合 wire).
 5. **P29.2 cross-encoder for #46** = separate decision.
 6. **bug.md 真 ship count 维持 73 / 73** — P29 ships additive data layer, no new bug.md fix.
+
+### P32 — `lumen chat` persistence + session registry + cron durability
+
+> **Multi-commit sweep on `lumen chat` durability.** 7 commits
+> (P32.1, P32.1.1, P32.2, P32.3a, P32.3b, P32.4, P32.5) shipping
+> on `main` ahead of `origin/main` by 110 commits (P32 was the
+> user-reported regression case for chat durability — see
+> the trailing note from 2026-07-30). P32 mirrors the
+> pre-P32.4 Hermes `commit_session_boundary_async` and the
+> LangGraph `thread_id` contract in a sqlite-only world, but
+> stays within the workspace boundary (no Python or external
+> daemon to track).
+
+- [x] **P32.1 — `lumen chat` defaults to durable persistence + cwd-derived sessionId** — `feat(cli): P32.1 — chat 默认持久化 + cwd-derived 默认 sessionId` *(commit `3f9c949`)* — `apps/cli/src/chat-paths.ts` (XDG-aware path resolution + 8-byte-base64url cwd hash). Three new flags: `--session-id <id>` (override), `--new-session` (force a fresh uuid), `--no-persist` (opt back into pre-P32 in-memory behaviour). 35/35 cli tests green.
+- [x] **P32.1.1 — Storage-layer mkdirSync invariant** — `fix(memory): P32.1.1 — sqlite stores mkdirSync the parent directory` *(commit `38ca9d1`)* — `SqliteCheckpointStore` and `SqliteStore` constructors now `mkdirSync(parent, {recursive: true})` so a fresh install at `~/.local/state/lumen/chat.sqlite` no longer throws `Cannot open database because the directory does not exist`. Resolves the user-reported regression from P32.1's first run.
+- [x] **P32.2 — Mount-time history render** — `feat(cli): P32.2 — chat 启动时渲染历史 turn 进 TUI` *(commit `a1220e4`)* — `apps/cli/src/components/restore-turns.ts` (pure `messagesToTurns()` helper with 4 rules: drop system, fold tool loops, keep in-progress tail, render leading assistant as `user: ''`). `Chat.tsx` mount useEffect consumes `initialResumeFrom.messages` and primes `setTurns` so the user reopens `lumen chat` and immediately sees prior turns above the input box.
+- [x] **P32.3a — `BaseCheckpointStore.listSessions` + `deleteSession`** — `feat(core,memory): P32.3a — BaseCheckpointStore.listSessions + deleteSession` *(commit `8326949`)* — Storage-layer interface extension with `CheckpointSessionSummary[]` (session id, lastCreatedAt, checkpointCount, hasInProgress). Both `InMemoryCheckpointStore` and `SqliteCheckpointStore` implement the new methods with SQL `GROUP BY session_id`.
+- [x] **P32.3b — `/sessions` slash command in the TUI** — `feat(cli): P32.3b — /sessions slash command in TUI` *(commit `ad59104`)* — Five sub-commands: `list`, `list N`, `show <id>`, `switch <id>`, `delete <id>`, `help`. Switch is **restart-required** — writes `chat-next-session.json` and instructs the user to exit and relaunch with `--session-id`. Deleting the active session is refused. 17/17 sub-cases pass.
+- [x] **P32.4 — `SqliteLoopsStore` + `/unloop` + cross-restart loop durability** — `feat(memory,cli): P32.4 — /loop + /unloop persist across restarts` *(commit `3f61008`)* — `packages/memory/src/sqlite-loops-store.ts` (DDL for `loops(id, kind, interval_ms, cron_expr, prompt, registered_at, last_tick_at, stopped_at)`). `slash-commands.ts.handleLoopSlash` accepts a `HandleLoopContext { store?, fire? }` and persists every registration; `reloadPersistedLoops()` runs on TUI mount to re-arm every `stopped_at IS NULL` row. Net effect: closing the TUI does not lose scheduled loops.
+- [x] **P32.5 — `lumen doctor` detects better-sqlite3 ABI drift** — `feat(cli): P32.5 — lumen doctor detects better-sqlite3 ABI drift` *(commit `064aa7a`)* — `apps/cli/src/native-abi.ts` (`probeBetterSqlite3Abi`, `extractNodeModuleVersionMismatch`, `formatAbiDoctorMessage`). Doctor check #10 reports `[OK] better-sqlite3 ABI matches current Node (modules=N)` or `[FAIL] better-sqlite3 ABI drift: binary compiled for NODE_MODULE_VERSION=X but Node is running Y. Run \`pnpm rebuild:native\`.` Replaces the opaque `NODE_MODULE_VERSION` error users hit on Node upgrade.
+
+### P32 critical decisions (2026-07-30)
+
+1. **No new native dependency surface** — `SqliteLoopsStore` and `SqliteCheckpointStore` both wrap `better-sqlite3`, which was already a transitive `@lumen/memory` dep; P32.5 only adds `better-sqlite3` as a direct `apps/cli` dep so the runtime probe can resolve it via pnpm's strict hoisting. No new `node-gyp` builds.
+2. **Cwd-derived sessionId default is the user contract** — `chat-<cwdHash>` is deterministic for the same cwd, so reopening `lumen chat` in the same project lands back in the same conversation. Override via `--session-id` (explicit name) or `--new-session` (fresh uuid). The `--no-persist` flag preserves the pre-P32 in-memory behaviour for users who want sessionless runs.
+3. **`/sessions switch` is restart-required by design** — hot-swapping the checkpoint store mid `streamRun` corrupts the in-flight checkpoint id sequence (`<sessionId>-<iterations>`). The chosen UX is "queue, exit, relaunch" via `chat-next-session.json`. The trade-off is documented and the test pins down the refuse-to-delete-active-session safety guard.
+4. **`SqliteLoopsStore` is a separate sqlite file from `chat.sqlite`** — keeping the two lifecycles in their own files means future schema migrations on chat checkpoints cannot accidentally touch cron rows (and vice versa). Both files live under the same `XDG_STATE_HOME/lumen/` directory so a backup is still one tar.
+5. **Lumen Profile (CHANGELOG / TASKS) 独立 commit** — all upstream `apps/cli` and `@lumen/*` code changes were split across 6 commits (P32.1, P32.1.1, P32.2, P32.3a, P32.3b, P32.4, P32.5). The P32.6 bookkeeping commit (TASKS.md + CHANGELOG.md `[Unreleased]`) ships after the feature commits land to follow `CLAUDE.md` "TASKS.md / 文档 cleanup / CHANGELOG 独立 commit" guidance.
+6. **OpenClaw / Hermes / LangGraph reference** — the design locks for P32.3 (session marker `sqlite:<agentId>:<sessionId>:<storePath>`-style single-file multi-session) and P32.4 (cross-restart loop durability, analogous to Hermes's `commit_session_boundary_async`) both deliberately reduce complexity: lumen stays on 1 sqlite file per concern rather than introducing per-session files, and the rebuild-on-mount reload mirror prefers the LangGraph `thread_id ≤ 255 chars + sha256 hash` shape over a UUID. P32.5 is a pragmatic "patch the user footgun" rather than a framework-fetch-driven design.
