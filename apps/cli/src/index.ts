@@ -139,6 +139,18 @@ program
   .option('--cwd <path>', 'Working directory for tool execution')
   .option('--permissions <path>', 'Path to a YAML tool-permission policy file (P22.2)')
   .option('--checkpoint <path>', 'Path to a SQLite checkpoint database')
+  .option(
+    '--session-id <id>',
+    'P32.1: explicit session id (default: cwd-derived stable id, e.g. `chat-AbCdEfGhIjK`)',
+  )
+  .option(
+    '--new-session',
+    'P32.1: ignore any cwd-derived default and start a fresh uuid session in the current cwd',
+  )
+  .option(
+    '--no-persist',
+    'P32.1: opt out of the persistent checkpoint + default-session defaults; run like pre-P32.1 (in-memory, fresh uuid per launch)',
+  )
   .option('--no-resume', 'Do not resume a fresh in-progress checkpoint')
   .option('--resume-ttl <ms>', 'Maximum checkpoint age for auto-resume (default 600000)')
   .option('--checkpoint-interval <steps>', 'Save every N completed steps (default 1)')
@@ -174,6 +186,9 @@ program
       approveOn,
       permissionsPath: opts.permissions as string | undefined,
       checkpointPath: opts.checkpoint as string | undefined,
+      sessionId: opts.sessionId as string | undefined,
+      newSession: opts.newSession === true,
+      noPersist: opts.persist === false,
       noResume: opts.resume === false,
       resumeTtlMs:
         typeof opts.resumeTtl === 'string' ? Number.parseInt(opts.resumeTtl, 10) : undefined,

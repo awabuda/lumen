@@ -62,6 +62,16 @@ interface ChatProps {
   readonly initialResumeFrom?: AgentCheckpoint
   /** Step checkpoint cadence for each turn. */
   readonly checkpointInterval?: number
+  /**
+   * P32.1 — when persistence is on, the chat command derives a
+   * stable session id (cwd-hash) and forwards it here. We pass
+   * it to `streamRun({ sessionId })` so `Agent.executeLoop`
+   * hits the `options.sessionId ?? checkpoint?.sessionId ?? newSessionId()`
+   * fallback at the first branch and reuses our id instead of
+   * generating a fresh uuid. The TUI also surfaces the id in
+   * the bottom bar so the user knows which conversation they are in.
+   */
+  readonly sessionId?: string
 }
 
 export function Chat({
@@ -69,6 +79,7 @@ export function Chat({
   checkpointStore,
   initialResumeFrom,
   checkpointInterval,
+  sessionId,
 }: ChatProps): JSX.Element {
   const { exit } = useApp()
   const [turns, setTurns] = useState<readonly Turn[]>([])
@@ -275,6 +286,7 @@ export function Chat({
         for await (const ev of built.agent.streamRun({
           userMessage: trimmed,
           signal: ctrl.signal,
+          ...(sessionId !== undefined ? { sessionId } : {}),
           ...(checkpointStore ? { checkpointStore } : {}),
           ...(resumeFrom ? { resumeFrom } : {}),
           ...(checkpointInterval !== undefined ? { checkpointInterval } : {}),
@@ -353,7 +365,7 @@ export function Chat({
         setStreamingText('')
       }
     },
-    [built.agent, checkpointInterval, checkpointStore, exit, status],
+    [built, built.agent, checkpointInterval, checkpointStore, exit, sessionId, status],
   )
 
   // Keyboard input:

@@ -16,6 +16,7 @@
  */
 
 import type { AgentCheckpoint } from '@lumen/core'
+import { defaultChatCheckpointPath, defaultChatSessionId } from '../chat-paths.js'
 import { findResumeCheckpoint } from '../checkpoint-resume.js'
 import { type BuiltAgent, buildAgent } from '../composition.js'
 
@@ -29,6 +30,12 @@ import { type BuiltAgent, buildAgent } from '../composition.js'
  * (which starts with "interrupt: ...") in the turn log instead of
  * silently resetting to idle, so the user can see *why* the run was
  * interrupted and decide to retry with a different tool list.
+ *
+ * P32.1 — chat now defaults to durable persistence. Resolution:
+ *   `checkpointPath ?? defaultChatCheckpointPath()`
+ *   `sessionId ?? defaultChatSessionId(cwd)` (unless `noPersist`,
+ *   which disables both to keep the pre-P32.1 in-memory behavior
+ *   available as an explicit opt-out, not a silent default).
  */
 export interface ChatCommandOptions {
   model?: string
@@ -45,8 +52,24 @@ export interface ChatCommandOptions {
   approveOn?: ReadonlyArray<string>
   /** P22.2: path to a YAML permission policy file. */
   permissionsPath?: string
-  /** SQLite checkpoint database used for durable TUI turns. */
+  /**
+   * SQLite checkpoint database used for durable TUI turns. When
+   * omitted (and `noPersist` is false), defaults to
+   * `defaultChatCheckpointPath()` — the XDG_STATE_HOME-aware
+   * `chat.sqlite` location. Pass `:memory:` only for tests.
+   */
   checkpointPath?: string
+  /** P32.1: explicit session id (replaces cwd-derived default). */
+  sessionId?: string
+  /** P32.1: force a fresh sessionId even when cwd is unchanged. */
+  newSession?: boolean
+  /**
+   * P32.1: disable the new persistence defaults and run like the
+   * pre-P32.1 chat — in-memory checkpoint, fresh uuid per launch.
+   * Used by `--no-persist` and by tests that don't want a
+   * chat.sqlite file left in the user's home.
+   */
+  noPersist?: boolean
   /** Disable startup auto-resume. */
   noResume?: boolean
   /** Maximum checkpoint age for startup auto-resume. */
@@ -79,9 +102,29 @@ export const chatCommand = async (options: ChatCommandOptions): Promise<number> 
   const React = await import('react')
   const { render } = await import('ink')
   const { Chat } = await import('../components/Chat.js')
+  const cwd = options.cwd ?? process.cwd()
+  // P32.1 — chat defaults to durable persistence. `--no-persist`
+  // (or tests passing `noPersist: true`) opts back into the
+  // pre-P32.1 in-memory behaviour: no chat.sqlite is created
+  // and `newSessionId()` runs every launch, so there is
+  // nothing to leak across processes.
+  const persist = options.noPersist !== true
+  const checkpointPath = persist
+    ? (options.checkpointPath ?? defaultChatCheckpointPath())
+    : options.checkpointPath
+  // P32.1 — pick a stable session id when persistence is on. The
+  // user can override with `--session-id`. `--new-session`
+  // forces a fresh uuid (useful when the user wants to start a
+  // fork of the current conversation without leaving the cwd).
+  const sessionId = !persist
+    ? undefined
+    : options.newSession === true
+      ? undefined
+      : (options.sessionId ?? defaultChatSessionId(cwd))
+
   const { SqliteCheckpointStore } = await import('@lumen/memory')
-  const checkpointStore = options.checkpointPath
-    ? new SqliteCheckpointStore({ path: options.checkpointPath })
+  const checkpointStore = checkpointPath
+    ? new SqliteCheckpointStore({ path: checkpointPath })
     : undefined
   let initialResumeFrom: AgentCheckpoint | undefined
   try {
@@ -105,6 +148,7 @@ export const chatCommand = async (options: ChatCommandOptions): Promise<number> 
       built,
       checkpointStore,
       initialResumeFrom,
+      ...(sessionId !== undefined ? { sessionId } : {}),
       ...(options.checkpointInterval !== undefined
         ? { checkpointInterval: options.checkpointInterval }
         : {}),
