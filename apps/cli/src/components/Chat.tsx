@@ -42,7 +42,9 @@ import { handleSessionsSlash } from './sessions-slash.js'
 import {
   budgetSnapshotAsAssistant,
   handleLoopSlash,
+  handleUnloopSlash,
   initProjectAsAssistant,
+  reloadPersistedLoops,
 } from './slash-commands.js'
 
 /** A single turn (user + assistant) in the conversation log. */
@@ -60,6 +62,8 @@ interface ChatProps {
   readonly built: BuiltAgent
   /** Persistent checkpoint store shared across TUI turns. */
   readonly checkpointStore?: BaseCheckpointStore
+  /** P32.4 — persistent cron/loop store, mounted on chat.tsx bridge. */
+  readonly loopsStore?: import('@lumen/memory').SqliteLoopsStore
   /** Fresh in-progress snapshot discovered before mounting. Consumed once. */
   readonly initialResumeFrom?: AgentCheckpoint
   /** Step checkpoint cadence for each turn. */
@@ -79,6 +83,7 @@ interface ChatProps {
 export function Chat({
   built,
   checkpointStore,
+  loopsStore,
   initialResumeFrom,
   checkpointInterval,
   sessionId,
@@ -121,6 +126,53 @@ export function Chat({
     // with any prior turn.
     turnCounter.current = restored.length
   }, [initialResumeFrom])
+
+  // P32.4 — on chat mount, re-arm every loop previously
+  // registered via `/loop` so closing and re-opening the TUI
+  // does not silently kill the schedule. When the store is
+  // empty the effect is a no-op; when it has rows we surface
+  // a one-line "restored N loops from disk" message in the
+  // chat log so the user sees the schedule is alive.
+  useEffect(() => {
+    if (loopsStore === undefined) return
+    let cancelled = false
+    const fire = async (id: string, prompt: string): Promise<void> => {
+      try {
+        // Drain the streaming generator without rendering the
+        // result into the TUI — the loop runs in the background,
+        // so the user's own input box stays responsive.
+        for await (const _ev of built.agent.streamRun({ userMessage: prompt })) {
+          // intentionally empty — we only want the side effect
+          // of running the agent; the runtime handles persistence
+          // and tool dispatch as usual.
+        }
+      } catch (err) {
+        process.stderr.write(
+          `[loop] ${id} fire error: ${err instanceof Error ? err.message : String(err)}\n`,
+        )
+      }
+    }
+    void reloadPersistedLoops(loopsStore, fire).then((restored) => {
+      if (cancelled || restored.length === 0) return
+      const message = `[loop] restored ${restored.length} loop${restored.length === 1 ? '' : 's'} from disk:\n${restored.map((l) => `  ${l.id}  ${l.kind}${l.intervalMs !== undefined ? ` every ${Math.round(l.intervalMs / 1000)}s` : l.cronExpr !== undefined ? ` cron="${l.cronExpr}"` : ''}`).join('\n')}`
+      setTurns((prev) => [
+        ...prev,
+        {
+          key: prev.length + 1,
+          user: '',
+          assistant: {
+            role: 'assistant',
+            content: message,
+            toolCalls: [],
+          },
+        },
+      ])
+      turnCounter.current += 1
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [loopsStore, built.agent])
 
   // Per-run AbortController so Ctrl+C can cancel an in-flight run.
   const abortRef = useRef<AbortController | null>(null)
@@ -249,8 +301,42 @@ export function Chat({
       //   /loop "*/5 * * * *" <prompt> → cron expression
       // P30.A1: every tick now actually fires the agent loop
       // (was stderr-only pre-P30.A1).
+      // P32.4: the registration is also written to SqliteLoopsStore
+      // (when one is wired) so closing the TUI does not lose
+      // the schedule.
       if (trimmed.startsWith('/loop ') || trimmed === '/loop') {
-        const result = await handleLoopSlash(trimmed, built)
+        const result = await handleLoopSlash(trimmed, built, {
+          ...(loopsStore !== undefined ? { store: loopsStore } : {}),
+        })
+        const assistantMsg: AssistantMessage = {
+          role: 'assistant',
+          content: result.message,
+          toolCalls: [],
+        }
+        const turn: Turn = { key: turnCounter.current + 1, user: trimmed }
+        turnCounter.current += 1
+        setTurns((prev) => [
+          ...prev,
+          turn,
+          {
+            key: turnCounter.current + 1,
+            user: '',
+            assistant: assistantMsg,
+          } satisfies Turn,
+        ])
+        turnCounter.current += 1
+        setStatus('done')
+        setStreamingText('')
+        setInput('')
+        return
+      }
+      // P32.4 — /unloop <id> stops a loop registered via /loop.
+      // The persisted row is also marked inactive so a future
+      // `lumen chat` launch will not re-arm it.
+      if (trimmed.startsWith('/unloop')) {
+        const result = await handleUnloopSlash(trimmed, {
+          ...(loopsStore !== undefined ? { store: loopsStore } : {}),
+        })
         const assistantMsg: AssistantMessage = {
           role: 'assistant',
           content: result.message,
@@ -459,6 +545,7 @@ export function Chat({
       checkpointInterval,
       checkpointStore,
       exit,
+      loopsStore,
       sessionId,
       status,
     ],

@@ -122,10 +122,17 @@ export const chatCommand = async (options: ChatCommandOptions): Promise<number> 
       ? undefined
       : (options.sessionId ?? defaultChatSessionId(cwd))
 
-  const { SqliteCheckpointStore } = await import('@lumen/memory')
+  const { SqliteCheckpointStore, SqliteLoopsStore } = await import('@lumen/memory')
   const checkpointStore = checkpointPath
     ? new SqliteCheckpointStore({ path: checkpointPath })
     : undefined
+  // P32.4 — the cron registry lives in its own sqlite file at
+  // $XDG_STATE_HOME/lumen/loops.sqlite (default). The default-path
+  // helper inside `SqliteLoopsStore` handles the mkdirSync
+  // invariant from P32.1.1. `--no-persist` opts out of cron
+  // persistence too: registry entries survive across launches
+  // is part of the same durability surface as chat history.
+  const loopsStore = persist ? new SqliteLoopsStore({}) : undefined
   let initialResumeFrom: AgentCheckpoint | undefined
   try {
     initialResumeFrom = checkpointStore
@@ -137,6 +144,7 @@ export const chatCommand = async (options: ChatCommandOptions): Promise<number> 
       : undefined
   } catch (err) {
     await checkpointStore?.dispose()
+    await loopsStore?.dispose().catch(() => {})
     process.stderr.write(
       `lumen chat: checkpoint setup failed: ${err instanceof Error ? err.message : String(err)}\n`,
     )
@@ -147,6 +155,7 @@ export const chatCommand = async (options: ChatCommandOptions): Promise<number> 
     React.createElement(Chat, {
       built,
       checkpointStore,
+      ...(loopsStore !== undefined ? { loopsStore } : {}),
       initialResumeFrom,
       ...(sessionId !== undefined ? { sessionId } : {}),
       ...(options.checkpointInterval !== undefined

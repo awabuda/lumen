@@ -36,7 +36,9 @@
 
 import type { AssistantMessage } from '@lumen/core'
 import { CronExpressionCron, IntervalCron } from '@lumen/core'
+import type { PersistedLoop, SqliteLoopsStore } from '@lumen/memory'
 import type { BuiltAgent } from '../composition.js'
+import { startOneLoop } from '../cron-registry.js'
 import { analyzeCurrentProject } from './project-analyzer.js'
 
 const assistantFromText = (text: string): AssistantMessage => ({
@@ -196,14 +198,38 @@ const fireAgentForCron = async (
 }
 
 /**
- * Handle /loop. Returns the assistant message to drop into
- * the chat log plus the cron entry so the caller can start
+ * Handle /loop. Returns the assistant message to drop into the
+ * chat log plus the cron entry so the caller can start
  * it. P30.A1: every tick now fires the agent loop, not just
  * writes a stderr line.
+ *
+ * P32.4 — the registration is now also written to
+ * `SqliteLoopsStore` (when a store is supplied via `ctx`), so
+ * closing the TUI does not lose the loop — re-launching
+ * `lumen chat` reads the persisted rows via `loadAndStartLoops`
+ * and re-arms them. When `ctx` is `undefined` (the pre-P32.4
+ * test surface where handleLoopSlash ran without persistence)
+ * the live cron still fires; it just dies with the process
+ * like before. The module-scoped `loopRegistry` /
+ * `liveCrons` are kept for back-compat with the P23.12 test
+ * suite but new code should drive everything through
+ * `ctx.store`.
  */
+export interface HandleLoopContext {
+  /** Persist registrations across restarts. */
+  readonly store?: SqliteLoopsStore
+  /**
+   * Fire the agent on every tick. Defaults to
+   * `fireAgentForCron(undefined, …)` which logs to stderr when
+   * the test path does not supply an agent.
+   */
+  readonly fire?: (loopId: string, prompt: string) => Promise<void> | void
+}
+
 export const handleLoopSlash = async (
   raw: string,
   built?: BuiltAgent,
+  ctx: HandleLoopContext = {},
 ): Promise<{ readonly message: string; readonly entry?: LoopEntry }> => {
   const parsed = parseLoopArgs(raw)
   if (!parsed.ok) {
@@ -212,45 +238,78 @@ export const handleLoopSlash = async (
   const id = `loop-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const cronExpr = parsed.cronExpr
   const prompt = parsed.prompt
+  // Wrap the fire function to compose `built` (the test
+  // path's stderr log) with an explicit `ctx.fire` if given.
+  const fire = (theLoopId: string, thePrompt: string): Promise<void> => {
+    if (ctx.fire !== undefined) return Promise.resolve(ctx.fire(theLoopId, thePrompt))
+    // fireAgentForCron is sync (writes a stderr line); wrap so
+    // the persistence path's `await store.save(...)` always
+    // resolves to a settled promise.
+    return Promise.resolve(fireAgentForCron(built, theLoopId, thePrompt))
+  }
+
   if (cronExpr !== undefined) {
-    // P30.A1 — the cron expression path is now real. We use
-    // CronExpressionCron from @lumen/core (a 5-field `* * * * *`
-    // matcher that ticks every 30s). Each tick fires
-    // `built.agent.streamRun({ userMessage: prompt })` and logs
-    // the result. The constructor parses the expression
-    // synchronously; if it's malformed (not 5 fields, bad
-    // ranges, etc.) Zod throws a ValidationError — we surface
-    // the message and don't register a cron.
-    let cron: CronExpressionCron
-    try {
-      cron = new CronExpressionCron({
-        id,
-        expression: cronExpr,
-        job: () => fireAgentForCron(built, id, prompt),
-      })
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : 'invalid cron expression'
-      return { message: `[loop] invalid cron expression: ${reason}` }
-    }
-    cron.start()
-    const entry: LoopEntry = {
+    const persisted: PersistedLoop = {
       id,
       kind: 'cron',
       cronExpr,
       prompt,
-      message: `[loop] registered ${id}, cron="${cronExpr}": "${prompt}"`,
+      registeredAt: Date.now(),
+      isActive: true,
     }
-    loopRegistry.push(entry)
-    liveCrons.set(id, {
-      entry,
-      stop: () => cron.stop(),
-    })
-    return { message: entry.message, entry }
+    if (ctx.store !== undefined) {
+      await ctx.store.save(persisted)
+    }
+    // The CLI-side schedule lives in `liveCrons` regardless of
+    // persistence — module-scoped so we can /unloop it from the
+    // same TUI session.
+    try {
+      const cron = new CronExpressionCron({
+        id,
+        expression: cronExpr,
+        job: () => fire(id, prompt),
+      })
+      cron.start()
+      const entry: LoopEntry = {
+        id,
+        kind: 'cron',
+        cronExpr,
+        prompt,
+        message: `[loop] registered ${id}, cron="${cronExpr}": "${prompt}"`,
+      }
+      loopRegistry.push(entry)
+      liveCrons.set(id, { entry, stop: () => cron.stop() })
+      return { message: entry.message, entry }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : 'invalid cron expression'
+      return { message: `[loop] invalid cron expression: ${reason}` }
+    }
   }
   const intervalMs = parsed.intervalMs
   if (intervalMs === undefined) {
     return { message: '[loop] missing interval' }
   }
+  const persisted: PersistedLoop = {
+    id,
+    kind: 'interval',
+    intervalMs,
+    prompt,
+    registeredAt: Date.now(),
+    isActive: true,
+  }
+  if (ctx.store !== undefined) {
+    await ctx.store.save(persisted)
+  }
+  // P30.A1 — the IntervalCron job now actually fires the agent
+  // loop. Pre-P30.A1 the job only wrote a stderr line; the
+  // user saw a registration message but no actual work
+  // happened on each tick.
+  const cron = new IntervalCron({
+    id,
+    intervalMs,
+    job: () => fire(id, prompt),
+  })
+  cron.start()
   const entry: LoopEntry = {
     id,
     kind: 'interval',
@@ -259,21 +318,84 @@ export const handleLoopSlash = async (
     message: `[loop] registered ${id}, firing ${intervalLabel(intervalMs)}: "${prompt}"`,
   }
   loopRegistry.push(entry)
-  // P30.A1 — the IntervalCron job now actually fires the agent
-  // loop. Pre-P30.A1 the job only wrote a stderr line; the
-  // user saw a registration message but no actual work
-  // happened on each tick.
-  const cron = new IntervalCron({
-    id,
-    intervalMs,
-    job: () => fireAgentForCron(built, id, prompt),
-  })
-  cron.start()
-  liveCrons.set(id, {
-    entry,
-    stop: () => cron.stop(),
-  })
+  liveCrons.set(id, { entry, stop: () => cron.stop() })
   return { message: entry.message, entry }
+}
+
+/**
+ * Handle /unloop <id>. Stops the active cron, marks the
+ * persisted row inactive, and drops it from the in-memory
+ * registry. The next `lumen chat` launch will not restart it.
+ */
+export const handleUnloopSlash = async (
+  raw: string,
+  ctx: HandleLoopContext = {},
+): Promise<{ readonly message: string }> => {
+  const stripped = raw.replace(/^\/unloop\s*/, '').trim()
+  if (stripped.length === 0) {
+    return { message: '[unloop] usage: /unloop <id>' }
+  }
+  const target = liveCrons.get(stripped)
+  if (target === undefined) {
+    return { message: `[unloop] no active loop with id: ${stripped}` }
+  }
+  target.stop()
+  liveCrons.delete(stripped)
+  // Mark inactive in the loopRegistry array (mirror state).
+  for (let i = loopRegistry.length - 1; i >= 0; i--) {
+    const item = loopRegistry[i]
+    if (item !== undefined && item.id === stripped) {
+      loopRegistry.splice(i, 1)
+    }
+  }
+  if (ctx.store !== undefined) {
+    await ctx.store.stop(stripped)
+  }
+  return { message: `[unloop] stopped ${stripped}` }
+}
+
+/**
+ * P32.4 — load every persisted loop on TUI mount and start
+ * its cron timer. Returns the handles keyed by id so the TUI
+ * can call `stop()` on each during teardown. Currently the
+ * TUI does not own these handles in a controlled way (the
+ * module-scoped `liveCrons` map already mirrors them), but
+ * returning them lets a future test verify the round trip.
+ */
+export const reloadPersistedLoops = async (
+  store: SqliteLoopsStore,
+  fire: HandleLoopContext['fire'],
+): Promise<ReadonlyArray<PersistedLoop>> => {
+  // The schedule-management lives in apps/cli; the data path
+  // is in @lumen/memory. Wire them with a small adapter — the
+  // /loop call uses `startOneLoop` directly below, here we
+  // want persistence to drive the schedule (no re-write
+  // needed since listActive already filters `stopped_at IS NULL`).
+  const active = await store.listActive()
+  for (const entry of active) {
+    const { stop } = startOneLoop(entry, fire ?? (() => {}))
+    if (liveCrons.has(entry.id)) continue
+    loopRegistry.push({
+      id: entry.id,
+      kind: entry.kind,
+      intervalMs: entry.intervalMs,
+      cronExpr: entry.cronExpr,
+      prompt: entry.prompt,
+      message: `[loop] restored ${entry.id} from disk`,
+    })
+    liveCrons.set(entry.id, {
+      entry: {
+        id: entry.id,
+        kind: entry.kind,
+        intervalMs: entry.intervalMs,
+        cronExpr: entry.cronExpr,
+        prompt: entry.prompt,
+        message: `[loop] restored ${entry.id} from disk`,
+      },
+      stop,
+    })
+  }
+  return active
 }
 
 // ---------------------------------------------------------------------------

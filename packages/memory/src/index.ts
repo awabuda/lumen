@@ -45,6 +45,12 @@ export {
   type SqliteCheckpointStoreOptions,
 } from './sqlite-checkpoint-store.js'
 export {
+  SqliteLoopsStore,
+  type PersistedLoop,
+  type SqliteLoopsStoreOptions,
+  type LoopKind,
+} from './sqlite-loops-store.js'
+export {
   BaseVectorBackend,
   BruteForceVectorBackend,
   SqliteVecBackend,
