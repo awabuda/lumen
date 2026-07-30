@@ -37,7 +37,12 @@ import * as path from 'node:path'
 import BetterSqlite3 from 'better-sqlite3'
 import type { Database, Statement } from 'better-sqlite3'
 
-import type { AgentCheckpoint, BaseCheckpointStore, Message } from '@lumen/core'
+import type {
+  AgentCheckpoint,
+  BaseCheckpointStore,
+  CheckpointSessionSummary,
+  Message,
+} from '@lumen/core'
 
 const CHECKPOINTS_DDL = `
 CREATE TABLE IF NOT EXISTS checkpoints (
@@ -92,9 +97,11 @@ interface PreparedCheckpointStatements {
   insert: Statement
   get: Statement
   listBySession: Statement
+  listSessionSummaries: Statement
   latestInProgress: Statement
   latestInProgressBySession: Statement
   delete: Statement
+  deleteBySessionId: Statement
 }
 
 const prepareStatements = (db: Database): PreparedCheckpointStatements => ({
@@ -113,6 +120,11 @@ const prepareStatements = (db: Database): PreparedCheckpointStatements => ({
   listBySession: db.prepare(
     'SELECT * FROM checkpoints WHERE session_id = ? ORDER BY created_at DESC',
   ),
+  listSessionSummaries: db.prepare(
+    "SELECT session_id, MAX(created_at) AS last_at, COUNT(*) AS cnt, " +
+      "SUM(CASE WHEN outcome IS NULL OR outcome NOT IN ('success','error') THEN 1 ELSE 0 END) AS live_cnt " +
+      'FROM checkpoints GROUP BY session_id ORDER BY last_at DESC',
+  ),
   latestInProgress: db.prepare(
     "SELECT * FROM checkpoints WHERE (outcome = 'in_progress' OR outcome IS NULL) AND created_at >= ? ORDER BY created_at DESC LIMIT 1",
   ),
@@ -120,6 +132,7 @@ const prepareStatements = (db: Database): PreparedCheckpointStatements => ({
     "SELECT * FROM checkpoints WHERE session_id = ? AND (outcome = 'in_progress' OR outcome IS NULL) AND created_at >= ? ORDER BY created_at DESC LIMIT 1",
   ),
   delete: db.prepare('DELETE FROM checkpoints WHERE id = ?'),
+  deleteBySessionId: db.prepare('DELETE FROM checkpoints WHERE session_id = ?'),
 })
 
 export interface SqliteCheckpointStoreOptions {
@@ -195,6 +208,28 @@ export class SqliteCheckpointStore implements BaseCheckpointStore {
     return rows.map(rowToCheckpoint)
   }
 
+  public async listSessions(
+    options: { readonly limit?: number } = {},
+  ): Promise<ReadonlyArray<CheckpointSessionSummary>> {
+    interface SummaryRow {
+      readonly session_id: string
+      readonly last_at: number
+      readonly cnt: number
+      readonly live_cnt: number
+    }
+    const rows = this.stmts.listSessionSummaries.all() as SummaryRow[]
+    await yieldToLoop()
+    const all = rows.map(
+      (r): CheckpointSessionSummary => ({
+        sessionId: r.session_id,
+        lastCreatedAt: r.last_at,
+        checkpointCount: r.cnt,
+        hasInProgress: r.live_cnt > 0,
+      }),
+    )
+    return options.limit === undefined ? all : all.slice(0, options.limit)
+  }
+
   public async latestInProgress(
     options: {
       readonly sessionId?: string
@@ -214,6 +249,12 @@ export class SqliteCheckpointStore implements BaseCheckpointStore {
     const result = this.stmts.delete.run(id)
     await yieldToLoop()
     return result.changes > 0
+  }
+
+  public async deleteSession(id: string): Promise<number> {
+    const result = this.stmts.deleteBySessionId.run(id)
+    await yieldToLoop()
+    return result.changes
   }
 
   /** Close the underlying database. Tests should call this. */

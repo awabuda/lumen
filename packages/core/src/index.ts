@@ -391,6 +391,7 @@ export {
   checkpointFromRun,
   type AgentCheckpoint,
   type BaseCheckpointStore,
+  type CheckpointSessionSummary,
 } from './agent/checkpoint.js'
 
 // HITL interrupt middleware (P20.1) — declarative rules that

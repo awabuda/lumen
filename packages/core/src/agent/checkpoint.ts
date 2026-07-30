@@ -93,6 +93,13 @@ export const checkpointFromRun = (result: AgentRunResult, label?: string): Agent
  * The contract every checkpoint store fulfils. Implementations
  * must be safe to call from multiple async contexts.
  */
+export interface CheckpointSessionSummary {
+  readonly sessionId: string
+  readonly lastCreatedAt: number
+  readonly checkpointCount: number
+  readonly hasInProgress: boolean
+}
+
 export interface BaseCheckpointStore {
   readonly id: string
   /** Persist a checkpoint. Overwrites if the same id is saved twice. */
@@ -101,6 +108,19 @@ export interface BaseCheckpointStore {
   get(id: string): Promise<AgentCheckpoint | undefined>
   /** List all checkpoints for a session, newest first. */
   list(sessionId: string): Promise<ReadonlyArray<AgentCheckpoint>>
+  /**
+   * List all sessions the store holds, newest first by `lastCreatedAt`.
+   * Optionally limit the result count (most-recent N).
+   *
+   * P32.3 — backs the `/sessions` slash command. The summary is
+   * intentionally compact so the renderer can fit a list of recent
+   * conversations in a few lines of TUI output without dragging in
+   * message payloads. Full per-session history remains available via
+   * `list(sessionId)`.
+   */
+  listSessions(options?: {
+    readonly limit?: number
+  }): Promise<ReadonlyArray<CheckpointSessionSummary>>
   /** Return the newest resumable checkpoint, optionally scoped to one session. */
   latestInProgress(options?: {
     readonly sessionId?: string
@@ -108,6 +128,15 @@ export interface BaseCheckpointStore {
   }): Promise<AgentCheckpoint | undefined>
   /** Delete a checkpoint by id. Returns true if a checkpoint was removed. */
   delete(id: string): Promise<boolean>
+  /**
+   * P32.3 — delete every checkpoint with `sessionId === id`. Returns
+   * the number of rows removed. This is a destructive operation;
+   * the CLI gates it behind `/sessions delete <id>` plus a `--force`
+   * flag on the `lumen session` sub-command path. Separate from
+   * `delete(id)` so a caller cannot accidentally clear a whole
+   * session by passing a partial id.
+   */
+  deleteSession(id: string): Promise<number>
 }
 
 /**
@@ -135,6 +164,28 @@ export class InMemoryCheckpointStore implements BaseCheckpointStore {
       .sort((a, b) => b.createdAt - a.createdAt)
   }
 
+  public async listSessions(
+    options: { readonly limit?: number } = {},
+  ): Promise<ReadonlyArray<CheckpointSessionSummary>> {
+    const bySession = new Map<string, { count: number; lastAt: number; live: boolean }>()
+    for (const c of this.byId.values()) {
+      const cur = bySession.get(c.sessionId) ?? { count: 0, lastAt: 0, live: false }
+      cur.count += 1
+      if (c.createdAt > cur.lastAt) cur.lastAt = c.createdAt
+      if (c.outcome !== 'success' && c.outcome !== 'error') cur.live = true
+      bySession.set(c.sessionId, cur)
+    }
+    const summaries = [...bySession.entries()]
+      .map(([sessionId, agg]): CheckpointSessionSummary => ({
+        sessionId,
+        lastCreatedAt: agg.lastAt,
+        checkpointCount: agg.count,
+        hasInProgress: agg.live,
+      }))
+      .sort((a, b) => b.lastCreatedAt - a.lastCreatedAt)
+    return options.limit === undefined ? summaries : summaries.slice(0, options.limit)
+  }
+
   public async latestInProgress(
     options: {
       readonly sessionId?: string
@@ -154,5 +205,16 @@ export class InMemoryCheckpointStore implements BaseCheckpointStore {
 
   public async delete(id: string): Promise<boolean> {
     return this.byId.delete(id)
+  }
+
+  public async deleteSession(id: string): Promise<number> {
+    let n = 0
+    for (const [key, c] of this.byId) {
+      if (c.sessionId === id) {
+        this.byId.delete(key)
+        n += 1
+      }
+    }
+    return n
   }
 }
