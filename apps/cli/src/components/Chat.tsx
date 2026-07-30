@@ -38,6 +38,7 @@ import type { BuiltAgent } from '../composition.js'
 import { classifyChatError } from './chat-error.js'
 import { analyzeCurrentProject } from './project-analyzer.js'
 import { messagesToTurns } from './restore-turns.js'
+import { handleSessionsSlash } from './sessions-slash.js'
 import {
   budgetSnapshotAsAssistant,
   handleLoopSlash,
@@ -176,6 +177,62 @@ export function Chat({
             key: turnCounter.current + 1,
             user: '',
             assistant: snapshot,
+          } satisfies Turn,
+        ])
+        turnCounter.current += 1
+        setStatus('done')
+        setStreamingText('')
+        setInput('')
+        return
+      }
+      // P32.3 — /sessions lists + manages stored checkpoint
+      // sessions from chat.sqlite. Sub-cmd dispatch lives in
+      // `sessions-slash.ts`; here we only forward the call with
+      // the TUI's currentSessionId (populated from the run:start
+      // event) so the active row gets a `←` marker.
+      if (trimmed === '/sessions' || trimmed.startsWith('/sessions ')) {
+        if (checkpointStore === undefined) {
+          const assistantMsg: AssistantMessage = {
+            role: 'assistant',
+            content:
+              '[sessions] no checkpoint store wired — run `lumen chat` (not `--no-persist`) to enable',
+            toolCalls: [],
+          }
+          const turn: Turn = { key: turnCounter.current + 1, user: trimmed }
+          turnCounter.current += 1
+          setTurns((prev) => [
+            ...prev,
+            turn,
+            {
+              key: turnCounter.current + 1,
+              user: '',
+              assistant: assistantMsg,
+            } satisfies Turn,
+          ])
+          turnCounter.current += 1
+          setStatus('done')
+          setStreamingText('')
+          setInput('')
+          return
+        }
+        const result = await handleSessionsSlash(trimmed, {
+          checkpointStore,
+          currentSessionId: activeSessionId,
+        })
+        const assistantMsg: AssistantMessage = {
+          role: 'assistant',
+          content: result.message,
+          toolCalls: [],
+        }
+        const turn: Turn = { key: turnCounter.current + 1, user: trimmed }
+        turnCounter.current += 1
+        setTurns((prev) => [
+          ...prev,
+          turn,
+          {
+            key: turnCounter.current + 1,
+            user: '',
+            assistant: assistantMsg,
           } satisfies Turn,
         ])
         turnCounter.current += 1
@@ -395,7 +452,16 @@ export function Chat({
         setStreamingText('')
       }
     },
-    [built, built.agent, checkpointInterval, checkpointStore, exit, sessionId, status],
+    [
+      activeSessionId,
+      built,
+      built.agent,
+      checkpointInterval,
+      checkpointStore,
+      exit,
+      sessionId,
+      status,
+    ],
   )
 
   // Keyboard input:
