@@ -241,6 +241,29 @@ export const doctorCommand = async (opts: DoctorOptions = {}): Promise<number> =
     fail(`MCP discovery failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
+  // 10. better-sqlite3 ABI drift (P32.5).
+  //     The prebuilt `.node` binary is tied to one Node ABI. When
+  //     the developer upgrades Node and forgets `pnpm rebuild:native`,
+  //     every Sqlite*Store constructor throws an opaque error. This
+  //     check probes the binary directly so the failure path is
+  //     explicit at the doctor surface, with a one-line remediation
+  //     pointing at the rebuild script. A drift is `[FAIL]` — every
+  //     lumen run/chat that touches persistence is broken.
+  try {
+    const { formatAbiDoctorMessage, probeBetterSqlite3Abi } = await import('../native-abi.js')
+    const probe = probeBetterSqlite3Abi()
+    if (probe.ok) {
+      ok(formatAbiDoctorMessage(probe))
+      if (opts.verbose && probe.binaryPath !== undefined) {
+        process.stdout.write(`    binary:  ${probe.binaryPath}\n`)
+      }
+    } else {
+      fail(formatAbiDoctorMessage(probe))
+    }
+  } catch (err) {
+    fail(`better-sqlite3 ABI check crashed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
   process.stdout.write(`\n${failed === 0 ? 'All checks passed.' : `${failed} check(s) failed.`}\n`)
   return failed === 0 ? 0 : 1
 }
