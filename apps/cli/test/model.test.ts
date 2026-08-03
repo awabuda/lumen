@@ -114,6 +114,13 @@ describe('modelShowCommand', () => {
   let savedDefaultModel: string | undefined
   beforeEach(() => {
     savedDefaultModel = process.env.LUMEN_DEFAULT_MODEL
+    // biome-ignore lint/performance/noDelete: project rule wins; see the
+    // comment block above the model.test.ts main `beforeEach` — assigning
+    // `process.env.X = undefined` substitutes the literal string
+    // "undefined" which the loadConfig merge layer treats as the
+    // actual config value (not an absent key), breaking cases like
+    // "flags the default model" that write a defaultModel via the
+    // project file but expect the env layer to *not* override it.
     delete process.env.LUMEN_DEFAULT_MODEL
   })
   afterEach(() => {

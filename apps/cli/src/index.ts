@@ -694,9 +694,14 @@ program
 // hint.
 program
   .command('init')
-  .description('Write a starter `~/.lumen/permissions.yaml` (P22.3). Pass --with-config to also write a starter `~/.lumen/config.yaml` (P-2026-07-29 audit GAP-3).')
+  .description(
+    'Write a starter `~/.lumen/permissions.yaml` (P22.3). Pass --with-config to also write a starter `~/.lumen/config.yaml` (P-2026-07-29 audit GAP-3).',
+  )
   .option('--force', 'Overwrite an existing file')
-  .option('--path <file>', 'Override the permissions destination (default ~/.lumen/permissions.yaml)')
+  .option(
+    '--path <file>',
+    'Override the permissions destination (default ~/.lumen/permissions.yaml)',
+  )
   .option(
     '--with-config',
     'P-2026-07-29 audit GAP-3 follow-up: also write a starter `~/.lumen/config.yaml` so the new composition.ts model-resolution chain (commit 677233e) has a baseline config to point the operator at.',
