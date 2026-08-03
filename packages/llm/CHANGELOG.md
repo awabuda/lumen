@@ -1,5 +1,12 @@
 # @lumen/llm
 
+## 0.16.1
+
+### Patch Changes
+
+- Updated dependencies [3211dcc]
+  - @lumen/core@0.18.0
+
 ## 0.16.0
 
 ### Minor Changes

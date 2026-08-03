@@ -10,7 +10,7 @@ Test counts are point-in-time totals across the monorepo. The pre-1.0 series
 (`0.x.y`) does not promise API stability; breaking changes are recorded as
 **Changed** entries with a note about the migration path.
 
-## [Unreleased] — P32 lumen chat persistence + P33.A product-gate diagnostic
+## [0.18.0] — 2026-08-03 — P32 lumen chat persistence + P33.A product-gate diagnostic
 
 > **Mixed bookkeeping.** The P32 series (7 commits across
 > `3f9c949`, `38ca9d1`, `a1220e4`, `8326949`, `ad59104`,
