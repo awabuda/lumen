@@ -31,6 +31,7 @@ import {
   MaxIterationsExceededError,
   ProviderError,
   ToolError,
+  ValidationError,
 } from '../errors/index.js'
 import { HookRegistry } from '../hooks/index.js'
 import { type BaseLogger, ConsoleLogger } from '../logging/index.js'
@@ -53,6 +54,7 @@ import {
   type ParsedMiddleware,
   getAgentMiddleware,
 } from './middleware.js'
+import { type SectionContext, buildSystemPrompt } from './system-prompt-sections.js'
 
 export interface AgentConfig {
   /** The LLM provider to call. Required. */
@@ -69,6 +71,21 @@ export interface AgentConfig {
   readonly model?: string
   /** System prompt. Defaults to a minimal neutral prompt. */
   readonly systemPrompt?: string
+  /**
+   * P31.6 — section context for the layered system prompt
+   * assembler. When set, the Agent calls
+   * {@link buildSystemPrompt} with this value at
+   * construction time and stores the rendered string as
+   * the system prompt. `systemPrompt` (above) and
+   * `systemPromptContext` are mutually exclusive — passing
+   * both throws a `ValidationError`.
+   *
+   * Operators preferring dynamic layer composition (kernel,
+   * project walk-up, profile-gated persona / skills index /
+   * memory snapshot) should use this option; the bare
+   * `systemPrompt` string remains for legacy callers.
+   */
+  readonly systemPromptContext?: SectionContext
   /** Working directory (passed to tools via ToolContext). */
   readonly cwd?: string
   /** Logger. Defaults to a no-op ConsoleLogger. */
@@ -333,7 +350,22 @@ export class Agent {
     this.memory = config.memory
     this.hooks = config.hooks ?? new HookRegistry()
     this.model = config.model ?? config.config?.defaultModel ?? 'gpt-4o-mini'
-    this.systemPrompt = config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT
+    // P31.6 — when `systemPromptContext` is set, render the
+    // layered prompt once at construction time and use the
+    // resulting string. The two system-prompt sources are
+    // mutually exclusive; passing both is a config error.
+    const hasStringPrompt = config.systemPrompt !== undefined
+    const hasContextPrompt = config.systemPromptContext !== undefined
+    if (hasStringPrompt && hasContextPrompt) {
+      throw new ValidationError(
+        'AgentConfig: `systemPrompt` and `systemPromptContext` are mutually exclusive; set at most one.',
+      )
+    }
+    if (hasContextPrompt) {
+      this.systemPrompt = buildSystemPrompt(config.systemPromptContext!)
+    } else {
+      this.systemPrompt = config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT
+    }
     this.cwd = config.cwd ?? process.cwd()
     this.logger = config.logger ?? new ConsoleLogger({ component: 'agent' })
   }
