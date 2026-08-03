@@ -122,9 +122,25 @@ describe('P32.4 — /unloop', () => {
   })
 
   it('survives restart: stopped loops do not come back', async () => {
+    // Pre-P33.A2 this assertion read `toBe('probe')` — the author
+    // assumed `listAll()` would return oldest-first (ASC), but the
+    // store has always been DESC (most-recently-registered first).
+    // Unloopping `all[0]` therefore stops the *newest* loop and
+    // leaves the oldest one alive. The assertion is updated to
+    // reflect the actual semantics; the test still pins the
+    // headline invariant (1 loop survives after unloop) which
+    // was the regression we wanted to catch in P32.4.
+    //
+    // P33.A2 also adds a `2ms` delay between the two registrations
+    // — pre-P33.A2 both `handleLoopSlash` calls within the same
+    // millisecond saw the same `Date.now()` value, which made
+    // SQLite's `ORDER BY registered_at DESC` ties undefined.
+    // The two parallel runs (full-suite vs single-file) hit
+    // different SQLite orderings and the test flapped ~30%.
     const handlePath = path.join(tmpDir, 'restart.db')
     const first = new SqliteLoopsStore({ path: handlePath })
     await handleLoopSlash('/loop 1m ping', undefined, { store: first })
+    await new Promise((r) => setTimeout(r, 2))
     await handleLoopSlash('/loop 1m probe', undefined, { store: first })
     const all = await first.listAll()
     const firstId = all[0]?.id ?? ''
@@ -134,9 +150,9 @@ describe('P32.4 — /unloop', () => {
     const second = new SqliteLoopsStore({ path: handlePath })
     try {
       const restored = await reloadPersistedLoops(second, () => {})
-      // Only the second loop should re-arm.
+      // Only one loop survives.
       expect(restored).toHaveLength(1)
-      expect(restored[0]?.prompt).toBe('probe')
+      expect(restored[0]?.prompt).toBe('ping')
     } finally {
       await second.dispose()
     }
