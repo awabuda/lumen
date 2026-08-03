@@ -360,6 +360,22 @@ export {
   loadProjectContext,
 } from './agent/system-prompt-loaders.js'
 
+// P31.4 — LRU stable-prefix cache. Read-through wrapper
+// around a SHA-256-keyed 64-slot LRU keyed on the stable
+// subset of `SectionContext` (cwd / profile / layer
+// texts); never indexes runtime or middleware dynamic
+// chunks. Used by Agent.run (P31.6) to skip re-rendering
+// the stable half on consecutive turns whose stable
+// inputs are unchanged.
+export {
+  SYSTEM_PROMPT_CACHE_LRU_CAP,
+  type LruStore,
+  type StableCacheKey,
+  StablePromptCache,
+  createStablePromptLru,
+  hashStableCacheKey,
+} from './agent/system-prompt-cache.js'
+
 // createAgent factory (P19.0.3) — composition root's entry point.
 // Sits alongside the Agent export so consumers can pick either
 // the class or the factory. See packages/core/src/agent/factory.ts
