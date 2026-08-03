@@ -37,7 +37,18 @@ export interface LoadConfigOptions {
 
 const DEFAULT_PROJECT_LOCATIONS = ['.lumen/config.yaml', '.lumen/config.yml', 'lumen.config.yaml']
 
-const DEFAULT_USER_PATH = join(homedir(), '.lumen', 'config.yaml')
+/**
+ * Resolve the default user-config path **at call time**, not at module
+ * load time. Reading `process.env.HOME` here (with `homedir()` as a
+ * fallback) lets tests + sandbox containers monkey-patch HOME without
+ * having to bust the module-level cache that the pre-P32.6 path used.
+ * The `DEFAULT_USER_PATH` module constant was evaluated exactly once
+ * per process; in CI we frequently see a developer's
+ * `~/.lumen/config.yaml` leak into a "user has 0 providers" test
+ * run because of that single-shot evaluation.
+ */
+const resolveDefaultUserPath = (): string =>
+  join(process.env.HOME ?? homedir(), '.lumen', 'config.yaml')
 
 /** Deep merge plain objects. Arrays and other non-plain values are replaced. */
 export const deepMerge = (
@@ -143,7 +154,9 @@ export const loadConfig = async (options: LoadConfigOptions = {}): Promise<Lumen
   const cwd = options.cwd ?? process.cwd()
   const envPrefix = options.envPrefix ?? 'LUMEN_'
 
-  const userPath = options.skipUserConfig ? undefined : (options.userPath ?? DEFAULT_USER_PATH)
+  const userPath = options.skipUserConfig
+    ? undefined
+    : (options.userPath ?? resolveDefaultUserPath())
   const projectPath = options.skipProjectConfig
     ? undefined
     : resolveProjectPath(cwd, options.projectPath)
