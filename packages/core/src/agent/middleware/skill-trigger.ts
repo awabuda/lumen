@@ -31,8 +31,8 @@
 
 import { z } from 'zod'
 
-import type { AgentMiddleware } from '../middleware.js'
 import type { Message } from '../../message/index.js'
+import type { AgentMiddleware } from '../middleware.js'
 
 /** Minimum descriptor a caller has to surface for each active skill. */
 export const ActiveSkillSchema = z
@@ -51,15 +51,16 @@ export const ActiveSkillSchema = z
 export type ActiveSkill = z.infer<typeof ActiveSkillSchema>
 
 /** Strategy the middleware uses to decide which skills to activate. */
-export type SkillTriggerFn = (
-  userMessage: string,
-) => Promise<ReadonlyArray<ActiveSkill>>
+export type SkillTriggerFn = (userMessage: string) => Promise<ReadonlyArray<ActiveSkill>>
 
 /** Configurable rule set. */
 export const SkillTriggerOptionsSchema = z
   .object({
     /** Trigger function. Called once per user turn. */
-    trigger: z.function().args(z.string()).returns(z.promise(z.array(ActiveSkillSchema))),
+    trigger: z
+      .function()
+      .args(z.string())
+      .returns(z.promise(z.array(ActiveSkillSchema))),
     /**
      * Maximum number of skills to activate per turn. The
      * trigger's results are truncated to this size. Defaults
@@ -112,7 +113,7 @@ export const createSkillTriggerMiddleware = (
     name: 'skill-trigger',
     stateSchema: z.object({}).strict(),
     initialState: {},
-    beforeModel: async (messages) => {
+    beforeModel: async (messages, ctx) => {
       // Find the most recent user message.
       let lastUser: Message | undefined
       for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -136,11 +137,16 @@ export const createSkillTriggerMiddleware = (
       const formatted = format(active)
       if (formatted.length === 0) return messages
 
-      const augmentation: Message = {
-        role: 'system',
-        content: formatted,
-      }
-      return [augmentation, ...messages]
+      // P31.6B — write to the dynamic suffix via the
+      // sanctioned `appendDynamicChunk` surface (R3). The
+      // chunks accumulated during `applyBeforeModel` are
+      // spliced into the system prompt's post-marker
+      // suffix by `Agent.spliceDynamicChunks` after the
+      // middleware pass resolves; prepending a standalone
+      // `{role: 'system'}` message would break the
+      // single-string protocol and Anthropic prefix cache.
+      ctx.appendDynamicChunk(formatted)
+      return messages
     },
   }
 }

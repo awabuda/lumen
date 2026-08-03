@@ -162,6 +162,23 @@ export interface MiddlewareContext {
   readonly control: MiddlewareControl
   /** Abort signal. Middleware can check `signal.aborted`. */
   readonly signal?: AbortSignal
+  /**
+   * P31.6B — write a chunk to the dynamic suffix of the
+   * system prompt assembled for the next model call.
+   * Equivalent to calling {@link PromptAssembler.appendDynamic}
+   * on the system prompt string built by the Agent's loop;
+   * the chunks accumulated during a single `applyBeforeModel`
+   * pass are collected and concatenated into the suffix
+   * before the provider request is dispatched.
+   *
+   * Per design doc §1.3 R3, this is the *only* sanctioned
+   * path for middleware to inject prompts — prepending a
+   * standalone `{role: 'system'}` message bypasses the
+   * boundary marker, breaks Anthropic prefix cache, and
+   * violates the single-string protocol. Skills / Plan /
+   * Reflection (when wired) should use this surface.
+   */
+  readonly appendDynamicChunk: (chunk: string) => void
 }
 
 /**

@@ -54,6 +54,7 @@ import {
   type ParsedMiddleware,
   getAgentMiddleware,
 } from './middleware.js'
+import { appendDynamic } from './system-prompt-boundary.js'
 import { type SectionContext, buildSystemPrompt } from './system-prompt-sections.js'
 
 export interface AgentConfig {
@@ -597,6 +598,15 @@ export class Agent {
         )
         if (mode === 'stream') yield { type: 'text:start', iteration: iterations }
 
+        // P31.6B — per-iteration dynamic-chunks collector.
+        // Middleware (skill-trigger, plan, reflection, …)
+        // write to it via `ctx.appendDynamicChunk`. After
+        // `applyBeforeModel` returns we splice the chunks
+        // into the system prompt via `appendDynamic` so
+        // they land in the dynamic suffix (post-marker),
+        // not as standalone `{role: 'system'}` messages.
+        const dynamicChunks: string[] = []
+
         const ctx = this.middlewareContext(
           {
             sessionId,
@@ -605,6 +615,9 @@ export class Agent {
             state: middlewareState,
             control: middlewareControl,
             signal,
+            appendDynamicChunk: (chunk) => {
+              if (chunk.length > 0) dynamicChunks.push(chunk)
+            },
           },
           stateView,
         )
@@ -623,11 +636,20 @@ export class Agent {
           ...ctx,
           history: messages,
         })
+        // P31.6B — splice the per-iteration dynamic chunks into
+        // the system message at the head of the messages
+        // array. The chunks land in the *dynamic suffix*
+        // (post-marker) when the system prompt carries the
+        // boundary; otherwise `appendDynamic` installs the
+        // marker. Either way the chunks are no longer
+        // carried as standalone `{role: 'system'}` messages
+        // (R3 enforcement).
+        const withDynamic = this.spliceDynamicChunks(modelMessages, dynamicChunks)
         let responseMessage: AssistantMessage
         if (mode === 'sync') {
           const assistantMessage = await this.callProviderWithMiddleware(
             middleware,
-            modelMessages,
+            withDynamic,
             budget,
             signal,
             // P23.4 — wrapModelCall also sees history (the
@@ -649,7 +671,7 @@ export class Agent {
           // generator's `yield`; the assembled message comes back as
           // the inner generator's return value.
           const inner: AsyncGenerator<RunEvent, AssistantMessage, void> =
-            this.runStreamModelCallInline(modelMessages, signal, iterations, budget)
+            this.runStreamModelCallInline(withDynamic, signal, iterations, budget)
           let lastValue: AssistantMessage | undefined
           while (true) {
             const next = await inner.next()
@@ -888,6 +910,12 @@ export class Agent {
             state: middlewareState,
             control: { continueAfterModel: false },
             signal,
+            // P31.6B — `applyAfterRun` does not consume the
+            // chunk surface; pass a no-op to satisfy the
+            // MiddlewareContext contract without granting
+            // the run-end hook a write path to the dynamic
+            // suffix.
+            appendDynamicChunk: () => {},
           },
           stateView,
         ),
@@ -1066,7 +1094,52 @@ export class Agent {
     // P23.3 — attach the typed `stateView` map so middleware can
     // mutate their own state slices via `ctx.stateView[name].set()`
     // without resorting to the pre-P23.3 `state.plan = X` cast.
+    // P31.6B — `appendDynamicChunk` is always supplied by the
+    // call site; the merge below leaves the surface untouched
+    // when no stateView is needed.
     return stateView === undefined ? ctx : { ...ctx, stateView }
+  }
+
+  /**
+   * P31.6B — splice the per-iteration dynamic chunks into the
+   * head of the messages array. The first message (when
+   * present) is the system message; we rewrite its content
+   * via {@link appendDynamic} so the chunks land in the
+   * dynamic suffix (post-boundary-marker) regardless of
+   * whether the original system prompt carried the marker.
+   *
+   * P31.6B R3 — this helper is the *only* path through which
+   * middleware-injected content reaches the provider. The
+   * Skill / Plan migration drops their pre-existing
+   * `{role: 'system'}` prepends in favour of
+   * `ctx.appendDynamicChunk(chunk)` so the chunks always
+   * travel through here.
+   *
+   * No-op when there are zero chunks. No-op when the messages
+   * array is empty (no system message to splice into) — the
+   * caller returns the original array unchanged in that
+   * case to keep the empty-array contract intact.
+   */
+  private spliceDynamicChunks(
+    modelMessages: ReadonlyArray<Message>,
+    dynamicChunks: ReadonlyArray<string>,
+  ): ReadonlyArray<Message> {
+    if (dynamicChunks.length === 0) return modelMessages
+    if (modelMessages.length === 0) return modelMessages
+    const head = modelMessages[0]!
+    if (head.role !== 'system') {
+      // No system prompt to splice into. Prepend one built
+      // from the dynamic chunks alone so the chunks still
+      // reach the provider (no information lost); the
+      // boundary marker is installed by `appendDynamic` in
+      // either branch.
+      const prompt = appendDynamic('', dynamicChunks.join('\n\n'))
+      return [{ ...head, role: 'system', content: prompt }, ...modelMessages]
+    }
+    const sysContent = typeof head.content === 'string' ? head.content : ''
+    const merged = dynamicChunks.reduce((acc, chunk) => appendDynamic(acc, chunk), sysContent)
+    if (merged === sysContent) return modelMessages
+    return [{ ...head, role: 'system' as const, content: merged }, ...modelMessages.slice(1)]
   }
 
   /**

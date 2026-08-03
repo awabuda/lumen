@@ -22,20 +22,25 @@ describe('createSkillTriggerMiddleware', () => {
       { role: 'system', content: 'sys' },
       { role: 'user', content: 'help me make a git commit' },
     ]
+    // P31.6B R3 — skill-trigger now writes to the dynamic
+    // suffix via `appendDynamicChunk` instead of prepending a
+    // standalone `{role: 'system'}` message. The chunk
+    // collector observes the chunks; the original `messages`
+    // array is returned unchanged.
+    const chunks: string[] = []
     const out = await m.beforeModel!(input, {
       sessionId: 's',
       iteration: 1,
       startedAt: 0,
       state: {},
       control: { continueAfterModel: false },
-    })
-    expect(out).toHaveLength(3)
-    expect(out[0]?.role).toBe('system')
-    const aug = out[0]
-    if (aug && aug.role === 'system') {
-      expect(aug.content).toContain('Active skills')
-      expect(aug.content).toContain('git commit')
-    }
+      // biome-ignore lint/suspicious/noExplicitAny: test scaffolding only.
+      appendDynamicChunk: (chunk: string) => chunks.push(chunk),
+    } as any)
+    expect(out).toEqual(input)
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0]).toContain('Active skills')
+    expect(chunks[0]).toContain('git commit')
   })
 
   it('passes through when the trigger returns no skills', async () => {
@@ -69,18 +74,26 @@ describe('createSkillTriggerMiddleware', () => {
       { id: 'd', name: 'D', description: 'd' },
     ]
     const m = createSkillTriggerMiddleware({ trigger, maxActive: 2 })
+    const chunks: string[] = []
     const out = await m.beforeModel!(
       [{ role: 'user', content: 'go' }],
-      { sessionId: 's', iteration: 1, startedAt: 0, state: {}, control: { continueAfterModel: false } },
+      {
+        sessionId: 's',
+        iteration: 1,
+        startedAt: 0,
+        state: {},
+        control: { continueAfterModel: false },
+        // biome-ignore lint/suspicious/noExplicitAny: test scaffolding only.
+        appendDynamicChunk: (chunk: string) => chunks.push(chunk),
+      } as any,
     )
-    expect(out).toHaveLength(2)
-    const aug = out[0]
-    if (aug && aug.role === 'system') {
-      expect(aug.content).toContain('A')
-      expect(aug.content).toContain('B')
-      expect(aug.content).not.toContain('C')
-      expect(aug.content).not.toContain('D')
-    }
+    expect(out).toHaveLength(1)
+    expect(chunks).toHaveLength(1)
+    const aug = chunks[0] ?? ''
+    expect(aug).toContain('A')
+    expect(aug).toContain('B')
+    expect(aug).not.toContain('C')
+    expect(aug).not.toContain('D')
   })
 
   it('passes through when there is no user message', async () => {
@@ -118,15 +131,20 @@ describe('createSkillTriggerMiddleware', () => {
       { role: 'assistant', content: 'first reply', toolCalls: [] },
       { role: 'user', content: 'second message' },
     ]
+    const chunks: string[] = []
     const out = await m.beforeModel!(input, {
       sessionId: 's',
       iteration: 1,
       startedAt: 0,
       state: {},
       control: { continueAfterModel: false },
-    })
+      // biome-ignore lint/suspicious/noExplicitAny: test scaffolding only.
+      appendDynamicChunk: (chunk: string) => chunks.push(chunk),
+    } as any)
     expect(calls).toEqual(['second message'])
-    expect(out).toHaveLength(4)
+    expect(out).toEqual(input)
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0]).toContain('Second')
   })
 
   it('accepts a custom formatActive', async () => {
@@ -139,14 +157,20 @@ describe('createSkillTriggerMiddleware', () => {
       formatActive: (skills) =>
         `<<<${skills.map((s) => s.id).join(',')}>>>`,
     })
-    const out = await m.beforeModel!(
+    const chunks: string[] = []
+    await m.beforeModel!(
       [{ role: 'user', content: 'go' }],
-      { sessionId: 's', iteration: 1, startedAt: 0, state: {}, control: { continueAfterModel: false } },
+      {
+        sessionId: 's',
+        iteration: 1,
+        startedAt: 0,
+        state: {},
+        control: { continueAfterModel: false },
+        // biome-ignore lint/suspicious/noExplicitAny: test scaffolding only.
+        appendDynamicChunk: (chunk: string) => chunks.push(chunk),
+      } as any,
     )
-    const aug = out[0]
-    if (aug && aug.role === 'system') {
-      expect(aug.content).toBe('<<<a>>>')
-    }
+    expect(chunks).toEqual(['<<<a>>>'])
   })
 
   it('exposes name "skill-trigger"', async () => {

@@ -144,18 +144,28 @@ export const createPlanMiddleware = (
           if (state.mode === 'auto') {
             ctx.control.continueAfterModel = true
           }
-          return [...messages, { role: 'system', content: planToContext(plan) }]
+          // P31.6B R3 — write the rendered plan to the dynamic
+          // suffix via the sanctioned surface. The chunks
+          // accumulated during this pass land in the system
+          // prompt's post-marker suffix via
+          // `Agent.spliceDynamicChunks`.
+          ctx.appendDynamicChunk(planToContext(plan))
+          return messages
         }
         const goal = [...messages]
           .reverse()
           .find((m) => m.role === 'user' && 'content' in m)
           ?.content.toString()
         set({ ...state, goal })
-        return [...messages, { role: 'system', content: PLAN_PROMPT }]
+        // P31.6B R3 — see above.
+        ctx.appendDynamicChunk(PLAN_PROMPT)
+        return messages
       }
       if (state.mode === 'auto' && state.phase === 'acting' && state.plan) {
         set({ ...state, phase: 'done' })
-        return [...messages, { role: 'system', content: planToContext(state.plan) }]
+        // P31.6B R3 — see above.
+        ctx.appendDynamicChunk(planToContext(state.plan))
+        return messages
       }
       return messages
     },
