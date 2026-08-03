@@ -10,21 +10,27 @@ Test counts are point-in-time totals across the monorepo. The pre-1.0 series
 (`0.x.y`) does not promise API stability; breaking changes are recorded as
 **Changed** entries with a note about the migration path.
 
-## [Unreleased] — P32 lumen chat persistence + session registry + cron durability
+## [Unreleased] — P32 lumen chat persistence + P33.A product-gate diagnostic
 
-> **Multi-commit sweep on `lumen chat` durability.** 7 commits
-> across P32.1 (default persistence + cwd-derived sessionId),
-> P32.1.1 (mkdirSync invariant from a user-reported regression),
-> P32.2 (mount-time history render), P32.3a/b (storage +
-> `/sessions` slash command), P32.4 (`SqliteLoopsStore` + `/loop`
-> cross-restart durability), and P32.5 (better-sqlite3 ABI drift
-> check on `lumen doctor`). Net effect: every persistent
-> surface (`chat.sqlite`, `loops.sqlite`, `~/.lumen/memory.db`)
-> survives TUI restart without manual reload, and the surface
-> regressions that blocked the implementation (the
-> "Cannot open database because the directory does not exist"
-> error, the `NODE_MODULE_VERSION` mismatch) now report at
-> `lumen doctor` instead of inside an opaque driver throw.
+> **Mixed bookkeeping.** The P32 series (7 commits across
+> `3f9c949`, `38ca9d1`, `a1220e4`, `8326949`, `ad59104`,
+> `3f61008`, `064aa7a`) + the v0.17.0 release commit
+> (`3d10e27` consume-changesets bookkeeping) + the P33.A
+> pass (`ee3ac82`, `b0dcee6`, `f72dfef`, `6c6bd9a`, `407a6fa`,
+> `cd90d1c`, `dd8b4b5`) all need to land in the next
+> `pnpm changeset version` cycle. The two new files in
+> `.changeset/` (`p32-lumen-chat-persistence.md` +
+> `p33a-doctor-product-gates.md`) declare the version
+> bumps; the release commit re-tagged this [Unreleased]
+> section so the git-archaeology reflects what shipped.
+>
+> The next release runs `pnpm changeset version` →
+> **v0.18.0** for `@lumen/cli` (minor), `@lumen/core`
+> (minor), `@lumen/memory` (minor), `@lumen/tools`
+> (minor), with the per-package `CHANGELOG.md` files
+> auto-rendered by `pnpm changeset version`. The
+> hand-written section below this header will be split
+> out into a sub-section per-P-series at that point.
 
 ### Added
 
