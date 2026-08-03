@@ -305,6 +305,23 @@ export {
   type RunEvent,
 } from './agent/index.js'
 
+// P31.1 — system prompt cache-boundary primitive (OpenClaw-style
+// marker protocol; see `docs/P31-SYSTEM-PROMPT-DESIGN.md`).
+// Re-exported here so downstream callers (P31.5 anthropic.ts,
+// P31.6 Agent.run, P31.7 init template renderers) can reach
+// the split/ensure/append helpers without diving into the
+// agent/ subpath.
+export {
+  SYSTEM_PROMPT_CACHE_BOUNDARY,
+  type BoundarySplit,
+  appendDynamic,
+  ensureSystemPromptCacheBoundary,
+  findSystemPromptCacheBoundary,
+  joinWithBoundary,
+  splitByBoundary,
+  stripBoundary,
+} from './agent/system-prompt-boundary.js'
+
 // createAgent factory (P19.0.3) — composition root's entry point.
 // Sits alongside the Agent export so consumers can pick either
 // the class or the factory. See packages/core/src/agent/factory.ts
