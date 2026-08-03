@@ -322,6 +322,29 @@ export {
   stripBoundary,
 } from './agent/system-prompt-boundary.js'
 
+// P31.2 — layered prompt sections + PromptAssembler. Pure
+// function `buildSystemPrompt(ctx)` is the single entry point
+// for Agent.run (P31.6) and any caller that wants the
+// canonical stable/dynamic split. R1 (no ToolRegistry schema
+// dump) and R2/R3 (runtime + middleware chunks live in the
+// dynamic suffix) are pinned by the test suite.
+export {
+  DEFAULT_BUDGET,
+  DEFAULT_GUIDANCE_TEXT,
+  KERNEL_TEXT,
+  buildSystemPrompt,
+  collectStableSections,
+  renderSkillsIndex,
+  renderStableText,
+  type LayerBudgets,
+  type ProfileLayers,
+  type SectionContext,
+  type SectionId,
+  type SectionPayload,
+  summarize,
+  truncateSection,
+} from './agent/system-prompt-sections.js'
+
 // createAgent factory (P19.0.3) — composition root's entry point.
 // Sits alongside the Agent export so consumers can pick either
 // the class or the factory. See packages/core/src/agent/factory.ts
