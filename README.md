@@ -94,6 +94,19 @@ lumen/
 - Commander (CLI 框架)
 - Vitest (测试)
 
+## 路线图（产品优先）
+
+Lumen 的战略是：**先建成通用 Agent 底座，通用性完成后再孵化多个垂类助手**（垂类 = profile / skills / ProductAssembly 组合，不 fork 核心）。当前形态仍是**厚内核 + 薄产品壳**（CLI 已闭环，高级能力多在库里、默认需手动打开）。
+
+近期优先级（摘要，全部服务「通用性完成」；垂类为 Post-generality）：
+
+1. **近 2 周（阶段 A）** — 默认产品 profile：裸跑即挂上 Plan / Permission / Skill；强制 ToolRisk 与工作区根目录钳制。
+2. **1–2 月（阶段 B）** — 兑现「自进化」：人可读记忆、技能学习默认接通、Trust/Plan 可见；最小本机常驻入口。
+3. **一季度（阶段 C）** — 一个可靠非终端入口 + 开箱向导；渠道与 Companion App 后置。
+4. **之后（阶段 D）** — 通用门禁通过后，才用配置 + skills 孵化垂类；不与上述窗口抢资源。
+
+详细方案、通用完成标准与阶段划分见 `docs/OPTIMIZATION-PLAN.md`；路线图 / 战略 canvas（仓库外 Cursor 分析件）及 `docs/P19-DESIGN.md` / `TASKS.md`。
+
 ## 开发
 
 ```bash
