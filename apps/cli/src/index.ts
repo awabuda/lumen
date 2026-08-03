@@ -204,9 +204,16 @@ program
   .command('doctor')
   .description('Diagnose the local Lumen install')
   .option('-v, --verbose', 'Print extra detail for each check')
+  .option(
+    '--product',
+    'P33.A: additionally run G-P1..G-P6 product-completeness gates (OPTIMIZATION-PLAN.md §0.5)',
+  )
   .action(async (opts: Record<string, unknown>) => {
     const { doctorCommand } = await import('./commands/doctor.js')
-    const code = await doctorCommand({ verbose: opts.verbose === true })
+    const code = await doctorCommand({
+      verbose: opts.verbose === true,
+      product: opts.product === true,
+    })
     process.exit(code)
   })
 

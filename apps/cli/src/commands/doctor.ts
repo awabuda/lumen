@@ -32,6 +32,13 @@ export interface DoctorOptions {
    * Defaults to `false`.
    */
   readonly verbose?: boolean
+  /**
+   * P33.A — additionally run the G-P1..G-P6 product gates from
+   * `docs/OPTIMIZATION-PLAN.md` §0.5. Each gate is its own row
+   * in the doctor output, printed after the existing 10
+   * infrastructure checks. Default `false`.
+   */
+  readonly product?: boolean
 }
 
 export const doctorCommand = async (opts: DoctorOptions = {}): Promise<number> => {
@@ -262,6 +269,43 @@ export const doctorCommand = async (opts: DoctorOptions = {}): Promise<number> =
     }
   } catch (err) {
     fail(`better-sqlite3 ABI check crashed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  // 11. (opt-in) G-P1..G-P6 product gates (P33.A).
+  //     Only runs when `--product` is passed. Each gate emits one
+  //     `[OK]/[WARN]/[FAIL]` line so a CI gate can grep the
+  //     output. Product-gate FAIL rows do NOT bump the doctor
+  //     exit code (they are informational, mirroring the WARN
+  //     path); only infrastructure FAIL rows do. Future P33+
+  //     work will close G-P1 and G-P6; we WANT to print them
+  //     as FAIL today so the remaining work is visible.
+  if (opts.product === true) {
+    process.stdout.write('\nProduct gates (--product):\n')
+    let productFailed = 0
+    try {
+      const { runAllGates } = await import('../product-gates.js')
+      const results = await runAllGates()
+      for (const r of results) {
+        const tag = `[${r.severity}]`
+        const spaces = ' '.repeat(Math.max(0, 5 - r.severity.length))
+        process.stdout.write(`  ${tag}${spaces}${r.message}\n`)
+        if (r.severity === 'FAIL') {
+          productFailed += 1
+        }
+        if (r.hint.length > 0) {
+          process.stdout.write(`         hint: ${r.hint}\n`)
+        }
+      }
+      if (productFailed === 0) {
+        process.stdout.write('  All product gates pass.\n')
+      } else {
+        process.stdout.write(`  ${productFailed} product gate(s) still pending — see OPTIMIZATION-PLAN.md §0.5.\n`)
+      }
+    } catch (err) {
+      fail(
+        `product gate runner crashed: ${err instanceof Error ? err.message : String(err)}`,
+      )
+    }
   }
 
   process.stdout.write(`\n${failed === 0 ? 'All checks passed.' : `${failed} check(s) failed.`}\n`)
