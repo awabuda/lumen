@@ -889,4 +889,86 @@ describe('AnthropicProvider prompt caching', () => {
     const provider = makeProvider(makeFetch([]))
     expect(provider.capabilities.promptCaching).toBe(true)
   })
+
+  // -----------------------------------------------------------------------
+  // P31.5 — marker-aware system-block wiring
+  // -----------------------------------------------------------------------
+  // When the system field carries the lumen cache-boundary marker
+  // AND the caller has not supplied structured
+  // `anthropicSystemBlocks` via providerOptions, the provider
+  // emits a two-block array (cached-stable + plain-dynamic)
+  // instead of a single string. Per design doc §1.8 v1 only
+  // Anthropic benefits from this splitting; other providers
+  // receive the marker literal unchanged.
+
+  it('P31.5: emits cached-stable + plain-dynamic blocks when the marker is present and no anthropicSystemBlocks override', async () => {
+    const fetchImpl = makeFetch([{ body: stubResponse }])
+    const provider = makeProvider(fetchImpl)
+    const prompt =
+      '## kernel\nYou are Lumen.\n\n<!-- LUMEN_CACHE_BOUNDARY -->\n\nD1: time=T0'
+    await provider.chat(
+      basicRequest([
+        { role: 'system', content: prompt } as Message,
+        { role: 'user', content: 'hi' } as Message,
+      ]),
+    )
+    const call = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]
+    const init = call[1] as RequestInit
+    const body = JSON.parse(init.body as string)
+    expect(Array.isArray(body.system)).toBe(true)
+    expect(body.system).toHaveLength(2)
+    expect(body.system[0]).toMatchObject({
+      type: 'text',
+      cache_control: { type: 'ephemeral' },
+    })
+    expect(body.system[0].text).toContain('You are Lumen.')
+    expect(body.system[1]).toMatchObject({ type: 'text' })
+    expect(body.system[1].cache_control).toBeUndefined()
+    expect(body.system[1].text).toContain('D1: time=T0')
+  })
+
+  it('P31.5: caller-supplied anthropicSystemBlocks win over the marker-derived pair', async () => {
+    const fetchImpl = makeFetch([{ body: stubResponse }])
+    const provider = makeProvider(fetchImpl)
+    const prompt = 'kernel<!-- LUMEN_CACHE_BOUNDARY -->\nD1'
+    const override = [{ type: 'text' as const, text: 'CALLER-OWN' }]
+    await provider.chat({
+      ...basicRequest([
+        { role: 'system', content: prompt } as Message,
+        { role: 'user', content: 'hi' } as Message,
+      ]),
+      providerOptions: { anthropicSystemBlocks: override },
+    })
+    const call = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]
+    const init = call[1] as RequestInit
+    const body = JSON.parse(init.body as string)
+    expect(body.system).toEqual(override)
+  })
+
+  it('P31.5: a marker-less system string is passed through unchanged', async () => {
+    const fetchImpl = makeFetch([{ body: stubResponse }])
+    const provider = makeProvider(fetchImpl)
+    await provider.chat(
+      basicRequest([
+        { role: 'system', content: 'plain prompt' } as Message,
+        { role: 'user', content: 'hi' } as Message,
+      ]),
+    )
+    const call = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]
+    const init = call[1] as RequestInit
+    const body = JSON.parse(init.body as string)
+    expect(body.system).toBe('plain prompt')
+  })
 })
+
+// Stub response body used by the P31.5 wire-shape tests.
+const stubResponse = {
+  id: 'msg_x',
+  type: 'message',
+  role: 'assistant',
+  model: 'claude-test',
+  content: [{ type: 'text', text: 'ok' }],
+  stop_reason: 'end_turn',
+  stop_sequence: null,
+  usage: { input_tokens: 1, output_tokens: 1 },
+}

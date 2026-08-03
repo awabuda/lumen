@@ -50,8 +50,10 @@ import {
   type UserMessage,
   ValidationError,
   withRetry,
+  SYSTEM_PROMPT_CACHE_BOUNDARY,
 } from '@lumen/core'
 import { z } from 'zod'
+import { buildAnthropicSystemBlocks } from './anthropic-marker.js'
 import {
   HttpStatusError,
   ResponseShapeError,
@@ -739,6 +741,21 @@ export class AnthropicProvider extends BaseProvider {
     // the splitter. An invalid shape throws a typed ProviderError.
     const systemBlocks = this.resolveSystemBlocks(request)
     const { system, anthropicMessages } = splitSystemAndMessages(request.messages, systemBlocks)
+    // P31.5 — when `system` is a string that carries the cache-
+    // boundary marker, rewrite it into a two-block array so
+    // Anthropic can cache the stable prefix and skip the
+    // dynamic suffix on every turn. Caller-supplied structured
+    // blocks still win when present (per the existing precedence
+    // rule). Per design doc §1.8, only Anthropic benefits from
+    // this in v1.
+    let resolvedSystem: string | ReadonlyArray<AnthropicSystemBlock> | undefined = system
+    if (
+      typeof system === 'string' &&
+      system.includes(SYSTEM_PROMPT_CACHE_BOUNDARY) &&
+      systemBlocks === undefined
+    ) {
+      resolvedSystem = buildAnthropicSystemBlocks(system)
+    }
     if (anthropicMessages.length === 0) {
       throw new ProviderError('Anthropic requires at least one non-system message in `messages`', {
         providerId: this.id,
@@ -750,7 +767,7 @@ export class AnthropicProvider extends BaseProvider {
       messages: anthropicMessages,
       max_tokens: request.maxTokens ?? this.defaultMaxTokens,
     }
-    if (system !== undefined) body.system = system
+    if (resolvedSystem !== undefined) body.system = resolvedSystem
     if (request.temperature !== undefined) body.temperature = request.temperature
     if (request.topP !== undefined) body.top_p = request.topP
     if (request.stop !== undefined && request.stop.length > 0) {
