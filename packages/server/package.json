@@ -1,6 +1,6 @@
 {
   "name": "@lumen/server",
-  "version": "0.15.1",
+  "version": "0.15.2",
   "description": "HTTP and WebSocket adapter for the Lumen agent runtime.",
   "type": "module",
   "main": "./dist/index.js",

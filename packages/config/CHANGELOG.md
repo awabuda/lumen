@@ -1,16 +1,15 @@
----
-'@lumen/core': minor
-'@lumen/tools': minor
-'@lumen/config': minor
-'@lumen/skills': minor
----
+# @lumen/config
 
-P24 + P25 — bug.md FEATURE_GAP sweep (16 commits).
+## 0.16.0
 
-P24 closed three FEATURE_GAP items that fit inside the
-existing `tools` / `mcp` / `cli` packages:
+### Minor Changes
 
-  - **#9  web_browser tool** (P24.1) — single composite
+- 17346c7: P24 + P25 — bug.md FEATURE_GAP sweep (16 commits).
+
+  P24 closed three FEATURE_GAP items that fit inside the
+  existing `tools` / `mcp` / `cli` packages:
+
+  - **#9 web_browser tool** (P24.1) — single composite
     Playwright-backed tool with `goto` / `act` /
     `extract` / `screenshot` ops. Opt-in via
     `createBrowserTools()` and the `--web-browser` CLI
@@ -22,22 +21,22 @@ existing `tools` / `mcp` / `cli` packages:
     `connectAllMcpServers` swapped from a serial loop to
     `Promise.all` with per-promise try/catch.
 
-P24.5 documents the explicit deferral of bug.md **#10
-Computer Use** — needs a native dep beyond `better-sqlite3`
-and would violate P22.7 §3.
+  P24.5 documents the explicit deferral of bug.md **#10
+  Computer Use** — needs a native dep beyond `better-sqlite3`
+  and would violate P22.7 §3.
 
-P25 closed the remaining in-scope FEATURE_GAP items:
+  P25 closed the remaining in-scope FEATURE_GAP items:
 
   - **#37** SubAgentContext isolation (P25.1.A) — typed,
     append-only slice with `history` / `memo` /
     `createdAtMs` / `lastWriteMs` fields.
   - **#38** Auto-dispatch router (P25.1.B) — `nullRouter`
-    + `heuristicSubAgentRouter` helpers.
+    - `heuristicSubAgentRouter` helpers.
   - **#39** Built-in sub-agent SKILL.md (P25.1.C) —
     `explore` / `plan` / `general-purpose` prompts ship
     at `packages/skills/skills/`.
   - **#43** Worktree isolation (P25.2) — `createWorktree`
-    + `runInWorktree` helpers.
+    - `runInWorktree` helpers.
   - **#49** Background Task registry (P25.3) —
     spawn / await / cancel / list lifecycle.
   - **#50** Agent View (P25.4) — `snapshotAgentView` +
@@ -56,11 +55,11 @@ P25 closed the remaining in-scope FEATURE_GAP items:
     layer only; the Slack / Telegram / WhatsApp reference
     adapters ship as separate files in a future P-ticket.
 
-The 4 remaining items are explicitly deferred:
+  The 4 remaining items are explicitly deferred:
 
   - **#10** Computer Use — P22.7 §3 native-dep guardrail.
   - **#45 #46** multimodal encoder / People-aware memory
     — P26+ until a multimodal embedding surface exists.
 
-TASKS.md: P23.11 + P23.12 + P24 + P25 sub-sections all
-marked `[x]`; 0 open items.
+  TASKS.md: P23.11 + P23.12 + P24 + P25 sub-sections all
+  marked `[x]`; 0 open items.

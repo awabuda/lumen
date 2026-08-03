@@ -1,5 +1,0 @@
----
-'@lumen/memory': minor
----
-
-P23.8: Memory correctness sweep (fix #20, #21, #22, #32). SqliteStoreConfigSchema gains an optional `dimensions` field — the value was previously hardcoded to 1536 inside `buildVectorBackend()` and unreachable from outside the class. SqliteVecBackend.upsertBatch now wraps the batch in a single `db.transaction(...)` so a 100-point batch is one fsync + one rowid-lookup sweep instead of N of each (fix #21). The rowid hash is upgraded from FNV-1a 32-bit to FNV-1a 64-bit (bigint, narrowed to `Number` for the SQLite INTEGER bind), raising the collision-resistance ceiling from 2^32 to 2^64 (fix #22). `createProviderEmbedder` now forwards the declared `dimensions` to `source.embed()` instead of dropping it silently, so an operator asking for 1024-dim vectors actually gets 1024 (fix #32).

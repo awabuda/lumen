@@ -1,6 +1,6 @@
 {
   "name": "@lumen/skills",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "private": true,
   "description": "Reusable operating knowledge for Lumen agents: SKILL.md frontmatter parser, filesystem discovery, registry, and trigger matching (keyword + embedding).",
   "type": "module",
