@@ -11,6 +11,8 @@ import {
 } from '../src/commands/config.js'
 
 let tmpDir: string
+let savedHome: string | undefined
+let savedCwd: string
 let stdout = ''
 let stderr = ''
 
@@ -26,10 +28,28 @@ beforeEach(async () => {
     stderr += String(chunk)
     return true
   })
+  // `configPathCommand` walks `<HOME>/.lumen/config.*` and
+  // `<cwd>/.lumen/config.*` looking for an existing file; a
+  // developer's real `~/.lumen/config.yaml` (or a project
+  // `.lumen/` next to the test process) would falsely satisfy
+  // the "no config file" negative test. Redirect both to
+  // `tmpDir` so the negative case actually hits the empty
+  // branch. Saved on enter; restored in afterEach.
+  savedHome = process.env.HOME
+  savedCwd = process.cwd()
+  process.env.HOME = tmpDir
+  process.chdir(tmpDir)
 })
 
 afterEach(async () => {
   vi.restoreAllMocks()
+  if (savedHome === undefined) {
+    // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
+    delete process.env.HOME
+  } else {
+    process.env.HOME = savedHome
+  }
+  process.chdir(savedCwd)
   await fs.rm(tmpDir, { recursive: true, force: true })
 })
 
