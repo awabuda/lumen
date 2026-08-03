@@ -7,8 +7,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { modelListCommand, modelProvidersCommand, modelShowCommand } from '../src/commands/model.js'
 
 let tmpDir: string
+let savedHome: string | undefined
+let savedCwd: string
+let savedLumenEnv: Record<string, string | undefined>
 let stdout = ''
 let stderr = ''
+
+const LUMEN_ENV_KEYS = Object.keys(process.env).filter((k) => k.startsWith('LUMEN_'))
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lumen-cli-model-test-'))
@@ -22,10 +27,46 @@ beforeEach(async () => {
     stderr += String(chunk)
     return true
   })
+  // `loadConfig` merges three layers: `~/.lumen/config.*`,
+  // `<cwd>/.lumen/*`, and every env var prefixed with `LUMEN_`.
+  // Without isolation a developer's real `~/.lumen/config.yaml`
+  // (or any project `.lumen/` near the test process) leaks
+  // into the empty-state cases, and `LUMEN_API_KEY` /
+  // `LUMEN_BASE_URL` on the developer shell produces a
+  // "1 configured" default. Redirect HOME + cwd to `tmpDir`
+  // and scrub the LUMEN_* env for the duration of each case;
+  // restore on afterEach so concurrent test files
+  // (e.g. config.test.ts) aren't perturbed.
+  savedHome = process.env.HOME
+  savedCwd = process.cwd()
+  savedLumenEnv = {}
+  for (const key of LUMEN_ENV_KEYS) {
+    savedLumenEnv[key] = process.env[key]
+    // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
+    delete process.env[key]
+  }
+  process.env.HOME = tmpDir
+  process.chdir(tmpDir)
 })
 
 afterEach(async () => {
   vi.restoreAllMocks()
+  if (savedHome === undefined) {
+    // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
+    delete process.env.HOME
+  } else {
+    process.env.HOME = savedHome
+  }
+  process.chdir(savedCwd)
+  for (const key of LUMEN_ENV_KEYS) {
+    const next = savedLumenEnv[key]
+    if (next === undefined) {
+      // biome-ignore lint/performance/noDelete: env-var cleanup — only correct way to unset
+      delete process.env[key]
+    } else {
+      process.env[key] = next
+    }
+  }
   await fs.rm(tmpDir, { recursive: true, force: true })
 })
 
