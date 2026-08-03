@@ -345,6 +345,21 @@ export {
   truncateSection,
 } from './agent/system-prompt-sections.js'
 
+// P31.3 — project + optional context-file loaders. Pure
+// read-from-disk helpers wired through an `FsReader` shim
+// so tests can drive them without touching the real
+// filesystem. `loadProjectContext` covers P1 (AGENTS.md /
+// CLAUDE.md walk-up), `loadOptionalContextFiles` covers
+// P2 / B1 / M1.
+export {
+  type FsReader,
+  type LoadedOptionalContext,
+  type OptionalContextFilesOptions,
+  type ProjectContextOptions,
+  loadOptionalContextFiles,
+  loadProjectContext,
+} from './agent/system-prompt-loaders.js'
+
 // createAgent factory (P19.0.3) — composition root's entry point.
 // Sits alongside the Agent export so consumers can pick either
 // the class or the factory. See packages/core/src/agent/factory.ts
