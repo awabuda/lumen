@@ -695,7 +695,7 @@ program
 program
   .command('init')
   .description(
-    'Write a starter `~/.lumen/permissions.yaml` (P22.3). Pass --with-config to also write a starter `~/.lumen/config.yaml` (P-2026-07-29 audit GAP-3).',
+    'Write a starter `~/.lumen/permissions.yaml` (P22.3). Pass --with-config to also write a starter `~/.lumen/config.yaml` (P-2026-07-29 audit GAP-3). Pass --with-context to also seed `<cwd>/.lumen/AGENTS.md` + `TOOLS.md` (P31 §1.2 P1 + G1 walk-up surface).',
   )
   .option('--force', 'Overwrite an existing file')
   .option(
@@ -710,6 +710,14 @@ program
     '--config-path <file>',
     'Override the main config destination (requires --with-config; default ~/.lumen/config.yaml).',
   )
+  .option(
+    '--with-context',
+    'P31.7: also write a starter `<cwd>/.lumen/AGENTS.md` + `TOOLS.md` (P1 + G1 walk-up surface). The TOOLS template carries the §1.10 "prompt is descriptive; runtime is authoritative" disclaimer verbatim.',
+  )
+  .option(
+    '--cwd <path>',
+    'P31.7: override the cwd for `--with-context`. Default is the cwd at command run time.',
+  )
   .action(async (opts: Record<string, unknown>) => {
     const { initCommand } = await import('./commands/init.js')
     const code = await initCommand({
@@ -717,6 +725,8 @@ program
       path: opts.path as string | undefined,
       withConfig: opts.withConfig === true,
       configPath: opts.configPath as string | undefined,
+      withContext: opts.withContext === true,
+      cwd: opts.cwd as string | undefined,
     })
     process.exit(code)
   })

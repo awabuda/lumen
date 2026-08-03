@@ -125,6 +125,68 @@ describe('initCommand', () => {
     expect(code).toBe(0)
     expect(await fs.readFile(cfgDest, 'utf8')).toBe(starterConfigTemplate())
   })
+
+  // P31.7 — emit AGENTS.md + TOOLS.md under <cwd>/.lumen/
+  it('writes AGENTS.md and TOOLS.md when --with-context is set (P31.7)', async () => {
+    const permDest = path.join(workDir, 'policy.yaml')
+    const cwdRoot = path.join(workDir, 'p31proj')
+    await fs.mkdir(cwdRoot, { recursive: true })
+    const code = await initCommand({
+      path: permDest,
+      withContext: true,
+      cwd: cwdRoot,
+    })
+    expect(code).toBe(0)
+    const agentsPath = path.join(cwdRoot, '.lumen', 'AGENTS.md')
+    const toolsPath = path.join(cwdRoot, '.lumen', 'TOOLS.md')
+    expect(await fs.stat(agentsPath)).toBeTruthy()
+    expect(await fs.stat(toolsPath)).toBeTruthy()
+    const agentsBody = await fs.readFile(agentsPath, 'utf8')
+    expect(agentsBody).toContain('Project notes')
+    const toolsBody = await fs.readFile(toolsPath, 'utf8')
+    // P31 §1.10 disclaimer must be in the TOOLS template
+    // verbatim — operators paste this file expecting the
+    // prompt-vs-runtime precedence rule.
+    expect(toolsBody).toContain('Prompt is descriptive, runtime is authoritative')
+    expect(toolsBody).toContain('live')
+    expect(toolsBody).toContain('runtime wins')
+  })
+
+  it('--with-context skips files that already exist (unless --force)', async () => {
+    const permDest = path.join(workDir, 'policy.yaml')
+    const cwdRoot = path.join(workDir, 'p31proj-resume')
+    const lumenDir = path.join(cwdRoot, '.lumen')
+    await fs.mkdir(lumenDir, { recursive: true })
+    const agentsPath = path.join(lumenDir, 'AGENTS.md')
+    await fs.writeFile(agentsPath, 'USER-CUSTOM-AGENTS', 'utf8')
+    const code = await initCommand({
+      path: permDest,
+      withContext: true,
+      cwd: cwdRoot,
+    })
+    expect(code).toBe(0)
+    // The pre-existing file must not be overwritten.
+    expect(await fs.readFile(agentsPath, 'utf8')).toBe('USER-CUSTOM-AGENTS')
+  })
+
+  it('--with-context + --force overwrites pre-existing context files (P31.7)', async () => {
+    const permDest = path.join(workDir, 'policy.yaml')
+    const cwdRoot = path.join(workDir, 'p31proj-force')
+    const lumenDir = path.join(cwdRoot, '.lumen')
+    await fs.mkdir(lumenDir, { recursive: true })
+    const agentsPath = path.join(lumenDir, 'AGENTS.md')
+    await fs.writeFile(agentsPath, 'STALE', 'utf8')
+    const code = await initCommand({
+      path: permDest,
+      withContext: true,
+      cwd: cwdRoot,
+      force: true,
+    })
+    expect(code).toBe(0)
+    const body = await fs.readFile(agentsPath, 'utf8')
+    expect(body).not.toBe('STALE')
+    expect(body).toContain('Project notes')
+  })
 })
 
 describe('permissionsShowCommand', () => {

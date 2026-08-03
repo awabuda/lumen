@@ -6,11 +6,23 @@
  *  "No LLM model configured" ConfigError (commit 677233e) on
  *  first install with no actionable hint about where to put
  *  their config.
+ *
+ *  P31.7 — `--with-context` also writes a starter `<cwd>/.lumen/`
+ *  directory containing `AGENTS.md` (P31 §1.2 P1) and
+ *  `TOOLS.md` (P31 §1.2 G1) so the cwd walk-up in the next
+ *  session picks up the project notes. The TOOLS template
+ *  carries the §1.10 disclaimer verbatim (prompt describes
+ *  tools; runtime registry is authoritative).
  */
 
 import * as fs from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
+import {
+  contextInitFilesFor,
+  starterAgentsMdPath,
+  starterToolsTemplatePath,
+} from './init-templates.js'
 
 /** Default path of the permissions file. */
 export const defaultPermissionsPath = (): string =>
@@ -182,6 +194,16 @@ export interface InitCommandOptions {
   withConfig?: boolean
   /** Override the main config destination (requires --with-config). */
   configPath?: string
+  /** P31.7: also write a starter `<cwd>/.lumen/` directory with
+   *  `AGENTS.md` (P1 walk-up target) and `TOOLS.md` (G1 with
+   *  the §1.10 disclaimer). The cwd defaults to `process.cwd()`
+   *  at the time the command runs; pass `--cwd <path>` to
+   *  target a different project root. The `cwd` option is the
+   *  same shape as AgentConfig.cwd and any future composition
+   *  cwd resolver. */
+  withContext?: boolean
+  /** Override the cwd for `--with-context` (default: current cwd). */
+  cwd?: string
 }
 
 /** Run the `lumen init` command. Returns 0 on success, 2 on conflict. */
@@ -226,6 +248,36 @@ export const initCommand = async (options: InitCommandOptions = {}): Promise<num
     await fs.mkdir(resolve(cfgDest, '..'), { recursive: true })
     await fs.writeFile(cfgDest, starterConfigTemplate(), 'utf8')
     process.stdout.write(`wrote ${cfgDest}\n`)
+  }
+
+  // P31.7 — emit the layered system-prompt walk-up surface
+  // (AGENTS.md for P1 + TOOLS.md for G1 with the §1.10
+  // disclaimer) under `<cwd>/.lumen/`. Idempotent on the
+  // existing files: existing files are reported but not
+  // overwritten unless --force is set, matching the
+  // permissions / config semantics.
+  if (options.withContext === true) {
+    const cwdRoot = options.cwd ?? process.cwd()
+    const written = []
+    const skipped = []
+    for (const f of contextInitFilesFor(cwdRoot)) {
+      let exists = false
+      try {
+        await fs.access(f.path)
+        exists = true
+      } catch {
+        exists = false
+      }
+      if (exists && options.force !== true) {
+        skipped.push(f.path)
+        continue
+      }
+      await fs.mkdir(resolve(f.path, '..'), { recursive: true })
+      await fs.writeFile(f.path, f.body, 'utf8')
+      written.push(f.path)
+    }
+    for (const p of written) process.stdout.write(`wrote ${p}\n`)
+    for (const p of skipped) process.stdout.write(`skipped ${p} (--force to overwrite)\n`)
   }
   return 0
 }
