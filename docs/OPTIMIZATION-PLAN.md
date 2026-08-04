@@ -740,17 +740,68 @@ flowchart LR
 
 - `docs/ARCHITECTURE.md` — tier / 无 HTTP in core
 - `docs/P19-DESIGN.md` — middleware / createAgent / ToolRisk
-- `docs/SECURITY.md` — FS rootDir 未关闭
-- `docs/PERMISSIONS.md` — 仍写 opt-in `--permissions`
-- `TASKS.md` — H1.4 / P19–P22 多处「库完成」易误判体验完成
-- `apps/cli/src/composition.ts` — `loadConfig`；middleware opt-in
-- `apps/cli/src/index.ts` — flag 表面
-- `packages/config/src/profile.ts` / `schema.ts` — profile 库有、产品默认无
-- `packages/core/src/agent/index.ts` — `dispatchToolCall` 无 risk
-- `packages/core/src/tools/index.ts` — `ToolContext` 无 workspaceRoot
-- `packages/core/src/agent/middleware.ts` — ToolRisk 设计注释
-- `packages/tools/src/fs/*.ts` — 无钳制
-- `packages/tools/src/shell/default-sandbox.ts` — 已有 root+sep 先例
-- `packages/skills/src/evolver.ts` / `trajectory-hook.ts` — 库有、未进 barrel、composition 未挂
-- `packages/server/src/index.ts` — Gateway 可复用协议草形
+- `docs/SECURITY.md` — FS rootDir（P33.B Day3 已 ship：DefaultSandbox 拒绝 out-of-workspace cwd）
+- `docs/PERMISSIONS.md` — 默认加载语义（P33.B Day5 已 ship：assistant assembly 自动挂）
+- `TASKS.md` — P33.B + P34.1-6 多处完成，参考 §10 累计统计
+- `apps/cli/src/composition.ts` — `loadConfigWithProfile` + ProductAssembly middleware
+- `apps/cli/src/index.ts` — flag 表面（lumen run / chat / team / memory / checkpoint / gateway）
+- `packages/config/src/profile.ts` / `schema.ts` — profile 库有；BUILTIN_ASSEMBLIES 已 ship
+- `packages/core/src/agent/index.ts` — `dispatchToolCall` 读 risk + approver? callback
+- `packages/core/src/tools/index.ts` — `ToolContext.workspaceRoot` 字段已 ship
+- `packages/core/src/agent/middleware.ts` — ToolRisk 三档 enforce (P33.B Day3)
+- `packages/tools/src/fs/workspace-guard.ts` — `path-guard` + 五 FS 工具已 ship
+- `packages/tools/src/shell/default-sandbox.ts` — `root+sep` 钳制已 ship
+- `packages/skills/src/evolver.ts` / `trajectory-hook.ts` — barrel 已 export；composition 已挂 (P34.2)
+- `packages/server/src/index.ts` — Gateway 协议已 ship（P34.4 lumen gateway start）
 - `README.md` — 产品优先路线图摘要已写
+
+---
+
+## 10. Phase B 进度快照（2026-08-04 更新）
+
+本节是 §3 (Phase B) 的实际 ship 状态快照。**§3 原文 (2026-07-29) 是"待开工"语义**，本节标记每段完成情况 + 落点 commit + release tag。验收以本节为准。
+
+| 段 | 内容 | Status | 落点 commit | release |
+|---|---|---|---|---|
+| §3 B.1 | MEMORY.md / USER.md 人读记忆 + bridge 装饰器 | ✅ 已 ship | `9980979` (P34.1) | v0.20.0 |
+| §3 B.2 | Skill evolver 默认接通 (`skillEvolution: 'trajectory'`) | ✅ 已 ship | `e05b6c5` (P34.2) | v0.21.0 |
+| §3 B.3 | Trust / Plan UX（`/trust` + `/plan` slash） | ✅ 已 ship | `0800375` (P34.3) | v0.22.0 |
+| §3 B.4 | 最小 Gateway（`lumen gateway start|stop|status`） | ✅ 已 ship | `68258bc` (P34.4) | v0.23.0 |
+| §3 B.5 | Approval + checkpoint UX（`lumen checkpoint restore` + `--approve-all/--deny-all`） | ✅ 一半 ship（P34.5 + P34.5.b） | `fbe194c` (P34.5) + `239fac4` (P34.5.b) | v0.24.0 + v0.25.0 |
+| §3 B.5（second slice） | TUI 实时 approval prompt | ⏳ future P-ticket | — | — |
+
+### 10.1 G-P* 通用门禁（§0.5）当前状态
+
+| Gate | Before P33.B | After P34.6 | Closing |
+|---|---|---|---|
+| G-P1 开箱像助手 | WARN | OK | a118766 (P34.1) |
+| G-P2 计划与许可默认可见 | OK | OK | 1db9176 (P33.B Day5) |
+| G-P3 会学习可感知 | WARN | OK | 9980979 (P34.1) |
+| G-P4 危险出不了圈 | FAIL | OK | 5a10227 (P33.B Day3) |
+| G-P5 找得到、装得起 | OK | OK | pre-existing |
+| G-P6 一键退回裸核 | FAIL | OK | 1db9176 (P33.B Day5) |
+
+`lumen doctor --product` (empty ~/.lumen) 输出 **"All product gates pass."**
+
+### 10.2 Phase C / D 启动条件
+
+按 §0.4 通用门禁通过 → 阶段 C 启动。**当前 G-P1 / G-P3 / G-P4 / G-P6 已 OK**，G-P5 长期 OK，G-P2 OK —— 通用门禁已通过，Phase C 启动条件达成。
+
+### 10.3 Phase B 全 5 段累计统计（vs P33.B Day1 baseline）
+
+- 16 个 commit (P33.B Day1-5 + P34.1-6)
+- 6 个 release (v0.19.0 → v0.26.0)
+- `apps/cli` 测试 354 → 385 (+31)
+- monorepo 测试 1821 → 1884 (+63)
+- `@lumen/cli` 版本 0.18.0 → 0.26.0 (8 minor bumps)
+
+### 10.4 Phase C backlog（OPTIMIZATION-PLAN §4）
+
+- **C.1** — 第一非终端入口选型（本机 daemon UI / IM 渠道）
+- **C.2** — `lumen setup` 向导 + `lumen doctor` 扩展（assembly wiring 检查）
+- **C.3** — ACP / IDE 推进策略（先冻结 `editor-bridge` 契约，再做 VSCode 扩展 MVP）
+
+### 10.5 Phase D backlog（OPTIMIZATION-PLAN §4.5）
+
+- 首个垂类用 `profiles.<name>` + `BUILTIN_ASSEMBLIES` + skills 包配置，不 fork `Agent`（§0.7 禁用项）
+- 验证条件：新增垂类 **零** `packages/core` 行为分叉
