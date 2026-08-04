@@ -86,7 +86,7 @@ export const BUILTIN_ASSEMBLIES = {
     planMode: 'auto' as const,
     permissionsDefaultPath: '~/.lumen/permissions.yaml',
     reflection: { inline: true, runEnd: 'rule' as const },
-    skillEvolution: 'reserved' as const,
+    skillEvolution: 'trajectory' as const,
   },
   /**
    * The "bare" assembly. No middleware. The composition

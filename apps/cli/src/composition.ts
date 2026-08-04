@@ -53,6 +53,7 @@ import { OpenAICompatibleProvider } from '@lumen/llm'
 import { type DiscoveredMcpServer, closeAllMcpServers, connectAllMcpServers } from '@lumen/mcp'
 import { SqliteStore } from '@lumen/memory'
 import { defaultSkillsPath } from '@lumen/skills'
+import { HeuristicEvolver } from '@lumen/skills'
 import { createBrowserTools, createFilesystemTools } from '@lumen/tools'
 import { loadSkillRegistry } from './commands/skills.js'
 import { loadPermissionPolicyFromFile } from './permissions-loader.js'
@@ -226,6 +227,11 @@ export interface CliAgentOptions {
    * `false` = skip.
    */
   enablePlan?: boolean
+  /** P34.2 — opt out of the assistant-assembly skill
+   *  evolution middleware. Default `undefined` =
+   *  evolution mounts (when the assembly bundles
+   *  `skillEvolution: 'trajectory'`); `true` = skip. */
+  noSkillEvolve?: boolean
   /**
    * P33.B Day5 — opt out of the assistant-assembly
    * tool-permission middleware. Default `undefined` =
@@ -550,6 +556,84 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
       } catch (err) {
         process.stderr.write(
           `lumen: assistant assembly skill-trigger wiring skipped: ${
+            err instanceof Error ? err.message : String(err)
+          }\n`,
+        )
+      }
+    }
+    // P34.2 (Phase B.2) — skill auto-evolution on afterRun.
+    // The assistant assembly's `skillEvolution` field is
+    // `'trajectory'` (P33.B Day1 set `'reserved'`; P34.2
+    // flips it). When the assembly bundles evolver
+    // behaviour AND the operator did not pass
+    // `--no-skill-evolve`, we mount an afterRun hook that
+    // calls `HeuristicEvolver.evolve` with the final
+    // message history. The evolver writes a new
+    // SKILL.md into the skills dir on success.
+    //
+    // This is best-effort (stderr noise on failure,
+    // never throws out of afterRun) per the P19+ pattern
+    // for evolution hooks. Future P-ticket replaces
+    // `HeuristicEvolver` with an LLM-backed evolver
+    // (`LLMEvolver`) gated on a config flag.
+    if (assembly.skillEvolution === 'trajectory' && options.noSkillEvolve !== true) {
+      try {
+        const skillsRoot = options.skillsPath ?? defaultSkillsPath()
+        const evolver = new HeuristicEvolver()
+        middleware.push({
+          name: 'skill-evolution',
+          afterRun: async (result, _ctx) => {
+            try {
+              // HeuristicEvolver reads `role` + a string
+              // `content`. The shape comes from
+              // @lumen/core's Message discriminated
+              // union: assistant content is
+              // `string | undefined`; user / system
+              // content is `string | ContentPart[]`;
+              // tool messages have no `content`. We
+              // collapse each variant to a plain
+              // `{role: string, content: string}` for
+              // the evolver; tool-call *count* is what
+              // HeuristicEvolver actually uses, and
+              // role='tool' messages count as the
+              // tool-call signal.
+              const evolverMessages: Array<{ role: string; content: string; toolName?: string }> =
+                []
+              for (const m of result.messages) {
+                if (m.role === 'tool') {
+                  evolverMessages.push({ role: 'tool', content: '' })
+                  continue
+                }
+                let text = ''
+                if (m.role === 'assistant') {
+                  text = m.content ?? ''
+                } else {
+                  const c = m.content
+                  if (typeof c === 'string') {
+                    text = c
+                  } else {
+                    text = c
+                      .filter(
+                        (p): p is { type: 'text'; text: string } =>
+                          'type' in p && p.type === 'text',
+                      )
+                      .map((p) => p.text)
+                      .join(' ')
+                  }
+                }
+                evolverMessages.push({ role: m.role, content: text })
+              }
+              await evolver.evolve(evolverMessages, await loadSkillRegistry(skillsRoot), skillsRoot)
+            } catch (err) {
+              process.stderr.write(
+                `lumen: skill evolution skipped (${err instanceof Error ? err.message : String(err)})\n`,
+              )
+            }
+          },
+        })
+      } catch (err) {
+        process.stderr.write(
+          `lumen: skill evolution wiring skipped: ${
             err instanceof Error ? err.message : String(err)
           }\n`,
         )

@@ -50,3 +50,17 @@ export {
   findSkillFiles,
   type FilesystemSkillSourceOptions,
 } from './filesystem-source.js'
+
+// P34.2 (Phase B.2) — skill auto-evolution. The evolver
+// inspects a completed agent run and writes a new SKILL.md
+// when the run was non-trivial (≥3 tool calls). The
+// `BaseEvolver` contract is exported so the CLI bridge
+// can pick `HeuristicEvolver` (no LLM) or `LLMEvolver`
+// (asks the model for the body).
+export {
+  BaseEvolver,
+  HeuristicEvolver,
+  LLMEvolver,
+  type ChatMessage as EvolverChatMessage,
+  type EvolutionResult,
+} from './evolver.js'

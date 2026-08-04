@@ -26,20 +26,17 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  type AssemblyName,
   BUILTIN_ASSEMBLIES,
   DEFAULT_ASSEMBLY,
+  type ProductAssembly,
   profileNameToAssembly,
   resolveProductAssembly,
-  type AssemblyName,
-  type ProductAssembly,
 } from '../src/product-assembly.js'
 
 describe('BUILTIN_ASSEMBLIES (P33.B Day1 G-T1)', () => {
   it('exposes exactly two built-in assemblies', () => {
-    expect(Object.keys(BUILTIN_ASSEMBLIES).sort()).toEqual([
-      'assistant',
-      'bare',
-    ])
+    expect(Object.keys(BUILTIN_ASSEMBLIES).sort()).toEqual(['assistant', 'bare'])
   })
 
   it('assistant assembly has the documented middleware list', () => {
@@ -52,7 +49,7 @@ describe('BUILTIN_ASSEMBLIES (P33.B Day1 G-T1)', () => {
       'tool-permission',
     ])
     expect(a.planMode).toBe('auto')
-    expect(a.skillEvolution).toBe('reserved')
+    expect(a.skillEvolution).toBe('trajectory')
     expect(a.reflection.inline).toBe(true)
   })
 
@@ -139,9 +136,7 @@ describe('ProductAssembly type (P33.B Day1 G-T1 hard rule)', () => {
     // / `enableReflection` would extend this list, which this
     // test would catch at code-review time. Today it pins
     // the closed shape.
-    const allKeys: string[] = Object.keys(
-      Object.getPrototypeOf(BUILTIN_ASSEMBLIES.assistant) ?? {},
-    )
+    const allKeys: string[] = Object.keys(Object.getPrototypeOf(BUILTIN_ASSEMBLIES.assistant) ?? {})
     for (const k of expected) {
       expect(k in BUILTIN_ASSEMBLIES.assistant).toBe(true)
     }
