@@ -50,3 +50,19 @@ export {
   type PackageManifestLumen,
   type PackageManifest,
 } from './manifest.js'
+// P33.B Day1 — ProductAssembly + profile schema. Pure data +
+// a pure resolver; no `@lumen/core` dependency. Composition
+// roots consume `resolveProductAssembly` /
+// `profileNameToAssembly` to translate the resolved profile
+// name to a concrete middleware-list assembly. The
+// `assistant` assembly is the system default; `bare` is
+// the operator opt-out.
+export {
+  BUILTIN_ASSEMBLIES,
+  DEFAULT_ASSEMBLY,
+  type AssemblyMiddlewareName,
+  type AssemblyName,
+  type ProductAssembly,
+  profileNameToAssembly,
+  resolveProductAssembly,
+} from './product-assembly.js'
