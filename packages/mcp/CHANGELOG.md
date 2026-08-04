@@ -1,5 +1,13 @@
 # @lumen/mcp
 
+## 0.16.2
+
+### Patch Changes
+
+- Updated dependencies [b70d785]
+  - @lumen/core@0.19.0
+  - @lumen/config@0.17.0
+
 ## 0.16.1
 
 ### Patch Changes

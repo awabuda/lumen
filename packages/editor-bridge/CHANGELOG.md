@@ -1,5 +1,12 @@
 # @lumen/editor-bridge
 
+## 0.15.4
+
+### Patch Changes
+
+- Updated dependencies [b70d785]
+  - @lumen/core@0.19.0
+
 ## 0.15.3
 
 ### Patch Changes
