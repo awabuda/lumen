@@ -50,6 +50,13 @@ export interface ChatCommandOptions {
   interruptOn?: ReadonlyArray<string>
   /** Pre-approve tool names listed in interruptOn. */
   approveOn?: ReadonlyArray<string>
+  /** P34.5.b — auto-approve every `approval-required` /
+   *  `dangerous` tool call. Mutually exclusive with
+   *  `denyAll`. */
+  approveAll?: boolean
+  /** P34.5.b — hard-deny every `approval-required` /
+   *  `dangerous` tool call. */
+  denyAll?: boolean
   /** P22.2: path to a YAML permission policy file. */
   permissionsPath?: string
   /**

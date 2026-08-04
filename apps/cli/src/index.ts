@@ -60,6 +60,14 @@ program
     'Comma-separated tool names to pre-approve when they appear in --interrupt-on. The TUI can also /approve on the fly; this flag is the static allow-list.',
   )
   .option(
+    '--approve-all',
+    'P34.5.b: auto-approve every `approval-required` and `dangerous` tool call. Mutually exclusive with --deny-all. Useful for scripted runs where the operator has reviewed the plan.',
+  )
+  .option(
+    '--deny-all',
+    'P34.5.b: hard-deny every `approval-required` and `dangerous` tool call. Mutually exclusive with --approve-all. Useful for sandboxed CI runs.',
+  )
+  .option(
     '--permissions <path>',
     'Path to a YAML tool-permission policy file (P22.2). The file is validated against the Zod policy schema; a missing or malformed file throws a typed ConfigError.',
   )
@@ -108,6 +116,8 @@ program
       noMcp: opts.mcp === false,
       interruptOn,
       approveOn,
+      approveAll: opts.approveAll === true,
+      denyAll: opts.denyAll === true,
       permissionsPath: opts.permissions as string | undefined,
       autoMode: opts.autoMode === true,
       enablePlanMiddleware: planRaw !== undefined,
@@ -162,6 +172,14 @@ program
     '--approve-on <names>',
     'Comma-separated tool names to pre-approve on the interrupt list (TUI lets the user /approve on the fly; this flag is the static allow-list).',
   )
+  .option(
+    '--approve-all',
+    'P34.5.b: auto-approve every `approval-required` and `dangerous` tool call while in the TUI. Mutually exclusive with --deny-all.',
+  )
+  .option(
+    '--deny-all',
+    'P34.5.b: hard-deny every `approval-required` and `dangerous` tool call while in the TUI. Mutually exclusive with --approve-all.',
+  )
   .action(async (opts: Record<string, unknown>) => {
     // Lazy-load Ink only when actually entering the TUI.
     const { chatCommand } = await import('./commands/chat.js')
@@ -184,6 +202,8 @@ program
       cwd: opts.cwd as string | undefined,
       interruptOn,
       approveOn,
+      approveAll: opts.approveAll === true,
+      denyAll: opts.denyAll === true,
       permissionsPath: opts.permissions as string | undefined,
       checkpointPath: opts.checkpoint as string | undefined,
       sessionId: opts.sessionId as string | undefined,

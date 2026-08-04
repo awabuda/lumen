@@ -228,6 +228,24 @@ export interface CliAgentOptions {
    * `false` = skip.
    */
   enablePlan?: boolean
+  /**
+   * P34.5.b — when true, every `approval-required` or
+   * `dangerous` tool call is auto-allowed (after the
+   * approver is consulted). This is the inverse of
+   * `--deny-all`; both cannot be set at once. Useful
+   * for scripted runs where the operator has reviewed
+   * the agent's plan in advance. Per P19+ rule 11 the
+   * approver is still a callback, not a boolean — this
+   * option threads a pre-resolved map into the approver
+   * factory so the callback can answer consistently.
+   */
+  approveAll?: boolean
+  /**
+   * P34.5.b — when true, every `approval-required` or
+   * `dangerous` tool call is hard-denied. Mirror of
+   * `approveAll`. Useful for sandboxed CI runs.
+   */
+  denyAll?: boolean
   /** P34.2 — opt out of the assistant-assembly skill
    *  evolution middleware. Default `undefined` =
    *  evolution mounts (when the assembly bundles
@@ -741,6 +759,23 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
   // unchanged.
   const sessionId = `chat-${Math.random().toString(36).slice(2, 10)}`
   const systemPromptContext = await composeSystemPromptContext(cwd, sessionId, model)
+  // P34.5.b — `--approve-all` / `--deny-all` flags wire
+  // a deterministic approver into the agent. The
+  // approver is still a callback (P19+ rule 11) — we
+  // pre-resolve the decision from the flag rather than
+  // mutating `AgentConfig` boolean. `approveAll` and
+  // `denyAll` are mutually exclusive; composition
+  // callers should not pass both (we honour whichever
+  // is `true`, defaulting to approveAll in the rare
+  // typo'd-both case). When neither is set, the
+  // approver is `undefined` and the dispatch path
+  // falls back to the P33.B Day3 refusal behaviour.
+  const approver =
+    options.approveAll === true
+      ? async () => 'allow' as const
+      : options.denyAll === true
+        ? async () => 'deny' as const
+        : undefined
   const agent = createAgent({
     provider,
     tools,
@@ -749,6 +784,7 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
     config,
     model,
     cwd,
+    ...(approver !== undefined ? { approver } : {}),
     middleware,
     systemPromptContext,
     systemPromptCache: getSharedPromptCache(),

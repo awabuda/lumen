@@ -59,6 +59,13 @@ export interface RunCommandOptions {
   interruptOn?: ReadonlyArray<string>
   /** Pre-approve tool names listed in interruptOn. */
   approveOn?: ReadonlyArray<string>
+  /** P34.5.b — auto-approve every `approval-required` /
+   *  `dangerous` tool call. Mutually exclusive with
+   *  `denyAll`. */
+  approveAll?: boolean
+  /** P34.5.b — hard-deny every `approval-required` /
+   *  `dangerous` tool call. */
+  denyAll?: boolean
   /** P22.2: path to a YAML permission policy file. */
   permissionsPath?: string
   /**
@@ -178,8 +185,8 @@ export const runCommand = async (options: RunCommandOptions): Promise<number> =>
     if (!resolvedFromConfig) {
       process.stderr.write(
         'lumen: no model configured. Pass --model <id>, set LUMEN_MODEL (or LUMEN_DEFAULT_MODEL), ' +
-          "or add `defaultModel:` to your config. composition.ts will throw ConfigError " +
-          "otherwise — no hard-coded fallback anymore.\n",
+          'or add `defaultModel:` to your config. composition.ts will throw ConfigError ' +
+          'otherwise — no hard-coded fallback anymore.\n',
       )
     }
   }
