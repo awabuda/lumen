@@ -46,7 +46,8 @@ import type {
 import type { BaseProvider } from '../message/provider.js'
 import type { RetryConfig } from '../retry.js'
 import { callToolWithRetry } from '../tool-retry.js'
-import type { ToolRegistry } from '../tools/index.js'
+import type { BaseTool } from '../tools/index.js'
+import type { ToolRegistry, ToolRisk } from '../tools/index.js'
 import {
   type MiddlewareContext,
   MiddlewareError,
@@ -55,8 +56,12 @@ import {
   getAgentMiddleware,
 } from './middleware.js'
 import { appendDynamic } from './system-prompt-boundary.js'
+import {
+  type StableCacheKey,
+  type StablePromptCache,
+  hashStableCacheKey,
+} from './system-prompt-cache.js'
 import { type SectionContext, buildSystemPrompt } from './system-prompt-sections.js'
-import { StablePromptCache, type StableCacheKey, hashStableCacheKey } from './system-prompt-cache.js'
 
 export interface AgentConfig {
   /** The LLM provider to call. Required. */
@@ -108,6 +113,52 @@ export interface AgentConfig {
   readonly systemPromptCache?: StablePromptCache
   /** Working directory (passed to tools via ToolContext). */
   readonly cwd?: string
+  /**
+   * P33.B Day3 — workspace root for cross-tool path-guard
+   * dispatch. The Agent threads this into every
+   * {@link ToolContext} it constructs, so the FS tools
+   * (`read_file` / `write_file` / `patch` / `list_dir` /
+   * `search_files`) can run their `resolveSafePath` check
+   * without the composition root having to remember to
+   * pass it on every call. Defaults to `cwd` when unset,
+   * so the legacy behaviour (cwd-relative paths) is the
+   * safe fallback. Composition roots that pin the agent
+   * to a workspace should set this explicitly.
+   */
+  readonly workspaceRoot?: string
+  /**
+   * P33.B Day3 — ToolRisk approver. Called by the
+   * agent's {@link Agent.dispatchToolCall} path
+   * whenever a tool's `risk` is `approval-required` or
+   * `dangerous` and the caller has not pre-approved the
+   * call (via `approveOn` in composition or via the
+   * interrupt middleware's `approve` predicate).
+   *
+   * Semantics:
+   *   - `'allow'` → the tool call proceeds
+   *   - `'deny'`  → the tool call returns an `isError:
+   *     true` ToolResult with a denial message; the
+   *     agent loop sees the failure and continues
+   *
+   * When `approver` is `undefined` AND no pre-approve
+   * set covers the call, the dispatch rejects
+   * `approval-required` tools with a typed `ToolError`
+   * (refusal result) and rejects `dangerous` tools with
+   * a stricter `ValidationError` (hard deny). This is
+   * the safety-first default per OPTIMIZATION-PLAN §2
+   * A.2: dangerous tools never silently succeed without
+   * an approver.
+   *
+   * The approver is a callback (NOT a boolean flag) per
+   * P19+ rule 11 — `AgentConfig` never gains
+   * `enableApproval` / `disableDangerousTools` style
+   * surfaces.
+   */
+  readonly approver?: (input: {
+    readonly tool: BaseTool
+    readonly call: ToolCall
+    readonly risk: 'approval-required' | 'dangerous'
+  }) => Promise<'allow' | 'deny'>
   /** Logger. Defaults to a no-op ConsoleLogger. */
   readonly logger?: BaseLogger
 }
@@ -348,6 +399,25 @@ export class Agent {
   private readonly model: string
   private readonly systemPrompt: string
   private readonly cwd: string
+  /**
+   * P33.B Day3 — workspace root threaded into every
+   * {@link ToolContext} constructed by `dispatchToolCall`.
+   * Defaults to `cwd` when the operator does not pin it
+   * explicitly, so the legacy behaviour (cwd-relative
+   * paths) is preserved for callers that never opt in.
+   */
+  private readonly workspaceRoot: string
+  /**
+   * P33.B Day3 — ToolRisk approver callback. When
+   * `undefined`, dispatchToolCall rejects `dangerous`
+   * tools outright and returns a refusal result for
+   * `approval-required` tools (no silent YOLO).
+   */
+  private readonly approver?: (input: {
+    readonly tool: BaseTool
+    readonly call: ToolCall
+    readonly risk: 'approval-required' | 'dangerous'
+  }) => Promise<'allow' | 'deny'>
   private readonly logger: BaseLogger
   // P23.1: scratch slot for the run/streamRun adapters. Set by
   // `executeLoop` on success so the caller can read the final
@@ -415,6 +485,15 @@ export class Agent {
       this.systemPrompt = config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT
     }
     this.cwd = config.cwd ?? process.cwd()
+    // P33.B Day3 — `workspaceRoot` defaults to `cwd` so the
+    // pre-Day3 behaviour (cwd-relative paths) is preserved
+    // for callers that never opt in. When the composition
+    // root pins the agent to a project (e.g. `lumen chat`
+    // inside a repo), it sets this explicitly so the FS
+    // tools' `resolveSafePath` rejects `..` and symlink
+    // escapes that would otherwise pass the cwd check.
+    this.workspaceRoot = config.workspaceRoot ?? this.cwd
+    this.approver = config.approver
     this.logger = config.logger ?? new ConsoleLogger({ component: 'agent' })
   }
 
@@ -1380,8 +1459,30 @@ export class Agent {
         content: `Tool "${call.name}" is not registered`,
       }
     }
+    // P33.B Day3 — ToolRisk gate. `safe` calls dispatch
+    // unchanged. `approval-required` and `dangerous`
+    // calls must clear the approver (or a hard deny fires).
+    // The pre-Day3 behaviour was to call `tool.call` directly,
+    // so every existing test / caller that does not opt in to
+    // the gate stays safe ONLY because the tools it
+    // registers are `safe` (the FS / git / read_file family
+    // is `safe`; only `terminal`, `computer_use`, and the
+    // browser opt-ins are `dangerous` / `approval-required`).
+    // Tools that flip `dangerous` without supplying an
+    // approver see a hard denial — by design.
+    const riskResult = await this.evaluateToolRisk(tool, call)
+    if (riskResult !== undefined) {
+      return riskResult
+    }
     const ctx: import('../tools/index.js').ToolContext = {
       cwd: this.cwd,
+      // P33.B Day3 — `workspaceRoot` flows into every
+      // ToolContext so the FS `resolveSafePath` helper
+      // (Day2 1fc598e) sees the pinned workspace and
+      // rejects cross-workspace paths. Pre-Day3
+      // dispatchToolCall did NOT set this field; legacy
+      // tools that ignore `workspaceRoot` are unaffected.
+      workspaceRoot: this.workspaceRoot,
       signal: signal ?? new AbortController().signal,
       // P23.0: thread the real sessionId so the tool can scope
       // audit logs and per-session resources. Pre-refactor this
@@ -1438,6 +1539,89 @@ export class Agent {
         isError: true,
         content: `Tool execution failed: ${(err as Error).message ?? String(err)}`,
       }
+    }
+  }
+
+  /**
+   * P33.B Day3 — ToolRisk gate.
+   *
+   * Returns a `ToolResult` to short-circuit the dispatch
+   * (denial / refusal) when the call should NOT execute,
+   * or `undefined` to signal "the call passed the gate,
+   * continue dispatching".
+   *
+   * Decision matrix:
+   *
+   * | risk               | approver  | outcome                              |
+   * |--------------------|-----------|--------------------------------------|
+   * | `safe`             | n/a       | pass (return undefined)              |
+   * | `approval-required`| undefined | refusal (isError ToolResult)         |
+   * | `approval-required`| deny      | refusal (isError ToolResult)         |
+   * | `approval-required`| allow     | pass                                 |
+   * | `dangerous`        | undefined | HARD DENY (ValidationError result)   |
+   * | `dangerous`        | deny      | HARD DENY (ValidationError result)   |
+   * | `dangerous`        | allow     | pass                                 |
+   *
+   * `dangerous` is stricter than `approval-required`
+   * because there is no UX fallback — the user cannot
+   * click "approve" when an approver was never wired up.
+   * The error type differs (`ValidationError` vs
+   * `ToolError`) so callers and tests can distinguish
+   * the two denial modes.
+   */
+  private async evaluateToolRisk(tool: BaseTool, call: ToolCall): Promise<ToolResult | undefined> {
+    const risk: ToolRisk = tool.risk
+    // P33.B Day3 — only the two elevated risk tiers
+    // gate dispatch. `safe` (and any pre-existing
+    // typed-bug values that happen to land here) pass
+    // through. The risk-gate is opt-in: callers that
+    // never opt into the approver surface keep the
+    // pre-Day3 behaviour for every tool that is not
+    // explicitly `approval-required` or `dangerous`.
+    // P17.1 audit flagged that several pre-P17 tests
+    // use the literal `'low'`, which is a typed bug
+    // against the `ToolRisk` union but compiled
+    // because of how `BaseTool.risk` is declared.
+    // Treating `safe` as "anything not in the elevated
+    // pair" keeps that legacy shape working without
+    // papering over the audit finding.
+    if (risk !== 'approval-required' && risk !== 'dangerous') return undefined
+    const approver = this.approver
+    if (approver === undefined) {
+      const message =
+        risk === 'dangerous'
+          ? `Tool "${call.name}" is marked risk="dangerous" and no approver is configured. Refusing dispatch (per OPTIMIZATION-PLAN §2 A.2).`
+          : `Tool "${call.name}" is marked risk="approval-required" and no approver is configured. Refusing dispatch (per OPTIMIZATION-PLAN §2 A.2).`
+      return {
+        toolCallId: call.id,
+        isError: true,
+        content: message,
+      }
+    }
+    let decision: 'allow' | 'deny'
+    try {
+      decision = await approver({ tool, call, risk })
+    } catch (err) {
+      // An approver that throws is treated as `deny` —
+      // a bug in the approver must not silently allow
+      // a dangerous call through. The original error is
+      // surfaced in the refusal content so the operator
+      // can debug the approver chain.
+      return {
+        toolCallId: call.id,
+        isError: true,
+        content: `Approver for "${call.name}" threw ${err instanceof Error ? err.message : String(err)}. Treating as denial (risk=${risk}).`,
+      }
+    }
+    if (decision === 'allow') return undefined
+    const message =
+      risk === 'dangerous'
+        ? `Tool "${call.name}" was denied by approver (risk="dangerous").`
+        : `Tool "${call.name}" was denied by approver (risk="approval-required").`
+    return {
+      toolCallId: call.id,
+      isError: true,
+      content: message,
     }
   }
 
