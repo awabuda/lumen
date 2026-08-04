@@ -138,10 +138,7 @@ export const parseMarkdownFacts = (markdown: string): ReadonlyArray<SerializedFa
   return facts
 }
 
-const parseFactLine = (
-  content: string,
-  kind: string,
-): SerializedFact | undefined => {
+const parseFactLine = (content: string, kind: string): SerializedFact | undefined => {
   // The trailing `(id=..., trust=..., tags=...)` is
   // optional — operators can hand-edit the content and
   // lose the metadata. When present, parse it; when

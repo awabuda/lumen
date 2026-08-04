@@ -49,7 +49,9 @@ describe('serializeFactsToMarkdown', () => {
 
   it('formats the content + id + trust + tags inline', () => {
     const md = serializeFactsToMarkdown([fact()], { generatedAtIso: 'now' })
-    expect(md).toContain('- Postgres conn strings go in ~/.pgpass (id=fact-1, trust=0.70, tags=security,pg)')
+    expect(md).toContain(
+      '- Postgres conn strings go in ~/.pgpass (id=fact-1, trust=0.70, tags=security,pg)',
+    )
   })
 
   it('omits the tags suffix when no tags are present', () => {
