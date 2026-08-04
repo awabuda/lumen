@@ -403,6 +403,20 @@ export interface TeamCommandOptions {
    */
   readonly listDir?: string
   /**
+   * P34.6 — `list` action: when true, recurse into
+   * sub-directories looking for `team.json` /
+   * `*.team.json`. Off by default to preserve the
+   * pre-P34.6 behaviour.
+   */
+  readonly recursive?: boolean
+  /**
+   * P34.6 — `list` action: output format. `'human'`
+   * (default) prints the one-block-per-team summary;
+   * `'json'` prints a single JSON array suitable for
+   * CI pipelines that diff against the listing.
+   */
+  readonly format?: 'human' | 'json'
+  /**
    * `run` action only: the parent context the orchestrator
    * will dispatch sub-agents against. Callers in production
    * build this via `buildAgent({ ... })` from
@@ -522,30 +536,40 @@ export const printTeamResults = (team: Team, results: ReadonlyArray<unknown>): v
  * deeply-nested team rosters can pass a more specific
  * `--list-dir`).
  */
-const discoverTeamFiles = async (dir: string): Promise<ReadonlyArray<string>> => {
+const discoverTeamFiles = async (
+  dir: string,
+  options: { readonly recursive?: boolean } = {},
+): Promise<ReadonlyArray<string>> => {
   const { readdir, stat } = await import('node:fs/promises')
-  let entries: import('node:fs').Dirent[]
-  try {
-    entries = await readdir(dir, { withFileTypes: true })
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []
-    throw err
-  }
   const out: string[] = []
-  for (const e of entries) {
-    if (!e.isFile()) continue
-    if (e.name !== 'team.json' && !e.name.endsWith('.team.json')) continue
-    const full = join(dir, e.name)
-    // stat to confirm it's a regular file (skip symlinks
-    // pointing at directories etc.).
+  const visit = async (current: string): Promise<void> => {
+    let entries: import('node:fs').Dirent[]
     try {
-      const s = await stat(full)
-      if (s.isFile()) out.push(full)
-    } catch {
-      // ignore — caller will surface the load error if they
-      // try to read this file.
+      entries = await readdir(current, { withFileTypes: true })
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return
+      throw err
+    }
+    for (const e of entries) {
+      const full = join(current, e.name)
+      if (e.isDirectory()) {
+        if (options.recursive === true) await visit(full)
+        continue
+      }
+      if (!e.isFile()) continue
+      if (e.name !== 'team.json' && !e.name.endsWith('.team.json')) continue
+      try {
+        const s = await stat(full)
+        if (s.isFile()) {
+          out.push(full)
+        }
+      } catch {
+        // ignore — caller will surface the load error if they
+        // try to read this file.
+      }
     }
   }
+  await visit(dir)
   return out.sort()
 }
 
@@ -560,16 +584,37 @@ export const teamCommand = async (options: TeamCommandOptions): Promise<number> 
 
   if (action === 'list') {
     const dir = options.listDir ?? './teams'
-    const files = await discoverTeamFiles(dir)
+    const files = await discoverTeamFiles(dir, { recursive: options.recursive === true })
     if (files.length === 0) {
-      process.stdout.write(`No team.json files found under ${dir}\n`)
+      if (options.format === 'json') {
+        process.stdout.write('[]\n')
+      } else {
+        process.stdout.write(`No team.json files found under ${dir}\n`)
+      }
       return 0
     }
-    process.stdout.write(`Lumen teams under ${dir}\n\n`)
+    // Build a structured result first; the human / JSON
+    // renderers below are pure projections of the same
+    // array. Keeps the list action deterministic for CI
+    // pipelines that diff against `lumen team list
+    // --format json`.
+    const entries: Array<{
+      readonly path: string
+      readonly name: string
+      readonly mode: TeamMode
+      readonly agents: ReadonlyArray<string>
+      readonly tasks: number
+    }> = []
     for (const f of files) {
       try {
-        const team = await loadTeam(f)
-        process.stdout.write(`${formatTeam(team, f)}\n\n`)
+        const team: Team = await loadTeam(f)
+        entries.push({
+          path: f,
+          name: team.name,
+          mode: team.mode ?? 'sequential',
+          agents: team.agents.map((a) => a.name),
+          tasks: team.tasks?.length ?? 0,
+        })
       } catch (err) {
         // Surface the validation error inline so a single
         // broken team file does not mask the others. The
@@ -577,7 +622,21 @@ export const teamCommand = async (options: TeamCommandOptions): Promise<number> 
         // operator can fix it without re-running with
         // verbose mode.
         const msg = err instanceof Error ? err.message : String(err)
-        process.stdout.write(`! ${f}\n  ${msg}\n\n`)
+        if (options.format === 'json') {
+          process.stdout.write(`${JSON.stringify({ path: f, error: msg })}\n`)
+        } else {
+          process.stdout.write(`! ${f}\n  ${msg}\n\n`)
+        }
+      }
+    }
+    if (options.format === 'json') {
+      process.stdout.write(`${JSON.stringify(entries, null, 2)}\n`)
+    } else {
+      process.stdout.write(`Lumen teams under ${dir}\n\n`)
+      for (const e of entries) {
+        process.stdout.write(
+          `${e.path}\n  name=${e.name} mode=${e.mode} agents=[${e.agents.join(', ')}] tasks=${e.tasks}\n\n`,
+        )
       }
     }
     return 0

@@ -724,6 +724,11 @@ program
   .argument('[path]', 'Path to a team.json file (for "validate", "show", and "run")')
   .option('--list-dir <dir>', 'list: directory to scan for team.json files (defaults to ./teams)')
   .option(
+    '--recursive',
+    'list (P34.6): recurse into sub-directories when scanning for team.json / *.team.json files.',
+  )
+  .option('--format <fmt>', 'list (P34.6): output format. "human" (default) or "json".', 'human')
+  .option(
     '--team-checkpoint <path>',
     'run: persist a team-level checkpoint to this SQLite file after the run resolves (success or failure). Defaults to in-memory (no persistence).',
   )
@@ -732,9 +737,13 @@ program
       const { teamCommand } = await import('./commands/team.js')
       let code = 0
       if (subcommand === 'list') {
+        const formatRaw = opts.format as string | undefined
+        const format: 'human' | 'json' = formatRaw === 'json' ? 'json' : 'human'
         code = await teamCommand({
           action: 'list',
           listDir: opts.listDir as string | undefined,
+          recursive: opts.recursive === true,
+          format,
         })
       } else if (subcommand === 'validate') {
         if (!filePath) {
