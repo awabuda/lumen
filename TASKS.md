@@ -1632,10 +1632,66 @@ bridge composition tests).
 
 #### Backlog (Phase B continued)
 
-- **B.4** — Minimum Gateway (`lumen gateway start`,
-  long-lived Node process reusing composition).
 - **B.5** — Approval + checkpoint UX (TUI approval event
   channel + `lumen checkpoint restore`).
+
+### P34.4 — Minimum Gateway (Phase B.4 closure)
+
+Phase B.4 (OPTIMIZATION-PLAN §3 B.4) ships in P34.4:
+`lumen gateway start` runs a long-lived Node process
+that exposes the agent over HTTP + WebSocket via
+`@lumen/server`'s `createNodeServer`. Reuses
+`buildAgent` so the assistant assembly (plan /
+permission / skill / reflection / memory bridge)
+all carry over from `lumen run` / `lumen chat`
+unchanged.
+
+#### Commits
+
+```
+68258bc  P34.4  lumen gateway start|stop|status subcommand
+```
+
+#### Surface
+
+```
+lumen gateway start [--port <n>] [--host <h>] [--path-prefix <path>]
+  - builds Agent via buildAgent (assistant assembly)
+  - calls @lumen/server createNodeServer({agentFactory, port, host, pathPrefix})
+  - installs SIGINT/SIGTERM graceful-shutdown
+  - foreground; operator Ctrl+C's to stop
+
+lumen gateway stop    — P34.4 stub; daemon mode is a
+                          future P-ticket.
+
+lumen gateway status  — prints the planned endpoint.
+```
+
+#### Why apps/cli (not @lumen/server)
+
+- `apps/gateway | apps/cli` is the only allowed
+  caller of `@lumen/server` + `buildAgent` per the
+  DI-boundary table in OPTIMIZATION-PLAN §3 B.4.
+- The server package owns the protocol; the CLI
+  owns the composition.
+- `apps/cli/package.json` adds `@lumen/server`
+  workspace dependency (no inversion).
+
+#### Verification
+
+```
+pnpm --filter @lumen/cli typecheck      # 0 errors
+pnpm --filter @lumen/cli test         # 374 tests, 0 fail
+pnpm exec biome check apps/cli/src apps/cli/test \
+  apps/cli/package.json                # 0 errors
+```
+
+End-to-end smoke:
+  `lumen gateway status --port 8888` →
+    `planned endpoint: http://127.0.0.1:8888/v1`
+  `lumen gateway stop` → friendly stub message
+
+CLI test delta: 371 → 374 (+3).
 
 ### P34.3 — Trust / Plan UX (Phase B.3 closure)
 
