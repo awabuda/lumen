@@ -3,6 +3,21 @@
 import { describe, expect, it } from 'vitest'
 import { Agent, type AssistantMessage, type Message, ToolRegistry } from '../src/index.js'
 import { FakeProvider } from './fake-provider.js'
+import type { MiddlewareContext } from '../src/agent/middleware.js'
+
+const makeCtx = (extra: Record<string, unknown> = {}): MiddlewareContext => ({
+  sessionId: 's',
+  iteration: 1,
+  startedAt: 0,
+  state: {},
+  control: { continueAfterModel: false },
+  // P31.6B R3 — context-compression now writes to the
+  // dynamic suffix via `appendDynamicChunk` instead of
+  // prepending a standalone role:system message.
+  appendDynamicChunk: (chunk: string) => (extra.chunks as string[] | undefined)?.push(chunk),
+  ...extra,
+})
+
 
 const longHistory = (n: number): ReadonlyArray<Message> => {
   const out: Message[] = []
@@ -41,42 +56,31 @@ describe('createContextCompressionMiddleware', () => {
       '../src/agent/middleware/context-compression.js'
     )
     const m = createContextCompressionMiddleware({ maxMessages: 5, keepLastN: 2 })
-    const out = await m.beforeModel!(longHistory(3), {
-      sessionId: 's',
-      iteration: 1,
-      startedAt: 0,
-      state: {},
-      control: { continueAfterModel: false },
-    })
+    const out = await m.beforeModel!(longHistory(3), makeCtx())
     expect(out).toHaveLength(3)
   })
 
-  it('compresses when over the cap and keeps the last N messages', async () => {
+  it('compresses when over the cap and keeps the last N messages (P31.6B R3)', async () => {
     const { createContextCompressionMiddleware } = await import(
       '../src/agent/middleware/context-compression.js'
     )
     const m = createContextCompressionMiddleware({ maxMessages: 10, keepLastN: 3 })
     const input = longHistory(20)
-    const out = await m.beforeModel!(input, {
-      sessionId: 's',
-      iteration: 1,
-      startedAt: 0,
-      state: {},
-      control: { continueAfterModel: false },
-    })
-    // 1 summary + 3 kept = 4 messages.
-    expect(out).toHaveLength(4)
-    expect(out[0]?.role).toBe('system')
-    const summary = out[0]
-    if (summary && summary.role === 'system') {
-      expect(summary.content).toContain('17 message(s) collapsed')
-    }
+    const chunks: string[] = []
+    const out = await m.beforeModel!(input, makeCtx({ chunks }))
+    // P31.6B — the summary is no longer prepended as a
+    // standalone role:system message; it lands in the
+    // dynamic suffix via `appendDynamicChunk`. The middleware
+    // returns the kept tail only.
+    expect(out).toHaveLength(3)
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0]).toContain('17 message(s) collapsed')
     // The last 3 input messages are preserved verbatim, in order.
     const kept = input.slice(-3)
-    expect(out.slice(1)).toEqual(kept)
+    expect(out).toEqual(kept)
   })
 
-  it('accepts a custom summaryFn', async () => {
+  it('accepts a custom summaryFn (P31.6B R3)', async () => {
     const { createContextCompressionMiddleware } = await import(
       '../src/agent/middleware/context-compression.js'
     )
@@ -85,19 +89,10 @@ describe('createContextCompressionMiddleware', () => {
       keepLastN: 2,
       summaryFn: (msgs) => `custom-summary of ${msgs.length}`,
     })
-    const out = await m.beforeModel!(longHistory(6), {
-      sessionId: 's',
-      iteration: 1,
-      startedAt: 0,
-      state: {},
-      control: { continueAfterModel: false },
-    })
-    expect(out).toHaveLength(3)
-    expect(out[0]?.role).toBe('system')
-    const summary = out[0]
-    if (summary && summary.role === 'system') {
-      expect(summary.content).toBe('custom-summary of 4')
-    }
+    const chunks: string[] = []
+    const out = await m.beforeModel!(longHistory(6), makeCtx({ chunks }))
+    expect(out).toHaveLength(2)
+    expect(chunks).toEqual(['custom-summary of 4'])
   })
 
   it('rejects keepLastN >= maxMessages at construction', async () => {
@@ -132,14 +127,12 @@ describe('createContextCompressionMiddleware', () => {
       '../src/agent/middleware/context-compression.js'
     )
     const m = createContextCompressionMiddleware({ maxMessages: 50, keepLastN: 7 })
-    const out = await m.beforeModel!(longHistory(100), {
-      sessionId: 's',
-      iteration: 1,
-      startedAt: 0,
-      state: {},
-      control: { continueAfterModel: false },
-    })
-    expect(out).toHaveLength(1 + 7)
+    const chunks: string[] = []
+    const out = await m.beforeModel!(longHistory(100), makeCtx({ chunks }))
+    // P31.6B R3 — middleware no longer returns a prepended
+    // system message; the count is just keepLastN.
+    expect(out).toHaveLength(7)
+    expect(chunks).toHaveLength(1)
   })
 
   // P23.12 (fix #26) — the slice counters on the middleware
@@ -182,6 +175,9 @@ describe('createContextCompressionMiddleware', () => {
           },
         },
       },
+      // P31.6B R3 — context-compression writes the summary
+      // to the dynamic suffix via the sanctioned surface.
+      appendDynamicChunk: () => {},
     } as unknown as Parameters<typeof m.beforeModel>[1]
 
     const beforeModel = m.beforeModel!

@@ -145,10 +145,13 @@ export const createContextCompressionMiddleware = (
       const toCompress = messages.slice(0, -keepLastN)
       const toKeep = messages.slice(-keepLastN)
       const summary = await summarise(toCompress)
-      const summaryMessage: Message = {
-        role: 'system',
-        content: summary,
-      }
+      // P31.6B R3 — write the summary to the dynamic suffix
+      // via the sanctioned surface instead of prepending a
+      // standalone `{role: 'system'}` message. The chunks
+      // are spliced into the system prompt's post-marker
+      // suffix by `Agent.spliceDynamicChunks` after the
+      // pass resolves.
+      ctx.appendDynamicChunk(summary)
       // P23.12 — bump the slice counters via the typed state
       // surface. `stateView` is built by `Agent.buildStateView`
       // (P23.3); our key is the middleware `name`. We read the
@@ -177,7 +180,7 @@ export const createContextCompressionMiddleware = (
           totalMessagesCompressed: previousTotal + toCompress.length,
         })
       }
-      return [summaryMessage, ...toKeep]
+      return toKeep
     },
   }
 }
