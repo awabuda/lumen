@@ -262,6 +262,47 @@ program
   })
 
 program
+  .command('memory')
+  .description('Inspect and manage the memory markdown bridge (MEMORY.md / USER.md)')
+  .argument('[subcommand]', '"sync" (default) or "show"', 'sync')
+  .option('--memory-path <path>', 'Override the SQLite memory database path')
+  .option('--memory-md-path <path>', 'Override MEMORY.md path (default ~/.lumen/MEMORY.md)')
+  .option('--user-md-path <path>', 'Override USER.md path (default ~/.lumen/USER.md)')
+  .option('--trust-threshold <n>', 'Minimum trust to project into markdown (default 0.6)', '0.6')
+  .option('--profile <name>', 'Profile label written into the markdown frontmatter')
+  .action(async (subcommand: string, opts: Record<string, unknown>) => {
+    const { memorySyncCommand, memoryShowCommand } = await import('./commands/memory.js')
+    const memoryPath = opts.memoryPath as string | undefined
+    const memoryMdPath = opts.memoryMdPath as string | undefined
+    const userMdPath = opts.userMdPath as string | undefined
+    const trustRaw = opts.trustThreshold
+    const trustThreshold = typeof trustRaw === 'string' ? Number.parseFloat(trustRaw) : undefined
+    const profile = opts.profile as string | undefined
+    let code = 0
+    if (subcommand === 'sync') {
+      code = await memorySyncCommand({
+        ...(memoryPath !== undefined ? { memoryPath } : {}),
+        ...(memoryMdPath !== undefined ? { memoryMdPath } : {}),
+        ...(userMdPath !== undefined ? { userMdPath } : {}),
+        ...(trustThreshold !== undefined && Number.isFinite(trustThreshold)
+          ? { trustThreshold }
+          : {}),
+        ...(profile !== undefined ? { profile } : {}),
+      })
+    } else if (subcommand === 'show') {
+      code = await memoryShowCommand({
+        ...(memoryPath !== undefined ? { memoryPath } : {}),
+        ...(memoryMdPath !== undefined ? { memoryMdPath } : {}),
+        ...(userMdPath !== undefined ? { userMdPath } : {}),
+      })
+    } else {
+      process.stderr.write(`lumen memory: unknown subcommand: ${subcommand}\n`)
+      code = 1
+    }
+    process.exit(code)
+  })
+
+program
   .command('plan')
   .description('Inspect and manage persisted plans (list / approve / reject)')
   .argument('[subcommand]', '"list" (default), "approve <id>", or "reject <id>"', 'list')

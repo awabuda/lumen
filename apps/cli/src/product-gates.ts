@@ -61,28 +61,48 @@ export interface GateResult {
  * Hence WARN.
  */
 export const gateG_P1_openBoxUsability = async (): Promise<GateResult> => {
-  // Probe by reading the package exports — if the four middleware
-  // classes are re-exported and the composition builder exists,
-  // the building blocks are shippable even if the default-product
-  // profile is not yet chosen.
+  // P33.B Day5 (commit 1db9176) wired the assistant
+  // assembly to auto-mount `createPlanMiddleware` /
+  // `createToolPermissionMiddleware` /
+  // `createSkillTriggerMiddleware` / `createReflectionMiddleware`
+  // via `resolveCliAssembly` in composition.ts. We probe
+  // the same shape — if the four factories are re-exported
+  // from `@lumen/core` AND the resolved assistant bundle
+  // contains all four middleware names, the operator can
+  // run bare `lumen run` and get the assistant experience
+  // without any flag.
   try {
     const core = (await import('@lumen/core')) as Record<string, unknown>
+    const { resolveProductAssembly } = (await import('@lumen/config')) as {
+      resolveProductAssembly: (name: string) => {
+        middleware: ReadonlyArray<string>
+      }
+    }
     const have = (name: string): boolean => typeof core[name] === 'function'
-    const shipped = ['PlanMiddleware', 'PermissionMiddleware', 'SkillTriggerMiddleware'].every(have)
-    if (!shipped) {
+    const factoriesShipped = [
+      'createPlanMiddleware',
+      'createToolPermissionMiddleware',
+      'createSkillTriggerMiddleware',
+      'createReflectionMiddleware',
+    ].every(have)
+    const assistant = resolveProductAssembly('assistant')
+    const assistantCovers = ['plan', 'tool-permission', 'skill-trigger', 'reflection'].every(
+      (name) => assistant.middleware.includes(name),
+    )
+    if (!factoriesShipped || !assistantCovers) {
       return {
         gate: 'G-P1',
         severity: 'FAIL',
-        message: 'open-box usability: default-product profile not shipped',
+        message: `open-box usability: factories=${factoriesShipped}, assistant-covers=${assistantCovers}`,
         hint: 'see docs/OPTIMIZATION-PLAN.md §A.1',
       }
     }
     return {
       gate: 'G-P1',
-      severity: 'WARN',
+      severity: 'OK',
       message:
-        'open-box usability: middleware shipped, but plan/permission/skill flags still required today',
-      hint: 'default product profile pending P33+ composition wire',
+        'open-box usability: assistant assembly auto-mounts plan / permission / skill / reflection without any flag (P33.B Day5)',
+      hint: '',
     }
   } catch (err) {
     return {
