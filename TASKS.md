@@ -1791,6 +1791,38 @@ End-to-end smoke: `lumen run --help` lists
 `--approve-all` / `--deny-all` between
 `--approve-on` and `----permissions`.
 
+### P34.6 — `lumen team list --format json / --recursive`
+
+Phase B backlog slice (low-risk CI enhancement):
+`lumen team list` gains two flags that the existing
+`lumen team list` shape already had room for but
+shipped without.
+
+#### Commits
+
+```
+0b396db  P34.6  lumen team list --format json / --recursive
+```
+
+#### Surface
+
+```
+lumen team list [--list-dir <dir>] [--recursive] [--format <fmt>]
+  --format <fmt>   'human' (default) or 'json'.
+  --recursive      Recurse into sub-directories.
+```
+
+#### Verification
+
+```
+pnpm --filter @lumen/cli typecheck    # 0 errors
+pnpm --filter @lumen/cli test       # 385 tests, 0 fail
+pnpm exec biome check apps/cli/src apps/cli/test \
+  apps/cli/src/commands apps/cli/test  # 0 errors
+```
+
+CLI test delta: 380 → 385 (+5).
+
 ### P34.3 — Trust / Plan UX (Phase B.3 closure)
 
 Phase B.3 (OPTIMIZATION-PLAN §3 B.3) ships in P34.3:
