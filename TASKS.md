@@ -1823,6 +1823,44 @@ pnpm exec biome check apps/cli/src apps/cli/test \
 
 CLI test delta: 380 → 385 (+5).
 
+### P34.9.b — `/state` TUI slash command (Phase B backlog slice)
+
+Phase B backlog slice — pure read-only data access
+that composes the three ship-ready state surfaces
+(`Budget` P23.12 + `PlanStore` P34.3 + memory records
+P34.1) into a single user-facing slash command.
+
+#### Commits
+
+```
+8a925c4  P34.9.b  /state TUI slash command
+```
+
+#### Surface
+
+`/state` reads three sources and emits a one-line
+per source:
+
+```
+[state] budget: tokens=... cost=... time=...ms
+[state] plan: count=...
+[state] memory: total=... kind=... kind=...
+```
+
+When a surface is missing, the command emits a
+friendly one-liner instead of throwing.
+
+#### Verification
+
+```
+pnpm --filter @lumen/cli typecheck    # 0 errors
+pnpm --filter @lumen/cli test       # 391 tests, 0 fail
+pnpm exec biome check apps/cli/src apps/cli/test \
+  apps/cli/src/components apps/cli/test  # 0 errors
+```
+
+CLI test delta: 385 → 391 (+6).
+
 ### P34.3 — Trust / Plan UX (Phase B.3 closure)
 
 Phase B.3 (OPTIMIZATION-PLAN §3 B.3) ships in P34.3:
