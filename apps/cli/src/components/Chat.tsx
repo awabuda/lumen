@@ -43,6 +43,7 @@ import {
   budgetSnapshotAsAssistant,
   handleLoopSlash,
   handlePlanSlash,
+  handleStateSlash,
   handleTrustSlash,
   handleUnloopSlash,
   initProjectAsAssistant,
@@ -275,6 +276,37 @@ export function Chat({
       // (default), the store is wired by buildAgent
       // and the operator sees the plan the agent is
       // currently executing.
+      // P34.9.b — `/state` slash command. Reads three
+      // read-only state surfaces (Budget + PlanStore +
+      // memory record count) and renders a one-line
+      // snapshot per source. Useful as a lower-overhead
+      // alternative to `/cost` + `/plan` combined when
+      // the operator just wants a "what is the agent
+      // doing right now" view.
+      if (trimmed === '/state' || trimmed.startsWith('/state ')) {
+        const result = await handleStateSlash(built)
+        const assistantMsg: AssistantMessage = {
+          role: 'assistant',
+          content: result.message,
+          toolCalls: [],
+        }
+        const turn: Turn = { key: turnCounter.current + 1, user: trimmed }
+        turnCounter.current += 1
+        setTurns((prev) => [
+          ...prev,
+          turn,
+          {
+            key: turnCounter.current + 1,
+            user: '',
+            assistant: assistantMsg,
+          } satisfies Turn,
+        ])
+        turnCounter.current += 1
+        setStatus('done')
+        setStreamingText('')
+        setInput('')
+        return
+      }
       if (trimmed === '/plan' || trimmed.startsWith('/plan ')) {
         const result = await handlePlanSlash(built)
         const assistantMsg: AssistantMessage = {

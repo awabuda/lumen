@@ -454,6 +454,70 @@ export const handleTrustSlash = async (
 }
 
 /**
+ * P34.9.b (Phase B backlog slice) — `/state` slash
+ * command. Reads three read-only state surfaces from
+ * `built` (Budget + PlanStore + memory record count) and
+ * emits a one-line-per-source summary. The TUI renders
+ * the result inline so the operator gets a single
+ * "what's the agent doing right now" snapshot without
+ * running a full agent loop.
+ */
+export const handleStateSlash = async (
+  built: BuiltAgent,
+): Promise<{ readonly message: string }> => {
+  const lines: string[] = []
+  // 1. Budget snapshot (P23.12).
+  const budget = built.agent.budgetSnapshot()
+  if (budget === undefined) {
+    lines.push('[state] budget: no runs yet — execute `lumen run "<prompt>"` first')
+  } else {
+    lines.push(
+      `[state] budget: tokens=${budget.used} cost=$${budget.costUsdConsumed().toFixed(4)} time=${budget.timeMsConsumed()}ms`,
+    )
+  }
+  // 2. PlanStore snapshot (P34.3).
+  const planStore = built.planStore
+  if (planStore === undefined) {
+    lines.push(
+      '[state] plan: no plan middleware mounted — pass `--enable-plan` or use the assistant assembly',
+    )
+  } else {
+    const plans = planStore.all
+    lines.push(`[state] plan: count=${plans.length}`)
+  }
+  // 3. Memory record count (P34.1 markdown-bridge hooks
+  // this through the same SqliteStore). We cap at one
+  // call so a 10k-record store does not slow the slash
+  // command to a crawl.
+  if (built.memory === undefined) {
+    lines.push('[state] memory: no memory store configured (pass without --no-memory)')
+  } else {
+    try {
+      const records = await built.memory.search({ limit: 10_000 })
+      const kinds = new Map<string, number>()
+      for (const r of records) {
+        const k = r.record.kind
+        kinds.set(k, (kinds.get(k) ?? 0) + 1)
+      }
+      const kindSummary = [...kinds.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([k, n]) => `${k}=${n}`)
+        .join(' ')
+      lines.push(
+        kindSummary.length > 0
+          ? `[state] memory: total=${records.length} ${kindSummary}`
+          : '[state] memory: total=0 (no records yet)',
+      )
+    } catch (err) {
+      lines.push(
+        `[state] memory: read failed (${err instanceof Error ? err.message : String(err)})`,
+      )
+    }
+  }
+  return { message: lines.join('\n') }
+}
+
+/**
  * P34.3 (Phase B.3) — `/plan` slash command. Reads
  * the live `PlanStore` the composition root threads
  * through `built`. When the plan middleware is not
