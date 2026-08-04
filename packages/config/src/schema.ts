@@ -130,6 +130,21 @@ export const LumenConfigSchema = z
     // can declare them in their YAML without surprises.
     profiles: z.record(z.record(z.unknown())).optional(),
     defaultProfile: z.string().min(1).optional(),
+    // P33.B Day4 — product slice. Pins a named
+    // ProductAssembly (one of the built-in `assistant` /
+    // `bare` keys, or a custom string the composition root
+    // maps to middleware). Without this slice the
+    // composition root falls back to the profile-derived
+    // default (assistant for the `default` profile, bare
+    // for the `bare` profile). Per P19+ rule 11, this is
+    // NOT an `enablePlan` / `enableReflection` boolean —
+    // it is a named bundle (ProductAssembly).
+    product: z
+      .object({
+        assembly: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
 

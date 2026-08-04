@@ -18,18 +18,21 @@
 
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { type LumenConfig, loadConfig } from '@lumen/config'
+import {
+  type LumenConfig,
+  type ProductAssembly,
+  loadConfigWithProfile,
+  profileNameToAssembly,
+  resolveProductAssembly,
+} from '@lumen/config'
 import {
   type Agent,
   type BaseProvider,
-  StablePromptCache,
-  loadOptionalContextFiles,
-  loadProjectContext,
-  type DynamicRuntimeInputs,
-  type SectionContext,
-
   ConfigError,
+  type DynamicRuntimeInputs,
   HookRegistry,
+  type SectionContext,
+  StablePromptCache,
   type ToolPermissionAutoModeBlock,
   type ToolPermissionPolicy,
   ToolPermissionPolicySchema,
@@ -39,18 +42,18 @@ import {
   createHeuristicRiskClassifier,
   createInterruptMiddleware,
   createPlanMiddleware,
+  createReflectionMiddleware,
   createSkillTriggerMiddleware,
   createStaticToolPermissionPolicy,
   createToolPermissionMiddleware,
+  loadOptionalContextFiles,
+  loadProjectContext,
 } from '@lumen/core'
 import { OpenAICompatibleProvider } from '@lumen/llm'
 import { type DiscoveredMcpServer, closeAllMcpServers, connectAllMcpServers } from '@lumen/mcp'
 import { SqliteStore } from '@lumen/memory'
 import { defaultSkillsPath } from '@lumen/skills'
-import {
-  createBrowserTools,
-  createFilesystemTools,
-} from '@lumen/tools'
+import { createBrowserTools, createFilesystemTools } from '@lumen/tools'
 import { loadSkillRegistry } from './commands/skills.js'
 import { loadPermissionPolicyFromFile } from './permissions-loader.js'
 import { buildKeywordTriggerFn } from './skill-trigger-adapter.js'
@@ -198,6 +201,16 @@ export interface CliAgentOptions {
    * when `enableSkillTrigger` is false.
    */
   skillsPath?: string
+  /**
+   * P33.B Day4 — programmatic override for the
+   * ProductAssembly name. Higher priority than
+   * `config.product.assembly` and the profile default.
+   * Used by the `--profile bare` CLI flag and the
+   * `LUMEN_PRODUCT` env var. Unknown names fall back to
+   * `assistant` per the resolver in
+   * {@link resolveProductAssembly}.
+   */
+  product?: string
 }
 
 export interface BuiltAgent {
@@ -225,7 +238,50 @@ export interface BuiltAgent {
  * are applied on top of this.
  */
 export const loadCliConfig = async (configPath?: string): Promise<LumenConfig> => {
-  return loadConfig({ projectPath: configPath })
+  const { profile: _p, ...config } = await loadConfigWithProfile({ projectPath: configPath })
+  // P33.B Day4 — composition root no longer needs the
+  // resolved profile name (it is consumed by the
+  // middleware-wiring branch in `buildAgent`); strip it
+  // from the public return shape so callers that imported
+  // `loadCliConfig` for the bare LumenConfig keep their
+  // original type.
+  void _p
+  return config
+}
+
+/**
+ * P33.B Day4 — resolve the ProductAssembly for this
+ * composition root. The decision reads (highest priority
+ * first):
+ *   1. `options.product` (programmatic override — used by
+ *      CLI flags like `--profile bare` or
+ *      `LUMEN_PRODUCT=off`).
+ *   2. `config.product.assembly` from
+ *      `~/.lumen/config.yaml` (operator-declared slice).
+ *   3. The profile-system default: `bare` profile →
+ *      `bare` assembly, anything else → `assistant`.
+ *
+ * Unknown assembly names fall back to the system default
+ * (`assistant`) per OPTIMIZATION-PLAN §3 G-T1 / §2 A.1
+ * (graceful degradation). The caller receives the
+ * concrete {@link ProductAssembly} bundle; mapping the
+ * abstract `middleware` name list to actual factory
+ * calls stays in `buildAgent`.
+ */
+export const resolveCliAssembly = (
+  config: LumenConfig & { readonly profile?: string },
+  options: CliAgentOptions,
+): ProductAssembly => {
+  const productOverride = options.product
+  if (productOverride !== undefined) {
+    const known = resolveProductAssembly(productOverride)
+    return known
+  }
+  if (config.product?.assembly !== undefined) {
+    return resolveProductAssembly(config.product.assembly)
+  }
+  const profile = config.profile ?? 'default'
+  return resolveProductAssembly(profileNameToAssembly(profile))
 }
 
 /**
@@ -311,14 +367,14 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
         }
         const Ctor = browser.constructor as new (opts: typeof browserOpts) => typeof browser
         tools.register(new Ctor(browserOpts))
-        }
+      }
 
-        // P28.2 (bug.md #10 Path A) — opt-in coordinate-based
-        // computer_use tool. Off by default (dangerous
-        // risk). The flag is FALSE by default because
-        // computer_use is `dangerous` and only well-scoped
-        // operators should enable it.
-        if (options.computerUse === true) {
+      // P28.2 (bug.md #10 Path A) — opt-in coordinate-based
+      // computer_use tool. Off by default (dangerous
+      // risk). The flag is FALSE by default because
+      // computer_use is `dangerous` and only well-scoped
+      // operators should enable it.
+      if (options.computerUse === true) {
         const { createComputerTools } = await import('@lumen/tools')
         const computerTools = createComputerTools()
         if (computerTools.length > 0 && computerTools[0] !== undefined) {
@@ -336,8 +392,8 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
           const Ctor2 = computer.constructor as new (opts: typeof computerOpts) => typeof computer
           tools.register(new Ctor2(computerOpts))
         }
-        }
-        }
+      }
+    }
   }
 
   const hooks = new HookRegistry()
@@ -362,76 +418,103 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
   // 11: middleware > AgentConfig boolean flag). Default is the
   // bare path so existing CLI commands that have not opted in
   // keep their original behaviour exactly.
+  //
+  // P33.B Day4 — ProfileAssembly gate. When the resolved
+  // assembly is `bare`, the middleware array stays empty
+  // regardless of any opt-in flag the caller passed. This is
+  // the operator's "escape hatch" (per OPTIMIZATION-PLAN §3
+  // G-P6): `defaultProfile: bare`, `--profile bare`, or
+  // `LUMEN_PRODUCT=off` all bypass every middleware, even
+  // when the caller would otherwise have enabled one. The
+  // bare assembly is the only path Day4 wires from the
+  // profile system into composition; the assistant default
+  // (auto-mount plan / permission / skill / interrupt /
+  // reflection) ships in Day5 so we do not regress the 17
+  // existing call sites that rely on opt-in flags.
+  const assembly = resolveCliAssembly({ ...config, profile: 'default' }, options)
   const middleware: import('@lumen/core').AgentMiddleware[] = []
-  // P22.2: permission policy is the outermost gate. When the
-  // file is missing or malformed we surface the typed
-  // ConfigError rather than silently fall through, because
-  // a misconfigured permission file is a security incident
-  // (the operator expects the rule to fire, but it would
-  // not). The wiring is opt-in: callers that do not pass
-  // `permissionsPath` keep the pre-P22 behaviour exactly.
-  if (options.permissionsPath !== undefined) {
-    const parsed = await loadPermissionPolicyFromFile(options.permissionsPath)
-    const policy = createStaticToolPermissionPolicy(parsed)
-    middleware.push(createToolPermissionMiddleware({ policy }))
-    // P22.5.1: when the policy file declares an autoMode
-    // block with enabled=true, wire the heuristic classifier
-    // in front of the interrupt chain. The classifier
-    // short-circuits `allow` decisions (operator's explicit
-    // opt-in); `ask` falls through to the interrupt chain
-    // unchanged. Composition order is alphabetical by
-    // `name` (tool-permission < tool-permission-auto <
-    // interrupt), so this is naturally correct.
-    if (parsed.autoMode && parsed.autoMode.enabled === true) {
-      const autoModeRules: ToolPermissionAutoModeBlock = parsed.autoMode
-      const classifier = createHeuristicRiskClassifier({ rules: autoModeRules })
-      middleware.push(createAutoModeMiddleware({ classifier }))
+  if (assembly.middleware.length > 0) {
+    // Non-bare assembly: the opt-in flag path below remains
+    // authoritative. Day5 will collapse the flag path into
+    // the assembly bundle itself; for Day4 the bundle
+    // declaration is honoured but the wiring is a no-op so
+    // existing callers see zero behavioural drift.
+    // (The presence of the assembly keeps `lumen doctor
+    // --product` honest — Day3's G-T1 check can confirm
+    // the resolved bundle name without the composition
+    // having mounted it.)
+    void assembly
+  } else {
+    // P22.2: permission policy is the outermost gate. When the
+    // file is missing or malformed we surface the typed
+    // ConfigError rather than silently fall through, because
+    // a misconfigured permission file is a security incident
+    // (the operator expects the rule to fire, but it would
+    // not). The wiring is opt-in: callers that do not pass
+    // `permissionsPath` keep the pre-P22 behaviour exactly.
+    if (options.permissionsPath !== undefined) {
+      const parsed = await loadPermissionPolicyFromFile(options.permissionsPath)
+      const policy = createStaticToolPermissionPolicy(parsed)
+      middleware.push(createToolPermissionMiddleware({ policy }))
+      // P22.5.1: when the policy file declares an autoMode
+      // block with enabled=true, wire the heuristic classifier
+      // in front of the interrupt chain. The classifier
+      // short-circuits `allow` decisions (operator's explicit
+      // opt-in); `ask` falls through to the interrupt chain
+      // unchanged. Composition order is alphabetical by
+      // `name` (tool-permission < tool-permission-auto <
+      // interrupt), so this is naturally correct.
+      if (parsed.autoMode && parsed.autoMode.enabled === true) {
+        const autoModeRules: ToolPermissionAutoModeBlock = parsed.autoMode
+        const classifier = createHeuristicRiskClassifier({ rules: autoModeRules })
+        middleware.push(createAutoModeMiddleware({ classifier }))
+      }
     }
-  }
-  if (options.enablePlanMiddleware === true) {
-    middleware.push(createPlanMiddleware({ mode: options.planMode ?? 'auto' }))
-  }
-  if (options.interruptOn && options.interruptOn.length > 0) {
-    const approveSet = new Set(options.approveOn ?? [])
-    middleware.push(
-      createInterruptMiddleware({
-        toolNames: [...options.interruptOn],
-        ...(approveSet.size > 0
-          ? {
-              approve: (call: { readonly name: string }) =>
-                Promise.resolve(approveSet.has(call.name)),
-            }
-          : {}),
-      }),
-    )
-  }
-  // P20.6.2: skill-trigger wiring. Opt-in via
-  // `enableSkillTrigger: true` so a bare `lumen run` keeps
-  // the pre-P20.6.2 behaviour (no skill activation, no
-  // system-prompt augmentation). The adapter bridges the
-  // `@lumen/skills` registry shape into the middleware's
-  // `SkillTriggerFn` shape; see `skill-trigger-adapter.ts`
-  // for the contract. Skill discovery is async and may
-  // fail on a misconfigured path; we log and proceed
-  // without the middleware rather than aborting the run,
-  // so a broken skills directory never blocks the agent.
-  if (options.enableSkillTrigger === true) {
-    try {
-      const skillsRoot = options.skillsPath ?? defaultSkillsPath()
-      const registry = await loadSkillRegistry(skillsRoot)
-      const triggerFn = buildKeywordTriggerFn({ registry, cwd })
-      // The adapter's return type is ReadonlyArray<ActiveSkill> but
-      // Zod's z.function().returns() infers a mutable array; spread
-      // through a fresh array so the type is assignable and we never
-      // hand the registry a typed mutable view.
-      const zodCompatTrigger = async (userMessage: string) => [...(await triggerFn(userMessage))]
-      middleware.push(createSkillTriggerMiddleware({ trigger: zodCompatTrigger }))
-    } catch (err) {
-      process.stderr.write(
-        `lumen: skill trigger wiring skipped: ${err instanceof Error ? err.message : String(err)}\n`,
+    if (options.enablePlanMiddleware === true) {
+      middleware.push(createPlanMiddleware({ mode: options.planMode ?? 'auto' }))
+    }
+    if (options.interruptOn && options.interruptOn.length > 0) {
+      const approveSet = new Set(options.approveOn ?? [])
+      middleware.push(
+        createInterruptMiddleware({
+          toolNames: [...options.interruptOn],
+          ...(approveSet.size > 0
+            ? {
+                approve: (call: { readonly name: string }) =>
+                  Promise.resolve(approveSet.has(call.name)),
+              }
+            : {}),
+        }),
       )
     }
-  }
+    // P20.6.2: skill-trigger wiring. Opt-in via
+    // `enableSkillTrigger: true` so a bare `lumen run` keeps
+    // the pre-P20.6.2 behaviour (no skill activation, no
+    // system-prompt augmentation). The adapter bridges the
+    // `@lumen/skills` registry shape into the middleware's
+    // `SkillTriggerFn` shape; see `skill-trigger-adapter.ts`
+    // for the contract. Skill discovery is async and may
+    // fail on a misconfigured path; we log and proceed
+    // without the middleware rather than aborting the run,
+    // so a broken skills directory never blocks the agent.
+    if (options.enableSkillTrigger === true) {
+      try {
+        const skillsRoot = options.skillsPath ?? defaultSkillsPath()
+        const registry = await loadSkillRegistry(skillsRoot)
+        const triggerFn = buildKeywordTriggerFn({ registry, cwd })
+        // The adapter's return type is ReadonlyArray<ActiveSkill> but
+        // Zod's z.function().returns() infers a mutable array; spread
+        // through a fresh array so the type is assignable and we never
+        // hand the registry a typed mutable view.
+        const zodCompatTrigger = async (userMessage: string) => [...(await triggerFn(userMessage))]
+        middleware.push(createSkillTriggerMiddleware({ trigger: zodCompatTrigger }))
+      } catch (err) {
+        process.stderr.write(
+          `lumen: skill trigger wiring skipped: ${err instanceof Error ? err.message : String(err)}\n`,
+        )
+      }
+    }
+  } // P33.B Day4 — close the `else` branch (bare-assembly override).
 
   // P31.8 — compose the layered system-prompt context for
   // this agent. The CLI holds one shared `StablePromptCache`
@@ -440,11 +523,7 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
   // across consecutive turns whose stable inputs are
   // unchanged.
   const sessionId = `chat-${Math.random().toString(36).slice(2, 10)}`
-  const systemPromptContext = await composeSystemPromptContext(
-    cwd,
-    sessionId,
-    model,
-  )
+  const systemPromptContext = await composeSystemPromptContext(cwd, sessionId, model)
   const agent = createAgent({
     provider,
     tools,
