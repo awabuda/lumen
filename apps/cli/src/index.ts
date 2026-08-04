@@ -303,6 +303,61 @@ program
   })
 
 program
+  .command('gateway')
+  .description('Run the agent over HTTP + WebSocket (Phase B.4 long-lived daemon)')
+  .argument('[subcommand]', '"start" (default), "stop", or "status"', 'start')
+  .option('--port <n>', 'Port to listen on (0 picks a random free port)', '0')
+  .option('--host <h>', 'Host to bind (default 127.0.0.1 — loopback only)', '127.0.0.1')
+  .option('--path-prefix <path>', 'Path prefix for all routes', '/v1')
+  .action(async (subcommand: string, opts: Record<string, unknown>) => {
+    const { gatewayStartCommand, gatewayStopCommand, gatewayStatusCommand } = await import(
+      './commands/gateway.js'
+    )
+    const portRaw = opts.port
+    const port = typeof portRaw === 'string' ? Number.parseInt(portRaw, 10) : 0
+    const host = opts.host as string | undefined
+    const pathPrefix = opts.pathPrefix as string | undefined
+    const baseOpts = {
+      ...(port > 0 ? { port } : {}),
+      ...(host !== undefined ? { host } : {}),
+      ...(pathPrefix !== undefined ? { pathPrefix } : {}),
+    }
+    let code = 0
+    if (subcommand === 'start') {
+      const handle = await gatewayStartCommand(baseOpts)
+      // SIGINT/SIGTERM -> graceful shutdown. The
+      // operator Ctrl+C's the foreground process; the
+      // stop() function closes the server + the
+      // SqliteStore.
+      const onSignal = async (sig: string): Promise<void> => {
+        process.stderr.write(`lumen gateway: caught ${sig}, shutting down\n`)
+        try {
+          await handle.stop()
+        } catch (err) {
+          process.stderr.write(
+            `lumen gateway: shutdown error: ${err instanceof Error ? err.message : String(err)}\n`,
+          )
+        }
+        process.exit(0)
+      }
+      process.on('SIGINT', () => {
+        void onSignal('SIGINT')
+      })
+      process.on('SIGTERM', () => {
+        void onSignal('SIGTERM')
+      })
+    } else if (subcommand === 'stop') {
+      code = await gatewayStopCommand()
+    } else if (subcommand === 'status') {
+      code = await gatewayStatusCommand(baseOpts)
+    } else {
+      process.stderr.write(`lumen gateway: unknown subcommand: ${subcommand}\n`)
+      code = 1
+    }
+    if (subcommand !== 'start') process.exit(code)
+  })
+
+program
   .command('plan')
   .description('Inspect and manage persisted plans (list / approve / reject)')
   .argument('[subcommand]', '"list" (default), "approve <id>", or "reject <id>"', 'list')

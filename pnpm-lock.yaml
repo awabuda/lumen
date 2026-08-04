@@ -38,6 +38,9 @@ importers:
       '@lumen/memory':
         specifier: workspace:*
         version: link:../../packages/memory
+      '@lumen/server':
+        specifier: workspace:*
+        version: link:../../packages/server
       '@lumen/skills':
         specifier: workspace:*
         version: link:../../packages/skills

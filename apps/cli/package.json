@@ -33,6 +33,7 @@
     "@lumen/llm": "workspace:*",
     "@lumen/mcp": "workspace:*",
     "@lumen/memory": "workspace:*",
+    "@lumen/server": "workspace:*",
     "@lumen/skills": "workspace:*",
     "@lumen/tools": "workspace:*",
     "better-sqlite3": "^11.3.0",
