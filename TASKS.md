@@ -1632,12 +1632,82 @@ bridge composition tests).
 
 #### Backlog (Phase B continued)
 
-- **B.3** — Trust / Plan UX (TUI panel + `lumen plan list`
-  printed after each chat; `/trust` slash).
 - **B.4** — Minimum Gateway (`lumen gateway start`,
   long-lived Node process reusing composition).
 - **B.5** — Approval + checkpoint UX (TUI approval event
   channel + `lumen checkpoint restore`).
+
+### P34.3 — Trust / Plan UX (Phase B.3 closure)
+
+Phase B.3 (OPTIMIZATION-PLAN §3 B.3) ships in P34.3:
+two TUI slash commands (`/trust` + `/plan`) that
+surface the memory trust distribution and the live
+PlanStore state to the operator. Per CLAUDE.md
+"`stop` = hard halt" rule, the previous turn's
+"stop" signal was a checkpoint report; this commit
+answers the user's "继续开发完成不要停" by closing
+Phase B.3 without further manual ack.
+
+#### Commits
+
+```
+0800375  P34.3  /trust + /plan TUI slash commands + PlanStore exposure
+```
+
+#### Surface
+
+```
+apps/cli/src/components/trust-plan-snapshot.ts   # pure-data
+  aggregateTrustByKind / formatTrustSnapshot /
+  formatPlanLine / formatPlanSnapshot
+
+apps/cli/src/components/slash-commands.ts      # handlers
+  handleTrustSlash(built)    — reads built.memory
+  handlePlanSlash(built)      — reads built.planStore
+
+apps/cli/src/components/Chat.tsx               # TUI wire
+  /trust + /plan branch in submit() (same shape
+  as /cost, /loop, /sessions, /init).
+
+apps/cli/src/composition.ts                    # composition
+  BuiltAgent gains planStore?: PlanStore. Every
+  PlanMiddleware mount gets a fresh PlanStore.
+```
+
+#### Key decisions
+
+1. **Pure data helpers** (`trust-plan-snapshot.ts`)
+   test in isolation (no TUI mount, no SqliteStore).
+   Future `lumen doctor --product` probes and
+   command-line operators reuse the same formatter
+   without dragging in Ink.
+2. **Defensive trust range filter.** Aggregator drops
+   `trust < 0 || trust > 1` so a hand-edited md bridge
+   round-trip cannot poison the per-kind stats.
+3. **`/plan` reads the live in-memory `PlanStore`.**
+   The CLI composition root creates one per
+   `buildAgent` call; future work persists to
+   SqliteStore (P34.3.x).
+4. **No LLM call.** Both `/trust` and `/plan` are
+   one-line pure-data reads — the operator never
+   waits on the model.
+
+#### Verification
+
+```
+pnpm --filter @lumen/cli typecheck            # 0 errors
+pnpm --filter @lumen/cli test               # 371 tests, 0 fail
+pnpm exec biome check apps/cli/src apps/cli/test \
+  apps/cli/src/components apps/cli/test      # 0 errors
+```
+
+End-to-end smoke:
+  /trust (4 records across 3 kinds) →
+    `[trust] total=4 kinds=3`
+  /plan (1 saved plan) →
+    `[plan] count=1\n  p-1: Ship P34.3  steps=2`
+
+CLI test delta: 362 → 371 (+9).
 
 ### P34.2 — Skill auto-evolution (Phase B.2 closure)
 
