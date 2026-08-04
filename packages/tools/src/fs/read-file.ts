@@ -20,6 +20,7 @@ import path from 'node:path'
 import { BaseTool, type ToolContext, type ToolDescriptor, type ToolRisk } from '@lumen/core'
 import { z } from 'zod'
 import { FileNotFoundError } from '../errors.js'
+import { resolveSafePath } from './workspace-guard.js'
 
 /** Zod schema for the tool's input. */
 export const ReadFileInputSchema = z.object({
@@ -66,7 +67,13 @@ export class ReadFileTool extends BaseTool {
 
   protected async execute(input: unknown, ctx: ToolContext): Promise<ReadFileOutput> {
     const { path: userPath, offset, limit } = input as ReadFileInput
-    const absPath = path.resolve(ctx.cwd, userPath)
+    // P33.B Day2 — workspace-root path-guard. Resolves the
+    // user-supplied path against `ctx.cwd`, then verifies
+    // the result is inside the workspace root before any
+    // filesystem I/O. Throws a typed `ConfigError` on
+    // traversal; the agent's per-tool error handler
+    // attributes the failure to the `path` field.
+    const absPath = await resolveSafePath(userPath, ctx.cwd, ctx.workspaceRoot)
     const startLine = offset ?? 1
     const maxLines = limit ?? DEFAULT_LIMIT
 

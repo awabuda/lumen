@@ -31,6 +31,18 @@ export type ToolRisk = 'safe' | 'approval-required' | 'dangerous'
 export interface ToolContext {
   /** Current working directory (set by the CLI / composition root). */
   readonly cwd: string
+  /**
+   * P33.B Day2 — workspace root for cross-tool path-guard. The
+   * FS tools (`read_file` / `write_file` / `patch` / `list_dir`
+   * / `search_files`) verify every `path` argument is either
+   * the workspace root or a strict descendant; the shell
+   * sandbox has a parallel guard on `request.cwd`. The field
+   * is optional so legacy callers can omit it (the
+   * workspace-guard throws a typed `ConfigError` when the
+   * field is missing AND a tool attempts the cross-tool
+   * path-guard). Composition roots should always set it.
+   */
+  readonly workspaceRoot?: string
   /** Abort signal — tools should check this in long-running loops. */
   readonly signal: AbortSignal
   /** Conversation session id. */

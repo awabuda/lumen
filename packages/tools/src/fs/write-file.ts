@@ -14,6 +14,7 @@ import * as fs from 'node:fs/promises'
 import path from 'node:path'
 import { AbortError, BaseTool, type ToolContext, type ToolDescriptor } from '@lumen/core'
 import { z } from 'zod'
+import { resolveSafePath } from './workspace-guard.js'
 
 /** Zod schema for the tool's input. */
 export const WriteFileInputSchema = z.object({
@@ -88,7 +89,7 @@ export class WriteFileTool extends BaseTool {
 
   protected async execute(input: unknown, ctx: ToolContext): Promise<WriteFileOutput> {
     const { path: userPath, content, atomic } = input as WriteFileInput
-    const absPath = path.resolve(ctx.cwd, userPath)
+    const absPath = await resolveSafePath(userPath, ctx.cwd, ctx.workspaceRoot)
     const useAtomic = atomic ?? true
 
     if (useAtomic) {

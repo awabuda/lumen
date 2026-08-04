@@ -23,6 +23,7 @@ import {
 } from '@lumen/core'
 import { z } from 'zod'
 import { atomicWriteFile } from './write-file.js'
+import { resolveSafePath } from './workspace-guard.js'
 
 /** Zod schema for the tool's input. */
 export const PatchInputSchema = z.object({
@@ -146,7 +147,7 @@ export class PatchTool extends BaseTool {
 
   protected async execute(input: unknown, ctx: ToolContext): Promise<PatchOutput> {
     const { path: userPath, oldString, newString, replaceAll } = input as PatchInput
-    const absPath = path.resolve(ctx.cwd, userPath)
+    const absPath = await resolveSafePath(userPath, ctx.cwd, ctx.workspaceRoot)
     const original = await fs.readFile(absPath, 'utf8')
 
     // First pass: exact substring match.

@@ -19,7 +19,7 @@ let ctx: ToolContext
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lumen-tools-write-'))
-  ctx = { cwd: tmpDir, signal: new AbortController().signal, sessionId: 'test' }
+  ctx = { cwd: tmpDir, workspaceRoot: tmpDir, signal: new AbortController().signal, sessionId: 'test' }
 })
 
 afterEach(async () => {

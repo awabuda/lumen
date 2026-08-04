@@ -12,6 +12,7 @@ import path from 'node:path'
 import { AbortError, BaseTool, type ToolContext, type ToolDescriptor } from '@lumen/core'
 import { z } from 'zod'
 import { PathKindError } from '../errors.js'
+import { resolveSafePath } from './workspace-guard.js'
 
 /** Zod schema for the tool's input. */
 export const ListDirInputSchema = z.object({
@@ -62,7 +63,7 @@ export class ListDirTool extends BaseTool {
 
   protected async execute(input: unknown, ctx: ToolContext): Promise<ListDirOutput> {
     const { path: userPath, recursive, maxDepth } = input as ListDirInput
-    const absPath = path.resolve(ctx.cwd, userPath)
+    const absPath = await resolveSafePath(userPath, ctx.cwd, ctx.workspaceRoot)
     const depthLimit = maxDepth ?? DEFAULT_MAX_DEPTH
     const entries: ListDirEntry[] = []
     await walk(absPath, absPath, recursive === true, depthLimit, 0, entries, ctx.signal)
