@@ -56,6 +56,7 @@ import {
 } from './middleware.js'
 import { appendDynamic } from './system-prompt-boundary.js'
 import { type SectionContext, buildSystemPrompt } from './system-prompt-sections.js'
+import { StablePromptCache, type StableCacheKey, hashStableCacheKey } from './system-prompt-cache.js'
 
 export interface AgentConfig {
   /** The LLM provider to call. Required. */
@@ -87,6 +88,24 @@ export interface AgentConfig {
    * `systemPrompt` string remains for legacy callers.
    */
   readonly systemPromptContext?: SectionContext
+  /**
+   * P31.6C — optional cache for the layered system prompt.
+   * When set, the Agent routes the `systemPromptContext`
+   * render through `cache.readThrough(stableKey, render)`
+   * so two consecutive Agent constructions on the same
+   * stable inputs (cwd / profile / layer bodies) skip the
+   * re-render entirely. The cache key never includes
+   * runtime / middleware dynamic chunks — those are
+   * re-emitted per turn via P31.6B's `appendDynamicChunk`
+   * path.
+   *
+   * Operators that need cross-turn dedup (e.g. interactive
+   * `lumen chat` that creates a fresh Agent per session
+   * but wants to amortise the layered prompt render)
+   * should construct one cache and share it across all
+   * Agents. The default is `undefined` (no cache).
+   */
+  readonly systemPromptCache?: StablePromptCache
   /** Working directory (passed to tools via ToolContext). */
   readonly cwd?: string
   /** Logger. Defaults to a no-op ConsoleLogger. */
@@ -363,7 +382,35 @@ export class Agent {
       )
     }
     if (hasContextPrompt) {
-      this.systemPrompt = buildSystemPrompt(config.systemPromptContext!)
+      // P31.6C — when a cache is supplied, route the
+      // render through it so two Agents with the same
+      // stable inputs share the rendered string. The
+      // cache key is built from the stable subset of the
+      // SectionContext (cwd / profile / layer bodies);
+      // runtime fields are intentionally absent from
+      // the key per StableCacheKey's closed shape.
+      const ctx = config.systemPromptContext!
+      const stableKey: StableCacheKey = {
+        cwd: ctx.runtime.cwd,
+        profile: {
+          persona: ctx.profile.persona === true,
+          bootstrap: ctx.profile.bootstrap === true,
+          skillsIndex: ctx.profile.skillsIndex === true,
+          memorySnapshot: ctx.profile.memorySnapshot === true,
+        },
+        kernelIdentityOverride: ctx.kernelIdentityOverride,
+        projectText: ctx.projectText,
+        personaText: ctx.personaText,
+        guidanceText: ctx.guidanceText,
+        skillsIndexText: ctx.skillsIndexText,
+        bootstrapText: ctx.bootstrapText,
+        memorySnapshotText: ctx.memorySnapshotText,
+      }
+      const cache = config.systemPromptCache
+      this.systemPrompt =
+        cache !== undefined
+          ? cache.readThrough(stableKey, () => buildSystemPrompt(ctx))
+          : buildSystemPrompt(ctx)
     } else {
       this.systemPrompt = config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT
     }
