@@ -10,6 +10,102 @@ Test counts are point-in-time totals across the monorepo. The pre-1.0 series
 (`0.x.y`) does not promise API stability; breaking changes are recorded as
 **Changed** entries with a note about the migration path.
 
+## [Unreleased] — P31 system prompt layering + cache boundary
+
+> **The P31 sweep is complete (12 implementation + design lock
+> commits).** All sections of the P31 design doc
+> (`docs/P31-SYSTEM-PROMPT-DESIGN.md` §1.0 / §1.2 / §1.3 / §1.5 /
+> §1.7 / §1.8 / §1.9 / §1.10) have shipped surface behind them
+> and the CLI composition root exercises the surface end-to-end.
+
+What ships in this Unreleased segment:
+
+- **P31.1** — system-prompt cache boundary primitive
+  (`SYSTEM_PROMPT_CACHE_BOUNDARY` marker, `splitByBoundary`,
+  `joinWithBoundary`, `appendDynamic`, `ensureSystemPromptCacheBoundary`).
+  OpenClaw-style marker protocol that anchors the rest of the
+  P31 redesign. (commit `65f3d2d`)
+- **P31.2** — `PromptAssembler` + layered builders + budget.
+  Canonical `buildSystemPrompt(ctx)` entry point with K0 / P1
+  / P2 / G1 / G2 / B1 / M1 sections, per-layer truncation
+  (kernel=1500, P1=12000 tail-trunc, P2=8000 per-file even
+  split, G1=4000, G2=3000, B1=4000, MEMORY=6000 head-preferred,
+  D1=2000, D2=8000). Kernel identity may be overridden via
+  `ctx.kernelIdentityOverride` while the safety contract is
+  locked. (commit `590b097`)
+- **P31.3** — project + context-file loaders. `loadProjectContext`
+  walks upward from cwd to git root for AGENTS.md / CLAUDE.md
+  (P1), with `~/.lumen/` fallback. `loadOptionalContextFiles`
+  loads profile-gated SOUL/IDENTITY/USER (P2) + BOOTSTRAP (B1)
+  + MEMORY (M1). (commit `711d770`)
+- **P31.4** — LRU stable-prefix cache. `StablePromptCache` is
+  a 64-slot LRU keyed on SHA-256 of the stable subset of
+  `SectionContext` (cwd / profile / layer bodies); never indexes
+  runtime or middleware dynamic chunks per design doc §1.9.
+  (commit `d467bd6`)
+- **P31.5** — Anthropic marker-aware system blocks. The
+  `anthropic.ts` provider splits the merged prompt at the
+  boundary marker and emits a two-block `system` field with
+  `cache_control: { type: 'ephemeral' }` on the stable prefix
+  so Anthropic caches the stable prefix across requests. The
+  dynamic suffix stays a plain text block (per-turn ephemeral).
+  (commit `4da7999`)
+- **P31.6** — `AgentConfig.systemPromptContext` integration.
+  When set, the Agent calls `buildSystemPrompt(ctx)` at
+  construction time and stores the rendered string. The bare
+  `systemPrompt` string remains for legacy callers; the two
+  are mutually exclusive (passing both throws a typed
+  `ValidationError`). (commit `b086fe4`)
+- **P31.6B** — Skill / Plan middleware migrate to
+  `appendDynamicChunk`. R3 enforcement: middleware (Skill /
+  Plan today, Reflection tomorrow) writes to the dynamic suffix
+  of the system prompt via the explicit `appendDynamicChunk`
+  surface exposed on `MiddlewareContext`. The Agent's
+  per-iteration `executeLoop` collects the chunks and splices
+  them into the head system message via `appendDynamic` so
+  the chunks land strictly post-marker (preserving Anthropic
+  prefix-cache hits) and never create a standalone
+  `{role: 'system'}` message. (commit `8001031`)
+- **P31.6C** — `AgentConfig.systemPromptCache` integration.
+  When set, the constructor routes the `systemPromptContext`
+  render through `cache.readThrough(stableKey, render)` so
+  two consecutive Agent constructions on the same stable
+  inputs (cwd / profile / layer bodies) share the rendered
+  string instead of re-running the assembler. The cache key
+  never includes runtime / middleware dynamic chunks (per
+  StableCacheKey's closed shape). (commit `1211f9d`)
+- **P31.7** — init templates for AGENTS.md + TOOLS.md walk-up
+  surface. `lumen init --with-context` writes a starter
+  `<cwd>/.lumen/` directory containing `AGENTS.md` (P1) and
+  `TOOLS.md` (G1). The TOOLS template carries the §1.10
+  disclaimer verbatim: "Prompt is descriptive, runtime is
+  authoritative". (commit `781a01f`)
+- **P31.8** — composition-root wiring. `apps/cli/src/composition.ts`
+  now actually threads a populated `SectionContext` and a
+  shared `StablePromptCache` into `createAgent(...)`, so the
+  P31 layered-prompt + cache surface shipped by P31.6 / P31.6C
+  is no longer orphaned at the agent construction site. The
+  CLI holds one shared `StablePromptCache` per process so
+  `lumen chat` amortises the layered prompt render across
+  consecutive turns whose stable inputs are unchanged.
+  (commit `ecdf79d`)
+
+Wire shape changes (semVer implications):
+
+- The `[role: 'system']` prepending pattern that the pre-P31.6B
+  Skill / Plan middleware used is gone. Any caller that built
+  message arrays with that pattern must migrate to
+  `ctx.appendDynamicChunk(chunk)` (R3). Reflection middleware
+  (P19.0.4) is the next consumer to migrate; the surface is
+  ready.
+- `systemPromptContext` is mutually exclusive with `systemPrompt`.
+  Operator-visible config (`lumen init` / `~/.lumen/config.yaml`)
+  is unaffected; the new field is internal to composition roots.
+
+Tests: 1149 pass across `@lumen/cli` (341) + `@lumen/core`
+(654) + `@lumen/llm` (154). typecheck clean. biome 0 net drift
+on touched files.
+
 ## [0.18.0] — 2026-08-03 — P32 lumen chat persistence + P33.A product-gate diagnostic
 
 > **Mixed bookkeeping.** The P32 series (7 commits across

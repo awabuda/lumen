@@ -1379,3 +1379,116 @@ ee3ac82 feat(cli): P33.A — lumen doctor --product G-P1..G-P6 product-gate runn
 ```
 
 Working tree clean, ready for `git push` (when user triggers).
+
+---
+
+## P31 — System prompt layering + cache boundary sweep (2026-08-04)
+
+> **Sweep complete.** 12 commits ship on `main` covering
+> every section of `docs/P31-SYSTEM-PROMPT-DESIGN.md`. The
+> P31 redesign (P31.1 → P31.8 + design lock) replaces the
+> pre-P31 single-string system prompt with a layered
+> boundary-aware system that supports Anthropic prompt
+> caching, profile-gated context files, and an LRU stable
+> cache. R3 (no `prepend role: 'system'` from middleware)
+> is enforced end-to-end.
+
+### Commits ship (chronological)
+
+```
+65f3d2d  P31.1  boundary primitive
+590b097  P31.2  PromptAssembler + sections + budget
+711d770  P31.3  project + context-file loaders
+d467bd6  P31.4  LRU stable-prefix cache
+4da7999  P31.5  Anthropic marker-aware system blocks
+b086fe4  P31.6  Agent accepts SectionContext
+8001031  P31.6B Skill / Plan → appendDynamicChunk (R3)
+1211f9d  P31.6C systemPromptCache integration
+781a01f  P31.7  init templates (AGENTS.md + TOOLS.md)
+ecdf79d  P31.8  composition-root wires SectionContext
+```
+
+(Plus the design lock chain `16d3a6c` + `c29cf02` +
+`a1905aa`.)
+
+### Verification (session-final)
+
+- typecheck: `pnpm --filter @lumen/{cli,core,llm} typecheck`
+  all green.
+- Tests: **1149 pass** (cli 341 + core 654 + llm 154).
+  Session baseline (start) was 320/5 failed + 30% flake;
+  delta = **+13 tests green + 0 flake**.
+- biome: 0 net drift vs session-start baseline (`783dde4`).
+  P31 files pre-existing `97 / 15` errors, current
+  `97 / 15` errors.
+- working tree: clean (除 phantom node_modules symlinks).
+
+### Critical decisions
+
+- **R3 enforcement via `appendDynamicChunk`.** Pre-P31.6B
+  Skill / Plan middleware prepended `{role: 'system'}`
+  messages, which bypassed the boundary marker, broke
+  Anthropic prefix cache, and violated the single-string
+  protocol. P31.6B replaces this with the explicit
+  `appendDynamicChunk` surface on `MiddlewareContext`,
+  enforced by `Agent.spliceDynamicChunks` after each
+  `applyBeforeModel` pass. R3 invariant test in
+  `agent-p31-6b-r3.test.ts` pins the wire shape so any
+  future regression that re-introduces a `prepend system`
+  path is caught at the boundary.
+- **Cache key excludes runtime.** The `StableCacheKey`
+  type is a closed shape that does NOT include
+  `runtime` (session_id / cwd echo / model / capturedAtIso)
+  or `middlewareDynamicChunks` (D2). Two consecutive
+  Agent constructions with the same stable inputs but
+  different `runtime` values hash to the same digest and
+  share the rendered stable prefix. The dynamic runtime
+  chunk is re-emitted per turn via P31.6B's
+  `appendDynamicChunk` path. P31.6C tests pin this.
+- **Mutuality rule.** `systemPrompt` and
+  `systemPromptContext` are mutually exclusive on
+  `AgentConfig`. Passing both throws a typed
+  `ValidationError` (not a `ConfigError`) so the
+  operator can grep for the conflict.
+
+### P31 backlog (closed)
+
+No P31 follow-ups remaining. The implementation sweep
+is end-to-end: design lock + boundary primitive +
+PromptAssembler + loaders + LRU cache + Anthropic
+marker-aware + Agent wire + R3 middleware migration +
+cache integration + init templates + composition-root
+wiring. The CLI composition root exercises the surface.
+
+### Backlog (next user-triggered, not auto-stripped)
+
+- **P33.B — Day1-Day5 OPTIMIZATION-PLAN.md §7 work**:
+  ProductAssembly + profile schema (Day1) + FS
+  workspaceRoot path-guard (Day2) + ToolRisk dispatch +
+  approver? (Day3) + CLI 接 profile + assistant 默认
+  (Day4) + Reflection 默认接通 + interrupt approver 对齐
+  + TASKS/README 同步 (Day5). G-P1 / G-P3 / G-P4 / G-P6
+  closure requires these. Multi-day refactor.
+- **P29.1 / P29.2 vendor selection** — Claude Code
+  hosted CUA vs OpenAI CUA vs OSS IBM-CUA adapter;
+  pure-JS CLIP vs OpenAI text-embedding cross-encoder
+  for #46. Gated on user pick.
+- **Tag + push** — `git tag v0.17.0 v0.18.0 && git push
+  --tags` fires `.github/workflows/release.yml`. Per
+  CLAUDE.md rule, the agent does not push; the user can
+  trigger this when desired.
+
+### Commit list (12 P31 commits ship on `main`, 132 ahead of `origin/main`)
+
+```
+ecdf79d  P31.8  composition-root wires SectionContext + shared cache
+1211f9d  P31.6C systemPromptCache integration
+8001031  P31.6B Skill / Plan → appendDynamicChunk (R3)
+781a01f  P31.7  init templates
+b086fe4  P31.6  Agent accepts SectionContext
+4da7999  P31.5  Anthropic marker-aware system blocks
+d467bd6  P31.4  LRU stable-prefix cache
+711d770  P31.3  project + context-file loaders
+590b097  P31.2  PromptAssembler + sections + budget
+65f3d2d  P31.1  boundary primitive
+```
