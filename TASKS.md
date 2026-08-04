@@ -1548,17 +1548,109 @@ pnpm exec biome check apps/cli/src apps/cli/test \
 remaining pre-existing PARTIAL items) is verified by
 the test suite.
 
+### P34 — Phase B.1: MEMORY.md / USER.md human-readable memory bridge
+
+Phase B (OPTIMIZATION-PLAN §3) ships its first slice in
+P34.1. The structured `SqliteStore` is the source of
+truth for facts / sessions / trust; the bridge projects
+high-trust facts into `~/.lumen/MEMORY.md` /
+`~/.lumen/USER.md` so the operator can `cat` the
+directory and immediately see what the agent has
+learned. `lumen doctor --product` flips G-P3 WARN → OK.
+
+#### Commits
+
+```
+5f2a8e8  P34.1.a  pure-data helpers (serialize / parse)         (memory)
+9980979  P34.1.b  composition bridge + lumen memory subcommand   (cli)
+a118766  P34.1.c  lumen memory subcommand wire + G-P1 OK         (cli)
+fb1ab28  P34.1.d  biome auto-format cleanup                       (memory)
+```
+
+#### Surface
+
+```
+packages/memory/src/markdown-bridge.ts   # pure data (no fs)
+  serializeFactsToMarkdown / parseMarkdownFacts / buildMarkdownDocument
+  DEFAULT_TRUST_THRESHOLD = 0.6
+
+apps/cli/src/memory-markdown-bridge.ts  # composition
+  createMemoryMarkdownBridge({store, memoryMdPath, userMdPath, trustThreshold})
+  .syncAfterRun()       pull sqlite → md
+  .ingestIfNewer()      if md mtime > lastSyncMs, parse back into sqlite
+  .describe()           paths + lastSyncMs
+
+apps/cli/src/commands/memory.ts          # CLI surface
+  lumen memory sync   — default
+  lumen memory show   — paths + last sync
+```
+
+#### Key decisions
+
+1. **Pure data lives in @lumen/memory** (no `node:fs`).
+   Composition + I/O lives in `apps/cli`. Tier isolation
+   per P19+ rule 1 preserved.
+2. **SqliteStore stays the source of truth.** Markdown
+   is a *projection*; the bridge never owns state.
+3. **`syncAfterRun()` is idempotent** (same store content
+   → same bytes; the helpers are deterministic).
+4. **`ingestIfNewer()` preserves trust** — operator
+   hand-edits that drop the metadata default to 0.6 do
+   NOT silently demote a high-confidence fact. We only
+   update trust when the operator explicitly wrote a
+   new trust literal.
+5. **`kind` decides the file.** `user` → USER.md;
+   everything else (preference / fact / skill / agent)
+   → MEMORY.md.
+6. **End-to-end verified.** `lumen memory sync` against
+   a tmp sqlite writes the schema-version frontmatter;
+   the bridge round-trips a trust=0.7 fact through
+   SqliteStore → MEMORY.md.
+
+#### Gates closed
+
+| Gate  | Before | After | Closing commit |
+|-------|--------|-------|----------------|
+| G-P1  | WARN   | OK    | a118766         |
+| G-P3  | WARN   | OK    | 9980979         |
+
+`lumen doctor --product` with empty `~/.lumen` now
+reports "All product gates pass."
+
+#### Verification
+
+```
+pnpm -r typecheck                                  # 0 errors, 11 packages
+pnpm -r --filter '!@lumen/docs-site' test         # 1857 tests, 0 fail
+pnpm exec biome check packages/memory/src \
+  apps/cli/src apps/cli/test                       # 0 errors
+```
+
+Memory test delta: 225 → 238 (+13 from the markdown-bridge
+unit suite). CLI test delta: 354 → 358 (+4 from the
+bridge composition tests).
+
+#### Backlog (Phase B continued)
+
+- **B.2** — Skill evolver default-on (move the
+  `reserved` flag in `BUILTIN_ASSEMBLIES.assistant.skillEvolution`
+  to `trajectory`; wire `createSkillEvolutionMiddleware`
+  in composition).
+- **B.3** — Trust / Plan UX (TUI panel + `lumen plan list`
+  printed after each chat; `/trust` slash).
+- **B.4** — Minimum Gateway (`lumen gateway start`,
+  long-lived Node process reusing composition).
+- **B.5** — Approval + checkpoint UX (TUI approval event
+  channel + `lumen checkpoint restore`).
+
 ### Backlog (next user-triggered, not auto-stripped)
 
-- **Phase B (P34+)** — OPTIMIZATION-PLAN §3 B.1-B.5
-  (human-readable MEMORY.md, evolver default-on,
-  Trust/Plan UX, minimum Gateway, approval +
-  checkpoint UX). G-P3 closure requires phase B.
+- **Phase B.2-B.5** — see P34 backlog section above.
 - **P29.1 / P29.2 vendor selection** — Claude Code
   hosted CUA vs OpenAI CUA vs OSS IBM-CUA adapter;
   pure-JS CLIP vs OpenAI text-embedding cross-encoder
   for #46. Gated on user pick.
-- **Tag + push** — `git tag v0.17.0 v0.18.0 v0.19.0 && git push
+- **Tag + push** — `git tag v0.17.0 v0.18.0 v0.19.0 v0.20.0 && git push
   --tags` fires `.github/workflows/release.yml`. Per
   CLAUDE.md rule, the agent does not push; the user can
   trigger this when desired.
