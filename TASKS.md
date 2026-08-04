@@ -1737,6 +1737,60 @@ pnpm exec biome check apps/cli/src apps/cli/test \
 
 CLI test delta: 374 → 380 (+6).
 
+### P34.5.b — `--approve-all` / `--deny-all` flags (Phase B.5 second slice)
+
+Phase B.5 second slice ships the operator-facing
+approval shortcut. P33.B Day3 wired
+`AgentConfig.approver?` into the dispatch path; this
+commit threads two pre-resolved approver callbacks
+through `buildAgent` so the operator can opt into a
+deterministic allow-all / deny-all posture from the
+CLI without writing code.
+
+#### Commits
+
+```
+239fac4  P34.5.b  --approve-all / --deny-all flags
+```
+
+#### Surface
+
+- `apps/cli/src/composition.ts` —
+  `CliAgentOptions` gains `approveAll?: boolean` +
+  `denyAll?: boolean`. `buildAgent` builds the
+  approver as `async () => 'allow'` / `'deny'`
+  based on the flag; passes to
+  `createAgent({ approver })`.
+- `apps/cli/src/commands/run.ts` +
+  `commands/chat.tsx` — same flags on
+  `RunCommandOptions` / `ChatCommandOptions`.
+- `apps/cli/src/index.ts` — registers
+  `--approve-all` / `--deny-all` flags on
+  `lumen run` + `lumen chat`.
+
+#### Why not TUI real-time prompts
+
+P34.5.b is the minimum-viable B.5 surface. TUI
+real-time approval prompts (in-TUI y/n while a tool
+is being dispatched) is a separate architecture
+change — `agent.streamRun` event hooks need a
+new `tool:approval` middleware hook that blocks
+on an external promise. Ships as a future
+P-ticket.
+
+#### Verification
+
+```
+pnpm --filter @lumen/cli typecheck    # 0 errors
+pnpm --filter @lumen/cli test       # 380 tests, 0 fail
+pnpm exec biome check apps/cli/src apps/cli/test \
+  apps/cli/src/commands apps/cli/test  # 0 errors
+```
+
+End-to-end smoke: `lumen run --help` lists
+`--approve-all` / `--deny-all` between
+`--approve-on` and `----permissions`.
+
 ### P34.3 — Trust / Plan UX (Phase B.3 closure)
 
 Phase B.3 (OPTIMIZATION-PLAN §3 B.3) ships in P34.3:
