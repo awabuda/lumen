@@ -1632,8 +1632,7 @@ bridge composition tests).
 
 #### Backlog (Phase B continued)
 
-- **B.5** — Approval + checkpoint UX (TUI approval event
-  channel + `lumen checkpoint restore`).
+- (Phase B.5 — see P34.5 below for the first slice)
 
 ### P34.4 — Minimum Gateway (Phase B.4 closure)
 
@@ -1692,6 +1691,51 @@ End-to-end smoke:
   `lumen gateway stop` → friendly stub message
 
 CLI test delta: 371 → 374 (+3).
+
+### P34.5 — `lumen checkpoint restore` (Phase B.5 first slice)
+
+Phase B.5 (OPTIMIZATION-PLAN §3 B.5) ships its first
+slice in P34.5: `lumen checkpoint restore` resolves
+a saved checkpoint by id, sessionId, or the most
+recent in-progress checkpoint. The restore path
+itself does NOT run the agent — it emits the
+resolved checkpoint id (or the full JSON on
+`--json`) so the caller can attach it to the next
+`lumen run --resume-from <path>:<id>` invocation.
+
+The TUI approval event channel (the other half of
+Phase B.5) is a future P-ticket — the slash
+commands and the in-TUI approve prompt need
+careful UX design; the `restore` path was the
+lower-risk / lower-scope slice and ships first.
+
+#### Commits
+
+```
+fbe194c  P34.5  lumen checkpoint restore subcommand
+```
+
+#### Surface
+
+```
+lumen checkpoint restore [--id <id>] [--session <id>] [--latest] [--json]
+  --id       explicit checkpoint id
+  --session  latest in-progress for one session
+  --latest   latest in-progress across every session
+  --json     emit the resolved checkpoint as JSON
+  --plans-path  path to a SQLite checkpoint database
+```
+
+#### Verification
+
+```
+pnpm --filter @lumen/cli typecheck    # 0 errors
+pnpm --filter @lumen/cli test       # 380 tests, 0 fail
+pnpm exec biome check apps/cli/src apps/cli/test \
+  apps/cli/src/commands apps/cli/test  # 0 errors
+```
+
+CLI test delta: 374 → 380 (+6).
 
 ### P34.3 — Trust / Plan UX (Phase B.3 closure)
 
