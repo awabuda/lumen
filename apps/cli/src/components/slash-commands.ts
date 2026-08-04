@@ -40,6 +40,7 @@ import type { PersistedLoop, SqliteLoopsStore } from '@lumen/memory'
 import type { BuiltAgent } from '../composition.js'
 import { startOneLoop } from '../cron-registry.js'
 import { analyzeCurrentProject } from './project-analyzer.js'
+import { formatPlanSnapshot, formatTrustSnapshot } from './trust-plan-snapshot.js'
 
 const assistantFromText = (text: string): AssistantMessage => ({
   role: 'assistant' as const,
@@ -72,6 +73,12 @@ export const formatBudgetSnapshot = (built: BuiltAgent): string => {
 
 export const budgetSnapshotAsAssistant = (built: BuiltAgent): AssistantMessage =>
   assistantFromText(formatBudgetSnapshot(built))
+
+export const planSnapshotAsAssistant = (_built: BuiltAgent): AssistantMessage => {
+  // P34.3 — placeholder (see trustSnapshotAsAssistant
+  // for the rationale).
+  return assistantFromText('[plan] loading…')
+}
 
 // ---------------------------------------------------------------------------
 // /loop: cron registration
@@ -416,6 +423,63 @@ export const initProjectAsAssistant = (): AssistantMessage => {
 // ---------------------------------------------------------------------------
 // Internal reset for tests; not exported as a CLI subcommand.
 // ---------------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+// /trust: trust / kind stats from SqliteStore (P34.3 Phase B.3)
+// -------------------------------------------------------------------
+
+/**
+ * P34.3 (Phase B.3) — `/trust` slash command. Reads
+ * every record from `built.memory` (the agent's
+ * SqliteStore) and emits a per-kind count + mean /
+ * min / max trust summary. When the agent has no
+ * memory store (e.g. `--no-memory`) we emit a
+ * friendly one-liner.
+ */
+export const handleTrustSlash = async (
+  built: BuiltAgent,
+): Promise<{ readonly message: string }> => {
+  if (built.memory === undefined) {
+    return { message: '[trust] no memory store configured (pass without --no-memory)' }
+  }
+  try {
+    const records = await built.memory.search({ limit: 10_000 })
+    const snapshot = records.map((r) => ({ kind: r.record.kind, trust: r.record.trust }))
+    return { message: formatTrustSnapshot({ records: snapshot }) }
+  } catch (err) {
+    return {
+      message: `[trust] memory read failed: ${err instanceof Error ? err.message : String(err)}`,
+    }
+  }
+}
+
+/**
+ * P34.3 (Phase B.3) — `/plan` slash command. Reads
+ * the live `PlanStore` the composition root threads
+ * through `built`. When the plan middleware is not
+ * mounted (`bare` assembly or `--no-plan`) we emit a
+ * friendly one-liner.
+ */
+export const handlePlanSlash = async (built: BuiltAgent): Promise<{ readonly message: string }> => {
+  const planStore = built.planStore
+  if (planStore === undefined) {
+    return {
+      message:
+        '[plan] no plan middleware mounted — pass `--enable-plan` or use the assistant assembly',
+    }
+  }
+  try {
+    return { message: formatPlanSnapshot(planStore) }
+  } catch (err) {
+    return {
+      message: `[plan] plan store read failed: ${err instanceof Error ? err.message : String(err)}`,
+    }
+  }
+}
+
+// -------------------------------------------------------------------
+// Internal reset for tests; not exported as a CLI subcommand.
+// -------------------------------------------------------------------
 
 export const __resetSlashStateForTests = (): void => {
   for (const cron of liveCrons.values()) {

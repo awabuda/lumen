@@ -42,6 +42,8 @@ import { handleSessionsSlash } from './sessions-slash.js'
 import {
   budgetSnapshotAsAssistant,
   handleLoopSlash,
+  handlePlanSlash,
+  handleTrustSlash,
   handleUnloopSlash,
   initProjectAsAssistant,
   reloadPersistedLoops,
@@ -229,6 +231,66 @@ export function Chat({
             key: turnCounter.current + 1,
             user: '',
             assistant: snapshot,
+          } satisfies Turn,
+        ])
+        turnCounter.current += 1
+        setStatus('done')
+        setStreamingText('')
+        setInput('')
+        return
+      }
+      // P34.3 (Phase B.3) — `/trust` reads every
+      // record from built.memory and emits a
+      // per-kind count + mean/min/max trust summary.
+      // Reads `built.memory` (the agent's SqliteStore)
+      // directly; no LLM call.
+      if (trimmed === '/trust' || trimmed.startsWith('/trust ')) {
+        const result = await handleTrustSlash(built)
+        const assistantMsg: AssistantMessage = {
+          role: 'assistant',
+          content: result.message,
+          toolCalls: [],
+        }
+        const turn: Turn = { key: turnCounter.current + 1, user: trimmed }
+        turnCounter.current += 1
+        setTurns((prev) => [
+          ...prev,
+          turn,
+          {
+            key: turnCounter.current + 1,
+            user: '',
+            assistant: assistantMsg,
+          } satisfies Turn,
+        ])
+        turnCounter.current += 1
+        setStatus('done')
+        setStreamingText('')
+        setInput('')
+        return
+      }
+      // P34.3 (Phase B.3) — `/plan` reads the live
+      // `PlanStore` that PlanMiddleware writes into
+      // and prints every saved plan with its step
+      // count. When the assistant assembly is in use
+      // (default), the store is wired by buildAgent
+      // and the operator sees the plan the agent is
+      // currently executing.
+      if (trimmed === '/plan' || trimmed.startsWith('/plan ')) {
+        const result = await handlePlanSlash(built)
+        const assistantMsg: AssistantMessage = {
+          role: 'assistant',
+          content: result.message,
+          toolCalls: [],
+        }
+        const turn: Turn = { key: turnCounter.current + 1, user: trimmed }
+        turnCounter.current += 1
+        setTurns((prev) => [
+          ...prev,
+          turn,
+          {
+            key: turnCounter.current + 1,
+            user: '',
+            assistant: assistantMsg,
           } satisfies Turn,
         ])
         turnCounter.current += 1

@@ -31,6 +31,7 @@ import {
   ConfigError,
   type DynamicRuntimeInputs,
   HookRegistry,
+  PlanStore,
   type SectionContext,
   StablePromptCache,
   type ToolPermissionAutoModeBlock,
@@ -254,6 +255,14 @@ export interface BuiltAgent {
    */
   readonly memory?: SqliteStore
   /**
+   * P34.3 (Phase B.3) — the live `PlanStore` that
+   * PlanMiddleware writes into. The `/plan` slash
+   * command reads this for the TUI snapshot. When
+   * PlanMiddleware is not mounted (bare assembly /
+   * `--no-plan`) the field is `undefined`.
+   */
+  readonly planStore?: PlanStore
+  /**
    * Connected MCP servers owned by this composition root. CLI commands
    * must close them when the run/chat session ends.
    */
@@ -425,6 +434,15 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
   }
 
   const hooks = new HookRegistry()
+  // P34.3 — collect every PlanStore the composition
+  // root instantiates so the first one is surfaced on
+  // `built.planStore` for the `/plan` slash command.
+  // Today there is exactly one (PlanMiddleware is
+  // mounted at most once per buildAgent call), but the
+  // list shape keeps the door open for future
+  // multi-plan scenarios (per-agent plans, sub-agent
+  // plans, …).
+  const planStores: PlanStore[] = []
 
   // The CLI's default memory store is a per-user SQLite file
   // in `~/.lumen/memory.db`. We construct it **before** the
@@ -513,7 +531,9 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
       )
     }
     if (planEnabled && assembly.middleware.includes('plan')) {
-      middleware.push(createPlanMiddleware({ mode: assembly.planMode }))
+      const planStore = new PlanStore()
+      planStores.push(planStore)
+      middleware.push(createPlanMiddleware({ mode: assembly.planMode, planStore }))
     }
     if (permissionEnabled && assembly.middleware.includes('tool-permission')) {
       // The default permissions file path is the
@@ -666,7 +686,9 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
       }
     }
     if (options.enablePlanMiddleware === true) {
-      middleware.push(createPlanMiddleware({ mode: options.planMode ?? 'auto' }))
+      const planStore = new PlanStore()
+      planStores.push(planStore)
+      middleware.push(createPlanMiddleware({ mode: options.planMode ?? 'auto', planStore }))
     }
     if (options.interruptOn && options.interruptOn.length > 0) {
       const approveSet = new Set(options.approveOn ?? [])
@@ -744,7 +766,17 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
     })
   }
 
-  return { agent, provider, tools, hooks, config, model, memory, mcpServers }
+  return {
+    agent,
+    provider,
+    tools,
+    hooks,
+    config,
+    model,
+    memory,
+    planStore: planStores[0],
+    mcpServers,
+  }
 }
 
 /**
