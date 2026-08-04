@@ -22,6 +22,12 @@ import { type LumenConfig, loadConfig } from '@lumen/config'
 import {
   type Agent,
   type BaseProvider,
+  StablePromptCache,
+  loadOptionalContextFiles,
+  loadProjectContext,
+  type DynamicRuntimeInputs,
+  type SectionContext,
+
   ConfigError,
   HookRegistry,
   type ToolPermissionAutoModeBlock,
@@ -427,6 +433,18 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
     }
   }
 
+  // P31.8 — compose the layered system-prompt context for
+  // this agent. The CLI holds one shared `StablePromptCache`
+  // per process so `lumen chat` (which constructs a fresh
+  // Agent per session) amortises the layered prompt render
+  // across consecutive turns whose stable inputs are
+  // unchanged.
+  const sessionId = `chat-${Math.random().toString(36).slice(2, 10)}`
+  const systemPromptContext = await composeSystemPromptContext(
+    cwd,
+    sessionId,
+    model,
+  )
   const agent = createAgent({
     provider,
     tools,
@@ -436,6 +454,8 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
     model,
     cwd,
     middleware,
+    systemPromptContext,
+    systemPromptCache: getSharedPromptCache(),
   })
 
   // MCP server discovery. We connect AFTER the Agent is
@@ -467,4 +487,111 @@ const defaultMemoryPath = (): string => {
   const override = process.env.LUMEN_MEMORY_PATH
   if (override) return override
   return path.join(os.homedir(), '.lumen', 'memory.db')
+}
+
+// ---------------------------------------------------------------------------
+// P31.8 — composition-root wiring for the layered system prompt.
+//
+// `buildAgent` is the single composition root in the CLI; it is the
+// place where `LumenConfig` + cwd + session id become concrete
+// `Provider` / `ToolRegistry` / `SectionContext` instances. Pre-P31.8
+// the `createAgent({...})` call passed neither `systemPromptContext`
+// nor `systemPromptCache`, so the agent fell back to the bundled
+// `DEFAULT_SYSTEM_PROMPT` and the P31 layered-prompt + cache surface
+// the other P31.* commits shipped was effectively orphaned.
+//
+// P31.8 composes the `SectionContext` here and threads it through
+// `createAgent`, so `lumen run` / `lumen chat` / `lumen chat-loop`
+// actually exercise the P31 sections (K0 / P1 / P2 / G1 / G2 / B1 /
+// M1 + D1 Runtime) and the LRU cache shipped by P31.4 / P31.6C.
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the {@link SectionContext} the Agent's
+ * `systemPromptContext` will render. Walks the cwd to git
+ * root for AGENTS.md / CLAUDE.md (P1), then loads the
+ * profile-gated optional context files (P2 / B1 / M1).
+ * The runtime layer is built from the composition's
+ * session state.
+ */
+export const composeSystemPromptContext = async (
+  cwd: string,
+  sessionId: string,
+  model: string,
+  profile: CliProfileFlags = {},
+): Promise<SectionContext> => {
+  // P1 — walk-up AGENTS.md / CLAUDE.md. The loader returns
+  // the body string or undefined.
+  const projectText = await loadProjectContext({ cwd })
+  // P2 / B1 / M1 — profile-gated optional context files.
+  // The P31.3 loader returns persona / bootstrap / memory;
+  // guidance and skillsIndex are built internally by the
+  // assembler from the default texts and the SkillRegistry
+  // (P31.2 §1.2 G1 / G2), so they are not fields on the
+  // loader result.
+  const optional = await loadOptionalContextFiles({
+    cwd,
+    personas: profile.persona === true ? (['SOUL', 'IDENTITY', 'USER'] as const) : undefined,
+    bootstrap: profile.bootstrap === true,
+    memorySnapshot: profile.memorySnapshot === true,
+  })
+  const runtime: DynamicRuntimeInputs = {
+    sessionId,
+    cwd,
+    model,
+    capturedAtIso: new Date().toISOString(),
+  }
+  return {
+    profile: {
+      persona: profile.persona === true,
+      bootstrap: profile.bootstrap === true,
+      skillsIndex: profile.skillsIndex === true,
+      memorySnapshot: profile.memorySnapshot === true,
+    },
+    projectText: projectText || undefined,
+    personaText: optional?.persona,
+    bootstrapText: optional?.bootstrap,
+    memorySnapshotText: optional?.memorySnapshot,
+    runtime,
+  }
+}
+
+/**
+ * Profile flags consumed by the P31 layered prompt
+ * assembler. Reflects the values the operator opted into
+ * via `lumen init --with-context` plus CLI flags that
+ * toggle the same layers (P33.A's `lumen doctor --product`
+ * surfaces the resolver).
+ */
+export interface CliProfileFlags {
+  readonly persona?: boolean
+  readonly bootstrap?: boolean
+  readonly skillsIndex?: boolean
+  readonly memorySnapshot?: boolean
+}
+
+/**
+ * Shared cache for the layered system prompt. The CLI holds
+ * one instance per `lumen chat` session so consecutive
+ * `agent.run` calls hit the cache when the stable inputs
+ * are unchanged (P31.6C). `lumen run` is single-shot and
+ * the cache is GC'd at process exit.
+ */
+let sharedChatCache: StablePromptCache | undefined
+
+/**
+ * Get-or-create the shared {@link StablePromptCache}.
+ * Used by `buildAgent` so subsequent agents in the same
+ * Node process amortise the layered prompt render.
+ */
+export const getSharedPromptCache = (): StablePromptCache => {
+  if (sharedChatCache === undefined) {
+    sharedChatCache = new StablePromptCache()
+  }
+  return sharedChatCache
+}
+
+/** Reset hook for tests; production code never touches this. */
+export const _resetSharedPromptCacheForTests = (): void => {
+  sharedChatCache = undefined
 }

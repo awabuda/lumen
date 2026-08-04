@@ -336,6 +336,7 @@ export {
   collectStableSections,
   renderSkillsIndex,
   renderStableText,
+  type DynamicRuntimeInputs,
   type LayerBudgets,
   type ProfileLayers,
   type SectionContext,
