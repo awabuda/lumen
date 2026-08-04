@@ -1632,16 +1632,85 @@ bridge composition tests).
 
 #### Backlog (Phase B continued)
 
-- **B.2** — Skill evolver default-on (move the
-  `reserved` flag in `BUILTIN_ASSEMBLIES.assistant.skillEvolution`
-  to `trajectory`; wire `createSkillEvolutionMiddleware`
-  in composition).
 - **B.3** — Trust / Plan UX (TUI panel + `lumen plan list`
   printed after each chat; `/trust` slash).
 - **B.4** — Minimum Gateway (`lumen gateway start`,
   long-lived Node process reusing composition).
 - **B.5** — Approval + checkpoint UX (TUI approval event
   channel + `lumen checkpoint restore`).
+
+### P34.2 — Skill auto-evolution (Phase B.2 closure)
+
+Phase B.2 (OPTIMIZATION-PLAN §3 B.2) ships in P34.2:
+the assistant assembly's `skillEvolution` slot
+flips from `'reserved'` (P33.B Day1 placeholder) to
+`'trajectory'` (active evolver) and the composition
+root wires `HeuristicEvolver` as an `afterRun`
+middleware. The LLM-backed `LLMEvolver` is
+exported but stays opt-in (future P-ticket).
+
+  #### Commits
+
+  ```
+  e05b6c5  P34.2  skill auto-evolution bridge + barrel export
+  ```
+
+  #### Surface
+
+  ```
+  @cmd-p34-bridge.a packages/skills barrel now exports
+    BaseEvolver / HeuristicEvolver / LLMEvolver /
+    EvolutionResult / EvolverChatMessage.
+
+  @cmd-p34-bridge.b apps/cli/src/skill-evolution-bridge.ts
+    createSkillEvolutionBridge({ skillsDir?, evolver? })
+      .afterRunHook(result)  — flattens Message discriminated
+                                union → evolver shape,
+                                best-effort on error.
+
+  @cmd-p34-bridge.c apps/cli/src/composition.ts
+    When assembly.skillEvolution === 'trajectory' AND
+    caller did not pass noSkillEvolve: push a
+    afterRun middleware that calls HeuristicEvolver.
+  ```
+
+  #### Key decisions
+
+  1. **HeuristicEvolver, not LLMEvolver, is the default.**
+     `LLMEvolver` would silently call the model on every
+     multi-tool run — a cost surface the operator did
+     not opt into. Future P-ticket gates `LLMEvolver`
+     on `config.skills.llmEvolver: true`.
+  2. **afterRun is best-effort.** A failure to write
+     SKILL.md logs to stderr; the agent result is
+     already settled and must not be re-thrown.
+  3. **Tier isolation preserved.** `apps/cli` (the
+     only place that knows about both packages) is
+     where the bridge composition lives. `@lumen/core`
+     does NOT import `@lumen/skills`.
+  4. **Per-message shape translation lives in the
+     bridge**, not in the evolver. HeuristicEvolver
+     keeps its minimal `{role, content: string}`
+     contract; the bridge flattens the discriminated
+     union.
+
+  #### Verification
+
+  ```
+  pnpm --filter @lumen/skills typecheck    # 0 errors
+  pnpm --filter @lumen/cli test           # 362 tests, 0 fail
+  pnpm -r typecheck                       # 0 errors, 11 packages
+  pnpm exec biome check apps/cli/src apps/cli/test \
+    packages/skills/src packages/config/src \
+    packages/config/test                   # 0 errors
+  ```
+
+  End-to-end smoke: a 3-tool-call transcript fed
+  through `HeuristicEvolver` produces
+  `/tmp/<tmpdir>/skills/auto-help-me-find-and-list-…/SKILL.md`
+  with the heuristic template.
+
+  CLI test delta: 358 → 362 (+4).
 
 ### Backlog (next user-triggered, not auto-stripped)
 
