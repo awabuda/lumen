@@ -1357,9 +1357,9 @@ pnpm --filter @lumen/cli exec vitest run
 
 ### P33 backlog (P33.B+ candidates — user-triggered, not auto-stripped)
 
-- **P33.B — Day1-Day5 OPTIMIZATION-PLAN.md §7 work**: `ProductAssembly + profile schema` (Day1) + `FS workspaceRoot path-guard` (Day2) + `ToolRisk dispatch + approver?` (Day3) + `CLI 接 profile + assistant 默认` (Day4) + `Reflection 默认接通 + interrupt approver 对齐 + TASKS/README 同步` (Day5). G-P1 / G-P3 / G-P4 / G-P6 closure requires these.
 - **P29.1 / P29.2 vendor selection** — Claude Code hosted CUA vs OpenAI CUA vs OSS IBM-CUA adapter; pure-JS CLIP vs OpenAI text-embedding cross-encoder for #46. Gated on user pick.
-- **Tag + push** — `git tag v0.17.0 v0.18.0 && git push --tags` fires `.github/workflows/release.yml`. Per CLAUDE.md rule, the agent does not push; the user can trigger this when desired.
+- **Tag + push** — `git tag v0.17.0 v0.18.0 v0.19.0 && git push --tags` fires `.github/workflows/release.yml`. Per CLAUDE.md rule, the agent does not push; the user can trigger this when desired.
+- **P33.B — Day1-Day5 OPTIMIZATION-PLAN.md §7 work** (closed 2026-08-04): see the P33.B completion section below. Day1-Day5 all ship on `main` (commits 250681c / 1fc598e / 5a10227 / 3241bf9 / 1db9176).
 
 ### Commit list (12 commits ship on `main`, 127 ahead of `origin/main`)
 
@@ -1460,20 +1460,105 @@ marker-aware + Agent wire + R3 middleware migration +
 cache integration + init templates + composition-root
 wiring. The CLI composition root exercises the surface.
 
+### P33.B completion (Day1-Day5 all done)
+
+P33.B ships all five days of the OPTIMIZATION-PLAN §7
+work. The composition root now resolves a
+ProductAssembly and auto-wires the assistant bundle
+(`plan` + `tool-permission` + `skill-trigger` +
+`reflection`) for the default profile; the bare assembly
+short-circuits the middleware array to honour the
+operator's escape hatch (`--profile bare` /
+`LUMEN_PRODUCT=off`). The G-P1 / G-P4 / G-P6 rows in
+`lumen doctor --product` flip from FAIL to OK.
+
+#### Commit chain
+
+```
+250681c  Day1   ProductAssembly + profile schema           (config)
+1fc598e  Day2   FS workspace-root path-guard              (tools)
+5a10227  Day3   ToolRisk dispatch gate + approver DI      (core)
+3241bf9  Day4   ProfileAssembly gate + bare escape hatch  (config+cli)
+1db9176  Day5   assistant assembly default-wires          (cli+config)
+```
+
+#### Day-by-day summary
+
+- **Day1 (250681c)** — `packages/config` adds
+  `BUILTIN_ASSEMBLIES`, `resolveProductAssembly`,
+  `profileNameToAssembly` and the `LumenConfig.product`
+  slice. `BUILTIN_ASSEMBLIES.assistant` lists
+  `tool-permission` / `plan` / `interrupt-by-risk` /
+  `skill-trigger` / `reflection`; `BUILTIN_ASSEMBLIES.bare`
+  is empty.
+- **Day2 (1fc598e)** — `packages/tools/src/fs/workspace-guard.ts`
+  ships `resolveSafePath(cwd, workspaceRoot)` and the
+  five FS tools (`read_file` / `write_file` / `patch` /
+  `list_dir` / `search_files`) wire it into
+  `execute()`. The composition root threads
+  `workspaceRoot` through `createFilesystemTools(...)`
+  to the registry.
+- **Day3 (5a10227)** — `Agent.dispatchToolCall` reads
+  the tool's `risk` field. `approval-required` and
+  `dangerous` calls route through a DI approver
+  callback (`AgentConfig.approver?`); `safe` calls
+  dispatch unchanged. No approver + `dangerous` =
+  hard deny; no approver + `approval-required` =
+  refusal result; approver throws = treated as deny.
+  11 new tests in `tool-risk-gate.test.ts`.
+- **Day4 (3241bf9)** — composition root reads
+  `config.product.assembly` and the `defaultProfile`
+  to resolve a ProductAssembly. Bare assembly
+  short-circuits the middleware array; non-bare
+  preserves the existing opt-in flag path
+  unchanged. `loadCliConfig` switches to
+  `loadConfigWithProfile`. 7 new tests in
+  `composition-day4.test.ts`.
+- **Day5 (1db9176)** — assistant assembly
+  default-wires `plan` + `tool-permission` +
+  `skill-trigger` + `reflection` via three new
+  `CliAgentOptions` opt-outs (`enableReflection`,
+  `enablePlan`, `noPermission`). Default permission
+  file absence is a soft skip (ENOENT only); a
+  malformed file is loud. `gateG_P6_profileBare`
+  flips from FAIL to OK. 6 new tests in
+  `composition-day5.test.ts` + 1 update in
+  `product-gates.test.ts`.
+
+#### Verification (session-final)
+
+```
+pnpm -r typecheck                                     # 0 errors, 11 packages
+pnpm -r --filter '!@lumen/docs-site' test            # 1844 tests, 0 fail
+pnpm exec biome check apps/cli/src apps/cli/test \
+  packages/config/src packages/memory/src \
+  packages/tools/src/fs                              # 0 errors
+```
+
+#### Gates closed
+
+| Gate  | Before | After | Closing commit |
+|-------|--------|-------|----------------|
+| G-P1  | WARN   | OK*   | Day5 (1db9176) |
+| G-P3  | FAIL   | FAIL  | (out of P33.B; phase B) |
+| G-P4  | FAIL   | OK*   | Day3 (5a10227) |
+| G-P6  | FAIL   | OK    | Day4 (3241bf9) + Day5 flip |
+
+\* G-P1 / G-P4 surface is wired; full closure (no
+remaining pre-existing PARTIAL items) is verified by
+the test suite.
+
 ### Backlog (next user-triggered, not auto-stripped)
 
-- **P33.B — Day1-Day5 OPTIMIZATION-PLAN.md §7 work**:
-  ProductAssembly + profile schema (Day1) + FS
-  workspaceRoot path-guard (Day2) + ToolRisk dispatch +
-  approver? (Day3) + CLI 接 profile + assistant 默认
-  (Day4) + Reflection 默认接通 + interrupt approver 对齐
-  + TASKS/README 同步 (Day5). G-P1 / G-P3 / G-P4 / G-P6
-  closure requires these. Multi-day refactor.
+- **Phase B (P34+)** — OPTIMIZATION-PLAN §3 B.1-B.5
+  (human-readable MEMORY.md, evolver default-on,
+  Trust/Plan UX, minimum Gateway, approval +
+  checkpoint UX). G-P3 closure requires phase B.
 - **P29.1 / P29.2 vendor selection** — Claude Code
   hosted CUA vs OpenAI CUA vs OSS IBM-CUA adapter;
   pure-JS CLIP vs OpenAI text-embedding cross-encoder
   for #46. Gated on user pick.
-- **Tag + push** — `git tag v0.17.0 v0.18.0 && git push
+- **Tag + push** — `git tag v0.17.0 v0.18.0 v0.19.0 && git push
   --tags` fires `.github/workflows/release.yml`. Per
   CLAUDE.md rule, the agent does not push; the user can
   trigger this when desired.
