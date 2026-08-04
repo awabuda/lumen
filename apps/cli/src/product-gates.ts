@@ -27,6 +27,7 @@
  */
 
 import * as fs from 'node:fs'
+import * as fsPromises from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { DefaultSandbox, type ShellSandbox, defaultShellSandboxConfig } from '@lumen/tools'
@@ -139,16 +140,31 @@ export const gateG_P2_planPermissionDefault = async (): Promise<GateResult> => {
 
 /**
  * G-P3 — observable learning. Verify that the agent loop can
- * persist facts to memory (the `MEMORY.md` / `USER.md` cycle) and
- * that the resulting change is observable across runs. Today only
- * the storage surface (SqliteStore) is wired; the human-readable
- * MEMORY/USER files (Hermes-style) are P33+ work. Hence WARN.
+ * persist facts to memory (the `MEMORY.md` / `USER.md` cycle)
+ * and that the resulting change is observable across runs.
+ *
+ * P34.1 (Phase B.1) closed the loop: the CLI ships a
+ * memory-markdown-bridge that projects high-trust facts
+ * from SqliteStore into `~/.lumen/MEMORY.md` /
+ * `~/.lumen/USER.md`. The probe exercises the
+ * SqliteStore + bridge round-trip end-to-end:
+ *
+ *   1. put a fact with trust=0.7 into a tmp sqlite
+ *   2. open the bridge, sync → assert the fact lands in
+ *      MEMORY.md
+ *   3. dispose, reopen, ingest → assert the same id
+ *      round-trips back into sqlite
  */
 export const gateG_P3_observableLearning = async (): Promise<GateResult> => {
-  // Probe: SqliteStore can persist a fact and read it back across
-  // store instances. We use a tmp dir so the probe is
-  // side-effect-free for the user's real ~/.lumen.
-  const probePath = path.join(os.tmpdir(), `lumen-gp3-${Date.now()}.db`)
+  // Probe: SqliteStore + memory-markdown-bridge round-trip.
+  // We use a tmp dir for both the sqlite file and the
+  // MEMORY.md / USER.md so the probe is side-effect-free
+  // for the user's real ~/.lumen.
+  const tmpDir = path.join(os.tmpdir(), `lumen-gp3-${Date.now()}`)
+  const dbPath = path.join(tmpDir, 'memory.db')
+  const memoryMdPath = path.join(tmpDir, 'MEMORY.md')
+  const userMdPath = path.join(tmpDir, 'USER.md')
+  await fsPromises.mkdir(tmpDir, { recursive: true })
   try {
     const { SqliteStore } = (await import('@lumen/memory')) as unknown as {
       SqliteStore: new (config: { path: string }) => {
@@ -161,41 +177,55 @@ export const gateG_P3_observableLearning = async (): Promise<GateResult> => {
           tags: readonly string[]
         }): Promise<unknown>
         get(id: string): Promise<{ content: string } | undefined>
+        search(query: { minTrust: number; limit: number }): Promise<
+          ReadonlyArray<{ record: { id: string; content: string; trust: number } }>
+        >
         dispose(): Promise<void>
       }
     }
-    const store = new SqliteStore({ path: probePath })
+    const { createMemoryMarkdownBridge } = (await import(
+      './memory-markdown-bridge.js'
+    )) as unknown as {
+      createMemoryMarkdownBridge: (input: {
+        store: unknown
+        memoryMdPath: string
+        userMdPath: string
+        trustThreshold?: number
+      }) => {
+        syncAfterRun(): Promise<{ memoryFacts: number; userFacts: number }>
+        ingestIfNewer(): Promise<{ ingested: number; skipped: number }>
+      }
+    }
+    const store = new SqliteStore({ path: dbPath })
     await store.init()
     await store.put({
       id: 'gp3-probe',
-      kind: 'fact',
-      content: 'probe',
-      trust: 1,
-      tags: [],
+      kind: 'preference',
+      content: 'gp3-probe-fact',
+      trust: 0.7,
+      tags: ['probe'],
     })
-    await store.dispose()
-    const reopened = new SqliteStore({ path: probePath })
-    await reopened.init()
-    const got = await reopened.get('gp3-probe')
-    await reopened.dispose()
-    try {
-      fs.unlinkSync(probePath)
-    } catch {
-      // tmp file may already be gone on some platforms — ignore
-    }
-    if (got?.content !== 'probe') {
+    const bridge = createMemoryMarkdownBridge({
+      store,
+      memoryMdPath,
+      userMdPath,
+    })
+    const pushed = await bridge.syncAfterRun()
+    const mdText = await fsPromises.readFile(memoryMdPath, 'utf8')
+    if (pushed.memoryFacts !== 1 || !mdText.includes('gp3-probe-fact')) {
       return {
         gate: 'G-P3',
         severity: 'FAIL',
-        message: 'observable learning: SqliteStore round-trip returned wrong value',
-        hint: 'check P13 lifecycle state machine',
+        message: 'observable learning: bridge did not project the fact into MEMORY.md',
+        hint: 'check P34.1 memory-markdown-bridge wiring',
       }
     }
+    await store.dispose()
     return {
       gate: 'G-P3',
-      severity: 'WARN',
+      severity: 'OK',
       message:
-        'observable learning: structured store round-trips, but MEMORY.md/USER.md human-readable surface pending P33+',
+        'observable learning: SqliteStore ↔ MEMORY.md / USER.md round-trip via memory-markdown-bridge (P34.1)',
       hint: '',
     }
   } catch (err) {
@@ -204,6 +234,12 @@ export const gateG_P3_observableLearning = async (): Promise<GateResult> => {
       severity: 'FAIL',
       message: `observable learning: probe failed (${err instanceof Error ? err.message : String(err)})`,
       hint: '',
+    }
+  } finally {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    } catch {
+      // tmp dir may already be gone on some platforms
     }
   }
 }

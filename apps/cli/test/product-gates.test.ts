@@ -36,10 +36,15 @@ describe('G-P2 plan + permission default', () => {
 })
 
 describe('G-P3 observable learning', () => {
-  it('round-trips a record through SqliteStore and reports WARN (human-readable surface pending)', async () => {
+  it('round-trips a record through SqliteStore + memory-markdown-bridge and reports OK (P34.1)', async () => {
+    // P33.A ee3ac82 documented G-P3 as WARN by design.
+    // P34.1 (Phase B.1) closed the loop: the CLI ships a
+    // memory-markdown-bridge that projects SqliteStore
+    // facts into ~/.lumen/MEMORY.md / USER.md. The probe
+    // asserts the bridge round-trips end-to-end.
     const r = await gateG_P3_observableLearning()
     expect(r.gate).toBe('G-P3')
-    expect(r.severity).toBe('WARN')
+    expect(r.severity).toBe('OK')
   })
 
   it('does not leave a tmp db file in os.tmpdir()', async () => {
