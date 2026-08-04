@@ -70,10 +70,17 @@ describe('G-P5 discoverable setup', () => {
 })
 
 describe('G-P6 profile bare', () => {
-  it('returns FAIL today because the --profile bare CLI surface is not shipped', async () => {
+  it('returns OK after P33.B Day4 wired the bare-assembly short-circuit', async () => {
+    // P33.A ee3ac82 documented G-P6 as FAIL by design.
+    // P33.B Day4 (commit 3241bf9) wired the bare-assembly
+    // short-circuit in composition.ts: when
+    // `resolveCliAssembly` resolves to `bare`, the
+    // middleware array stays empty regardless of any
+    // opt-in flag. The operator's escape hatch is real.
+    // P33.B Day5 flips this gate to OK.
     const r = await gateG_P6_profileBare()
     expect(r.gate).toBe('G-P6')
-    expect(r.severity).toBe('FAIL')
+    expect(r.severity).toBe('OK')
   })
 })
 

@@ -61,7 +61,7 @@ export interface ProductAssembly {
   readonly middleware: ReadonlyArray<AssemblyMiddlewareName>
   readonly planMode: 'auto' | 'plan' | 'act'
   readonly permissionsDefaultPath?: string
-  readonly reflection: { readonly inline: boolean; readonly runEnd?: 'rule' | 'model' }
+  readonly reflection: { readonly inline: boolean; readonly runEnd?: 'rule' | 'off' }
   readonly skillEvolution: 'off' | 'reserved' | 'trajectory'
 }
 

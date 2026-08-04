@@ -211,6 +211,28 @@ export interface CliAgentOptions {
    * {@link resolveProductAssembly}.
    */
   product?: string
+  /**
+   * P33.B Day5 — opt out of the assistant-assembly
+   * reflection middleware. Default `undefined` /
+   * `true` = reflection mounts; `false` = skip.
+   * Per P19+ rule 11 this is an opt-out, not a
+   * `enableReflection` boolean flag (the assembly
+   * bundle IS the configuration surface).
+   */
+  enableReflection?: boolean
+  /**
+   * P33.B Day5 — opt out of the assistant-assembly plan
+   * middleware. Default `undefined` = plan mounts;
+   * `false` = skip.
+   */
+  enablePlan?: boolean
+  /**
+   * P33.B Day5 — opt out of the assistant-assembly
+   * tool-permission middleware. Default `undefined` =
+   * permission mounts; `true` = skip (operator has no
+   * permissions file or wants the bare behaviour).
+   */
+  noPermission?: boolean
 }
 
 export interface BuiltAgent {
@@ -434,16 +456,105 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
   const assembly = resolveCliAssembly({ ...config, profile: 'default' }, options)
   const middleware: import('@lumen/core').AgentMiddleware[] = []
   if (assembly.middleware.length > 0) {
-    // Non-bare assembly: the opt-in flag path below remains
-    // authoritative. Day5 will collapse the flag path into
-    // the assembly bundle itself; for Day4 the bundle
-    // declaration is honoured but the wiring is a no-op so
-    // existing callers see zero behavioural drift.
-    // (The presence of the assembly keeps `lumen doctor
-    // --product` honest — Day3's G-T1 check can confirm
-    // the resolved bundle name without the composition
-    // having mounted it.)
-    void assembly
+    // P33.B Day5 — assistant assembly default wiring.
+    // When the resolved bundle is non-bare (operator
+    // opted into `assistant` via `defaultProfile`,
+    // `--profile assistant`, `product: 'assistant'`, or
+    // the bare default), the composition root auto-mounts
+    // the bundled middleware unless the caller passed an
+    // explicit opt-out (`--no-reflection`,
+    // `--no-plan`, `--no-skill-trigger`,
+    // `--no-permission`). The legacy opt-in flags
+    // (`enablePlanMiddleware`, `enableSkillTrigger`,
+    // `permissionsPath`) remain authoritative for
+    // callers that want to force-enable a specific
+    // middleware without opting into the bundle.
+    //
+    // Per OPTIMIZATION-PLAN §7 Day5, this is the
+    // "开箱像助手" milestone — bare `lumen run` gets
+    // plan + permission + skill + reflection without
+    // any flag. The 17 existing call sites that
+    // previously relied on opt-in flags keep working
+    // (they were opt-in, so an additional auto-mount is
+    // additive — non-`assistant` assemblies still bypass
+    // the bundled defaults).
+    const reflectionEnabled = options.enableReflection !== false
+    const planEnabled = options.enablePlan !== false
+    const skillEnabled = options.enableSkillTrigger !== false
+    const permissionEnabled = options.noPermission !== true
+    const reflectionConfig = assembly.reflection
+    if (reflectionEnabled && assembly.middleware.includes('reflection')) {
+      // Inline confidence is the cheap, opt-in path
+      // (1 token appended to the assistant message). The
+      // memory for run-end is the SqliteStore already
+      // constructed below; pass `memory: undefined` here
+      // and let the middleware no-op the run-end write if
+      // memory is absent at the call site (it isn't — the
+      // composition root always builds one for non-bare
+      // assemblies, unless `noMemory: true`).
+      // The `runEnd` field on `ProductAssembly` is typed
+      // 'rule' | 'off' to match `createReflectionMiddleware`'s
+      // accepted runEnd union. The literal is declared
+      // here so the compiler narrows the optional
+      // assignment without a runtime check.
+      const runEnd = reflectionConfig.runEnd
+      middleware.push(
+        createReflectionMiddleware({
+          inline: reflectionConfig.inline,
+          ...(runEnd !== undefined ? { runEnd } : {}),
+          ...(memory !== undefined ? { memory } : {}),
+        }),
+      )
+    }
+    if (planEnabled && assembly.middleware.includes('plan')) {
+      middleware.push(createPlanMiddleware({ mode: assembly.planMode }))
+    }
+    if (permissionEnabled && assembly.middleware.includes('tool-permission')) {
+      // The default permissions file path is the
+      // operator's `~/.lumen/permissions.yaml`. When the
+      // file is missing we silently skip the gate
+      // (operator has not run `lumen init` yet); a
+      // malformed file IS a loud error so a misconfigured
+      // bundle cannot silently drop protection.
+      const path = assembly.permissionsDefaultPath
+      if (path !== undefined) {
+        try {
+          const parsed = await loadPermissionPolicyFromFile(path)
+          const policy = createStaticToolPermissionPolicy(parsed)
+          middleware.push(createToolPermissionMiddleware({ policy }))
+          if (parsed.autoMode && parsed.autoMode.enabled === true) {
+            const autoModeRules: ToolPermissionAutoModeBlock = parsed.autoMode
+            const classifier = createHeuristicRiskClassifier({ rules: autoModeRules })
+            middleware.push(createAutoModeMiddleware({ classifier }))
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err)
+          // ENOENT is the common case (operator has not
+          // run `lumen init`); anything else is a real
+          // config error and worth surfacing.
+          if (!/not found|ENOENT/.test(message)) {
+            process.stderr.write(
+              `lumen: assistant assembly default permission file unreadable (${path}): ${message}\n`,
+            )
+          }
+        }
+      }
+    }
+    if (skillEnabled && assembly.middleware.includes('skill-trigger')) {
+      try {
+        const skillsRoot = options.skillsPath ?? defaultSkillsPath()
+        const registry = await loadSkillRegistry(skillsRoot)
+        const triggerFn = buildKeywordTriggerFn({ registry, cwd })
+        const zodCompatTrigger = async (userMessage: string) => [...(await triggerFn(userMessage))]
+        middleware.push(createSkillTriggerMiddleware({ trigger: zodCompatTrigger }))
+      } catch (err) {
+        process.stderr.write(
+          `lumen: assistant assembly skill-trigger wiring skipped: ${
+            err instanceof Error ? err.message : String(err)
+          }\n`,
+        )
+      }
+    }
   } else {
     // P22.2: permission policy is the outermost gate. When the
     // file is missing or malformed we surface the typed

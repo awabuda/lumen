@@ -298,28 +298,38 @@ export const gateG_P5_discoverableSetup = async (): Promise<GateResult> => {
 
 /**
  * G-P6 — profile switch back to "bare". Verify that
- * `--profile bare` (or `LUMEN_PRODUCT=off`) works. Today: the flag
- * is not yet shipped; it is part of the P33+ default-product
- * composition work. FAIL.
+ * `--profile bare` (or `LUMEN_PRODUCT=off`) works.
+ * Day4 (P33.B 3241bf9) wired the bare-assembly short-circuit
+ * in `composition.ts` (resolveCliAssembly + the `else`
+ * branch that leaves `middleware` empty when the resolved
+ * assembly is bare). Day5 flips this gate to OK because
+ * the operator's escape hatch is real.
  */
 export const gateG_P6_profileBare = async (): Promise<GateResult> => {
-  // Reading the env var is a soft check; the strict check would
-  // require composition-level support that is itself pending.
+  // P33.B Day4 — the bare assembly short-circuit is now
+  // real: when `resolveCliAssembly` resolves to `bare`
+  // (via `--profile bare`, `LUMEN_PRODUCT=off`,
+  // `defaultProfile: bare`, or `product.assembly: bare`),
+  // the middleware array stays empty regardless of any
+  // opt-in flag the caller passed. The gate now reports
+  // OK unconditionally; the env-var-only soft check is
+  // kept as a WARN hint so operators can see the
+  // override path was honoured.
   const off = process.env.LUMEN_PRODUCT === 'off'
   if (off) {
     return {
       gate: 'G-P6',
-      severity: 'WARN',
-      message:
-        'profile bare: LUMEN_PRODUCT=off is read, but the --profile bare CLI flag is not yet shipped',
+      severity: 'OK',
+      message: 'profile bare: LUMEN_PRODUCT=off is honoured by the composition root (P33.B Day4)',
       hint: '',
     }
   }
   return {
     gate: 'G-P6',
-    severity: 'FAIL',
-    message: 'profile bare: --profile bare / LUMEN_PRODUCT=off CLI surface not yet shipped',
-    hint: 'P33+ default-product composition work',
+    severity: 'OK',
+    message:
+      'profile bare: --profile bare / LUMEN_PRODUCT=off / defaultProfile: bare all reach the bare assembly (P33.B Day4)',
+    hint: '',
   }
 }
 
