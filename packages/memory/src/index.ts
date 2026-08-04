@@ -141,3 +141,16 @@ export {
   PeopleRegistry,
   type PersonRecord,
 } from './people.js'
+
+// P34.1 (Phase B.1) — human-readable MEMORY.md / USER.md
+// projection helpers. Pure data; no fs / sqlite — the
+// bridge composition lives in `apps/cli`.
+export {
+  DEFAULT_TRUST_THRESHOLD,
+  SERIALIZED_MARKDOWN_SCHEMA_VERSION,
+  buildMarkdownDocument,
+  parseMarkdownFacts,
+  serializeFactsToMarkdown,
+  type MarkdownDocumentMeta,
+  type SerializedFact,
+} from './markdown-bridge.js'
