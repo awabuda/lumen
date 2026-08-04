@@ -397,16 +397,28 @@ program
 program
   .command('checkpoint')
   .description('Inspect and manage saved agent run checkpoints')
-  .argument('<subcommand>', '"list <session-id>", "show <id>", or "delete <id>"')
-  .argument('[arg]', 'Session id (for "list") or checkpoint id (for "show"/"delete")')
+  .argument(
+    '<subcommand>',
+    '"list <session-id>", "show <id>", "delete <id>", or "restore [--id|--session|--latest]"',
+  )
+  .argument(
+    '[arg]',
+    'Session id (for "list") or checkpoint id (for "show"/"delete"/"restore --id")',
+  )
   .option(
     '--plans-path <path>',
     'P20.4.5: path to a SQLite checkpoint database (defaults to in-memory)',
   )
+  .option('--session <id>', 'restore: scope latest-in-progress lookup to this session id')
+  .option('--latest', 'restore: pick the latest in-progress checkpoint across every session')
+  .option('--json', 'restore: emit the resolved checkpoint as JSON instead of a one-liner')
   .action(async (subcommand: string, arg: string | undefined, opts: Record<string, unknown>) => {
-    const { checkpointDeleteCommand, checkpointListCommand, checkpointShowCommand } = await import(
-      './commands/checkpoint.js'
-    )
+    const {
+      checkpointDeleteCommand,
+      checkpointListCommand,
+      checkpointRestoreCommand,
+      checkpointShowCommand,
+    } = await import('./commands/checkpoint.js')
     const file = opts.plansPath as string | undefined
     let code = 0
     if (subcommand === 'list') {
@@ -429,6 +441,25 @@ program
         code = 1
       } else {
         code = await checkpointDeleteCommand({ id: arg, file })
+      }
+    } else if (subcommand === 'restore') {
+      const id = arg
+      const sessionId = opts.session as string | undefined
+      const latest = opts.latest === true
+      const json = opts.json === true
+      if (id !== undefined && (sessionId !== undefined || latest)) {
+        process.stderr.write(
+          'lumen checkpoint restore: --id is mutually exclusive with --session / --latest\n',
+        )
+        code = 1
+      } else {
+        code = await checkpointRestoreCommand({
+          ...(id !== undefined ? { id } : {}),
+          ...(sessionId !== undefined ? { sessionId } : {}),
+          ...(latest ? { latest: true } : {}),
+          ...(json ? { json: true } : {}),
+          ...(file !== undefined ? { file } : {}),
+        })
       }
     } else {
       process.stderr.write(`lumen checkpoint: unknown subcommand: ${subcommand}\n`)

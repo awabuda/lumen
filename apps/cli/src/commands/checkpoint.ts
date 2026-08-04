@@ -27,7 +27,11 @@
  * makes this CLI genuinely useful for production use.
  */
 
-import { type AgentCheckpoint, type BaseCheckpointStore, InMemoryCheckpointStore } from '@lumen/core'
+import {
+  type AgentCheckpoint,
+  type BaseCheckpointStore,
+  InMemoryCheckpointStore,
+} from '@lumen/core'
 
 /**
  * Resolve the checkpoint store to operate on.
@@ -63,9 +67,7 @@ export interface CheckpointListOptions {
   readonly file?: string
 }
 
-export const checkpointListCommand = async (
-  opts: CheckpointListOptions,
-): Promise<number> => {
+export const checkpointListCommand = async (opts: CheckpointListOptions): Promise<number> => {
   const store = await resolveStore(opts)
   try {
     const list = await store.list(opts.sessionId)
@@ -92,9 +94,7 @@ export interface CheckpointShowOptions {
   readonly file?: string
 }
 
-export const checkpointShowCommand = async (
-  opts: CheckpointShowOptions,
-): Promise<number> => {
+export const checkpointShowCommand = async (opts: CheckpointShowOptions): Promise<number> => {
   const store = await resolveStore(opts)
   try {
     const cp = await store.get(opts.id)
@@ -115,9 +115,7 @@ export interface CheckpointDeleteOptions {
   readonly file?: string
 }
 
-export const checkpointDeleteCommand = async (
-  opts: CheckpointDeleteOptions,
-): Promise<number> => {
+export const checkpointDeleteCommand = async (opts: CheckpointDeleteOptions): Promise<number> => {
   const store = await resolveStore(opts)
   try {
     const removed = await store.delete(opts.id)
@@ -126,6 +124,77 @@ export const checkpointDeleteCommand = async (
       return 1
     }
     process.stdout.write(`deleted ${opts.id}\n`)
+    return 0
+  } finally {
+    await store.dispose?.()
+  }
+}
+
+export interface CheckpointRestoreOptions {
+  /**
+   * Restore by explicit checkpoint id. Mutually
+   * exclusive with `sessionId` and `latest`. When
+   * neither is set, restores the most-recent
+   * in-progress checkpoint across every session.
+   */
+  readonly id?: string
+  /**
+   * Restore the most-recent in-progress checkpoint
+   * for the given session.
+   */
+  readonly sessionId?: string
+  /**
+   * Restore the latest in-progress checkpoint across
+   * every session (no session filter).
+   */
+  readonly latest?: boolean
+  /** When set, print the resolved checkpoint as JSON. */
+  readonly json?: boolean
+  readonly store?: BaseCheckpointStore
+  readonly file?: string
+}
+
+/**
+ * `lumen checkpoint restore` — P34.5 (Phase B.5)
+ * resolves a saved checkpoint and prints it for use
+ * with `lumen run --resume-from <path>:<id>` (or the
+ * TUI's auto-resume path). The restore path does NOT
+ * itself run the agent — it returns the resolved
+ * checkpoint id so the caller can decide which
+ * `lumen run` invocation to attach it to.
+ */
+export const checkpointRestoreCommand = async (opts: CheckpointRestoreOptions): Promise<number> => {
+  const store = await resolveStore(opts)
+  try {
+    let cp: AgentCheckpoint | undefined
+    if (opts.id !== undefined) {
+      cp = await store.get(opts.id)
+      if (cp === undefined) {
+        process.stderr.write(`lumen checkpoint restore: no checkpoint with id "${opts.id}"\n`)
+        return 1
+      }
+    } else {
+      // latest / sessionId / both-unset all map to
+      // `latestInProgress` with the optional session
+      // filter. `latest: true` is a flag for "ignore
+      // session filter" — we just don't pass it.
+      cp = await store.latestInProgress(
+        opts.sessionId !== undefined ? { sessionId: opts.sessionId } : {},
+      )
+      if (cp === undefined) {
+        const where = opts.sessionId !== undefined ? ` for session "${opts.sessionId}"` : ''
+        process.stderr.write(`lumen checkpoint restore: no in-progress checkpoint${where}\n`)
+        return 1
+      }
+    }
+    if (opts.json === true) {
+      process.stdout.write(`${JSON.stringify(cp, null, 2)}\n`)
+    } else {
+      process.stdout.write(
+        `lumen checkpoint restore: ${cp.id} (session=${cp.sessionId} iter=${cp.iterations})\n`,
+      )
+      process.stdout.write('  use: lumen run --resume-from <path>:<id>\n')
+    }
     return 0
   } finally {
     await store.dispose?.()
