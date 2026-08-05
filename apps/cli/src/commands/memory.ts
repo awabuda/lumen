@@ -90,6 +90,13 @@ export interface MemoryCommandOptions {
    * `show` to parity with `list --format json`).
    */
   readonly format?: 'human' | 'json'
+  /**
+   * P40.d — `show` action: when true, additionally
+   * enumerate every record in the SqliteStore and
+   * emit a per-kind count. Default `false` (preserves
+   * pre-P40.d behaviour).
+   */
+  readonly verbose?: boolean
 }
 
 /** `lumen memory sync` — pull sqlite → md, ingest if newer. */
@@ -104,10 +111,16 @@ export const memorySyncCommand = async (opts: MemoryCommandOptions = {}): Promis
   }, opts)
 }
 
-/** `lumen memory show` — print the resolved paths + last
- *  sync mtime. */
+/** P40.d — `lumen memory show --verbose`. The default
+ *  (human + no --verbose) prints the bridge paths; with
+ *  `--verbose` we also enumerate every record in the
+ *  SqliteStore and emit a per-kind count. Useful for
+ *  operators sanity-checking that the bridge's last sync
+ *  produced the expected distribution. The count is a
+ *  one-line `kind=N records` per kind, sorted by count
+ *  descending. */
 export const memoryShowCommand = async (opts: MemoryCommandOptions = {}): Promise<number> => {
-  return await withBridge(async (bridge) => {
+  return await withBridge(async (bridge, store) => {
     const desc = bridge.describe()
     if (opts.format === 'json') {
       // P39.b — emit the bridge descriptor as JSON for
@@ -115,27 +128,49 @@ export const memoryShowCommand = async (opts: MemoryCommandOptions = {}): Promis
       // output, with one extra `lastSyncIso` field that
       // resolves '(never)' to null so jq / CI can
       // branch cleanly.
-      process.stdout.write(
-        `${JSON.stringify(
-          {
-            memoryMdPath: desc.memoryMdPath,
-            userMdPath: desc.userMdPath,
-            lastSyncMs: desc.lastSyncMs,
-            lastSyncIso: desc.lastSyncMs > 0 ? new Date(desc.lastSyncMs).toISOString() : null,
-          },
-          null,
-          2,
-        )}\n`,
-      )
+      const payload: Record<string, unknown> = {
+        memoryMdPath: desc.memoryMdPath,
+        userMdPath: desc.userMdPath,
+        lastSyncMs: desc.lastSyncMs,
+        lastSyncIso: desc.lastSyncMs > 0 ? new Date(desc.lastSyncMs).toISOString() : null,
+      }
+      if (opts.verbose === true) {
+        payload.kindCounts = await computeKindCounts(store)
+      }
+      process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
       return 0
     }
     process.stdout.write(
       `memory markdown bridge:\n  MEMORY.md: ${desc.memoryMdPath}\n  USER.md:   ${desc.userMdPath}\n  last sync: ${desc.lastSyncMs > 0 ? new Date(desc.lastSyncMs).toISOString() : '(never)'}\n`,
     )
+    if (opts.verbose === true) {
+      const counts = await computeKindCounts(store)
+      const entries = Object.entries(counts).sort((a, b) => b[1] - a[1])
+      if (entries.length === 0) {
+        process.stdout.write('  (no records)\n')
+      } else {
+        process.stdout.write('  kind counts:\n')
+        for (const [k, n] of entries) process.stdout.write(`    ${k}=${n}\n`)
+      }
+    }
     return 0
   }, opts)
 }
 
+/** P40.d — pull every record from the store and bucket
+ *  by kind. The SqliteStore.search path already supports
+ *  an optional `kind` filter; for the per-kind count we
+ *  fetch all (with a generous limit) so the result
+ *  reflects the whole store, not a subset. */
+const computeKindCounts = async (store: SqliteStore): Promise<Record<string, number>> => {
+  const records = await store.search({ limit: 100_000 })
+  const counts: Record<string, number> = {}
+  for (const r of records) {
+    const k = r.record.kind
+    counts[k] = (counts[k] ?? 0) + 1
+  }
+  return counts
+}
 /** P38.b — `lumen memory list [--kind <k>]` — print every record
  *  in the SqliteStore, optionally filtered by kind. The default
  *  output is the one-line-per-record layout; `--format json`

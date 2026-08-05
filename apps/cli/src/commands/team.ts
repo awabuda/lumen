@@ -757,6 +757,10 @@ export const teamCommand = async (options: TeamCommandOptions): Promise<number> 
   }
 
   // action === 'show'
+  if (options.format === 'json') {
+    process.stdout.write(`${JSON.stringify(team, null, 2)}\n`)
+    return 0
+  }
   process.stdout.write(`${formatTeam(team, options.path)}\n`)
   if (team.tasks && team.tasks.length > 0) {
     process.stdout.write('\n  tasks:\n')

@@ -141,6 +141,14 @@ export interface CheckpointDeleteOptions {
   readonly id: string
   readonly store?: BaseCheckpointStore
   readonly file?: string
+  /**
+   * P40.b — output format. 'human' (default) is the
+   * pre-P40.b `deleted <id>` text; 'json' emits a
+   * structured object (CI-friendly). Brings `delete`
+   * to parity with `show --format json` (P37.b) and
+   * `list --format json` (P38.d).
+   */
+  readonly format?: 'human' | 'json'
 }
 
 export const checkpointDeleteCommand = async (opts: CheckpointDeleteOptions): Promise<number> => {
@@ -150,6 +158,12 @@ export const checkpointDeleteCommand = async (opts: CheckpointDeleteOptions): Pr
     if (!removed) {
       process.stderr.write(`lumen checkpoint delete: no checkpoint with id "${opts.id}"\n`)
       return 1
+    }
+    if (opts.format === 'json') {
+      process.stdout.write(
+        `${JSON.stringify({ id: opts.id, deleted: true, deletedAt: Date.now() }, null, 2)}\n`,
+      )
+      return 0
     }
     process.stdout.write(`deleted ${opts.id}\n`)
     return 0

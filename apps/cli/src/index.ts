@@ -320,6 +320,10 @@ program
     'list (P38.b): output format. "human" (default) or "json". CI-friendly.',
     'human',
   )
+  .option(
+    '--verbose',
+    'show (P40.d): additionally enumerate every record in the SqliteStore and emit a per-kind count.',
+  )
   .option('--profile <name>', 'Profile label written into the markdown frontmatter')
   .action(async (subcommand: string, opts: Record<string, unknown>) => {
     const { memorySyncCommand, memoryShowCommand } = await import('./commands/memory.js')
@@ -348,6 +352,7 @@ program
         ...(memoryMdPath !== undefined ? { memoryMdPath } : {}),
         ...(userMdPath !== undefined ? { userMdPath } : {}),
         format,
+        ...(opts.verbose === true ? { verbose: true } : {}),
       })
     } else {
       process.stderr.write(`lumen memory: unknown subcommand: ${subcommand}\n`)
@@ -749,6 +754,10 @@ program
     '--section <name>',
     'show (P35.b): only print the named top-level section of the config (e.g. "model", "providers", "mcp", "agent"). Unknown names print an empty JSON object and exit 0.',
   )
+  .option(
+    '--include-secrets',
+    'show (P40.c): include apiKey / Authorization headers in the output. Default off (secrets always redacted).',
+  )
   .action(async (subcommand: string, opts: Record<string, unknown>) => {
     const { configGetCommand, configShowCommand, configPathCommand, configValidateCommand } =
       await import('./commands/config.js')
@@ -767,9 +776,14 @@ program
         ...(dottedPath !== undefined ? { path: dottedPath } : {}),
       })
     } else if (subcommand === 'show') {
+      const formatRaw = opts.format as string | undefined
+      const format = formatRaw === 'json' ? 'json' : 'human'
+      const section = opts.section as string | undefined
       code = await configShowCommand({
         ...(configPath !== undefined ? { configPath } : {}),
         ...(section !== undefined ? { section } : {}),
+        includeSecrets: opts.includeSecrets === true,
+        format,
       })
     } else {
       process.stderr.write(`lumen config: unknown subcommand: ${subcommand}\n`)

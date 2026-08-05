@@ -56,6 +56,25 @@ export interface ConfigShowOptions {
    * JSON object and exit 0 (CI-friendly).
    */
   readonly section?: string
+  /**
+   * P40.c — when true, print the full unredacted
+   * config (apiKey / Authorization headers included).
+   * Default `false` (pre-P40.c behaviour, secrets
+   * always redacted). Off by default because the
+   * operator may paste stdout into a bug report.
+   * Hidden flag (--include-secrets) — the CLI option
+   * is still exposed for debugging but is not
+   * advertised in `lumen config show --help`.
+   */
+  readonly includeSecrets?: boolean
+  /**
+   * P40.c.b — output format. 'human' (default) is
+   * the pre-P40.c single-JSON-object text; 'json'
+   * (the same as human for show, but the explicit
+   * flag is accepted for CI consumers that need to
+   * override the default).
+   */
+  readonly format?: 'human' | 'json'
 }
 export interface ConfigGetOptions {
   readonly configPath?: string
@@ -78,13 +97,18 @@ export interface ConfigValidateOptions {
 /** `lumen config show` — pretty-print the resolved config with secrets redacted. */
 export const configShowCommand = async (opts: ConfigShowOptions = {}): Promise<number> => {
   const config = await loadCliConfig(opts.configPath)
-  const redacted = redact(config) as Record<string, unknown>
+  // P40.c — `includeSecrets` skips the redact() pass so
+  // operators can dump the full config for local
+  // debugging. Default off (secrets always scrubbed).
+  const view = (
+    opts.includeSecrets === true ? config : (redact(config) as Record<string, unknown>)
+  ) as Record<string, unknown>
   if (opts.section !== undefined) {
-    const section = redacted[opts.section]
+    const section = view[opts.section]
     process.stdout.write(`${JSON.stringify(section ?? {}, null, 2)}\n`)
     return 0
   }
-  process.stdout.write(`${JSON.stringify(redacted, null, 2)}\n`)
+  process.stdout.write(`${JSON.stringify(view, null, 2)}\n`)
   return 0
 }
 
