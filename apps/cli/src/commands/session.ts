@@ -238,7 +238,17 @@ export const sessionDeleteCommand = async (
     return 2
   }
   let removed = false
+  let session: SessionRecord | undefined
+  let messages: ReadonlyArray<SessionMessage> = []
   await withStore(async (store) => {
+    // P45.a — load the session + message history
+    // BEFORE the delete so the JSON path can
+    // surface the `lastAccessMs` field. The read
+    // is a few KB; cost is negligible.
+    session = await store.getSession(id)
+    if (session) {
+      messages = await store.getSessionMessages(id, { limit: 1_000 })
+    }
     removed = await store.deleteSession(id)
   }, opts)
   if (!removed) {
@@ -250,8 +260,20 @@ export const sessionDeleteCommand = async (
   // `list` (P35.f). The shape includes the session
   // id and the deletion timestamp.
   if (opts.format === 'json') {
+    // P45.a — the JSON shape now includes a
+    // `lastAccessMs` field (the most-recent message
+    // `createdAt` in the session, or the session's
+    // own `createdAt` if the session is empty). CI
+    // can use this to audit the time of last activity
+    // before deletion. The value is computed BEFORE
+    // `store.deleteSession` so the post-delete state
+    // is not consulted.
+    let lastAccessMs = session?.createdAt ?? Date.now()
+    if (messages.length > 0) {
+      lastAccessMs = Math.max(...messages.map((m) => m.createdAt))
+    }
     process.stdout.write(
-      `${JSON.stringify({ id, deleted: true, deletedAt: Date.now() }, null, 2)}\n`,
+      `${JSON.stringify({ id, deleted: true, deletedAt: Date.now(), lastAccessMs }, null, 2)}\n`,
     )
     return 0
   }

@@ -364,6 +364,10 @@ program
   )
   .option('--limit <n>', 'list (P38.b): max records to print (default 50).')
   .option(
+    '--no-trust',
+    'list (P45.d): skip the `minTrust` floor (default 0.6) so the list returns every record regardless of trust.',
+  )
+  .option(
     '--format <fmt>',
     'list (P38.b): output format. "human" (default) or "json". CI-friendly.',
     'human',
@@ -374,7 +378,9 @@ program
   )
   .option('--profile <name>', 'Profile label written into the markdown frontmatter')
   .action(async (subcommand: string, opts: Record<string, unknown>) => {
-    const { memorySyncCommand, memoryShowCommand } = await import('./commands/memory.js')
+    const { memorySyncCommand, memoryShowCommand, memoryListCommand } = await import(
+      './commands/memory.js'
+    )
     const memoryPath = opts.memoryPath as string | undefined
     const memoryMdPath = opts.memoryMdPath as string | undefined
     const userMdPath = opts.userMdPath as string | undefined
@@ -403,6 +409,25 @@ program
         format,
         ...(opts.verbose === true ? { verbose: true } : {}),
         ...(kindRaw !== undefined ? { kindFilter: kindRaw } : {}),
+      })
+    } else if (subcommand === 'list') {
+      // P45.d — wire `--no-trust` to the `list`
+      // action. Brings `list` to parity with the
+      // pre-existing `--format` / `--kind` /
+      // `--limit` flag set (P38.b / P39.b).
+      const formatRaw = opts.format as string | undefined
+      const format = formatRaw === 'json' ? 'json' : 'human'
+      const kindRaw = opts.kind as string | undefined
+      const limitRaw = opts.limit
+      const limit = typeof limitRaw === 'string' ? Number.parseInt(limitRaw, 10) : undefined
+      code = await memoryListCommand({
+        ...(memoryPath !== undefined ? { memoryPath } : {}),
+        ...(memoryMdPath !== undefined ? { memoryMdPath } : {}),
+        ...(userMdPath !== undefined ? { userMdPath } : {}),
+        format,
+        ...(kindRaw !== undefined ? { filterKind: kindRaw } : {}),
+        ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
+        ...(opts.trust === true ? { noTrust: true } : {}),
       })
     } else {
       process.stderr.write(`lumen memory: unknown subcommand: ${subcommand}\n`)

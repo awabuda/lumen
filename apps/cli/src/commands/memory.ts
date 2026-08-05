@@ -83,6 +83,15 @@ export interface MemoryCommandOptions {
   /** P38.b — `list` action: max records to print. Default 50. */
   readonly limit?: number
   /**
+   * P45.d — `list` action: when true, skip the
+   * `minTrust` floor (default 0.6 for the
+   * `memory.list` projection). Setting `noTrust`
+   * to true makes the list return every record
+   * regardless of the trust floor. CI can use
+   * this to audit the entire memory store.
+   */
+  readonly noTrust?: boolean
+  /**
    * P38.b + P39.b — output format. 'human' (default)
    * emits the pre-P38.b one-line-per-section text
    * layout; 'json' emits a structured object (CI-friendly).
@@ -201,8 +210,16 @@ const computeKindCounts = async (
 export const memoryListCommand = async (opts: MemoryCommandOptions = {}): Promise<number> => {
   const limit = opts.limit ?? 50
   return await withBridge(async (_bridge, store) => {
+    // P45.d — when noTrust is set, omit the
+    // `minTrust` floor. The pre-P45.d default is
+    // 0.6 (the markdown bridge's projection
+    // target). The `noTrust` flag drops the
+    // floor to 0 so the list returns every
+    // record regardless of trust.
+    const minTrust = opts.noTrust === true ? 0 : 0.6
     const records = await store.search({
       ...(opts.filterKind !== undefined ? { kind: opts.filterKind } : {}),
+      minTrust,
       limit: 10_000,
     })
     const sorted = records
