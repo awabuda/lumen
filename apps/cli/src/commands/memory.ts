@@ -97,6 +97,16 @@ export interface MemoryCommandOptions {
    * pre-P40.d behaviour).
    */
   readonly verbose?: boolean
+  /**
+   * P43.c — `show` action: when set with `--verbose`,
+   * restrict the per-kind count to this single kind.
+   * Useful for `lumen memory show --verbose --kind
+   * reflection` to confirm a single record class is
+   * accumulating as expected. The shape is unchanged
+   * — `kindCounts` still emits `{ <kind>: <n> }` but
+   * with at most one entry.
+   */
+  readonly kindFilter?: string
 }
 
 /** `lumen memory sync` — pull sqlite → md, ingest if newer. */
@@ -135,7 +145,7 @@ export const memoryShowCommand = async (opts: MemoryCommandOptions = {}): Promis
         lastSyncIso: desc.lastSyncMs > 0 ? new Date(desc.lastSyncMs).toISOString() : null,
       }
       if (opts.verbose === true) {
-        payload.kindCounts = await computeKindCounts(store)
+        payload.kindCounts = await computeKindCounts(store, opts.kindFilter)
       }
       process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
       return 0
@@ -144,7 +154,7 @@ export const memoryShowCommand = async (opts: MemoryCommandOptions = {}): Promis
       `memory markdown bridge:\n  MEMORY.md: ${desc.memoryMdPath}\n  USER.md:   ${desc.userMdPath}\n  last sync: ${desc.lastSyncMs > 0 ? new Date(desc.lastSyncMs).toISOString() : '(never)'}\n`,
     )
     if (opts.verbose === true) {
-      const counts = await computeKindCounts(store)
+      const counts = await computeKindCounts(store, opts.kindFilter)
       const entries = Object.entries(counts).sort((a, b) => b[1] - a[1])
       if (entries.length === 0) {
         process.stdout.write('  (no records)\n')
@@ -161,9 +171,19 @@ export const memoryShowCommand = async (opts: MemoryCommandOptions = {}): Promis
  *  by kind. The SqliteStore.search path already supports
  *  an optional `kind` filter; for the per-kind count we
  *  fetch all (with a generous limit) so the result
- *  reflects the whole store, not a subset. */
-const computeKindCounts = async (store: SqliteStore): Promise<Record<string, number>> => {
-  const records = await store.search({ limit: 100_000 })
+ *  reflects the whole store, not a subset.
+ *  P43.c — when `kindFilter` is set, restrict to that
+ *  single kind. The returned object still has the
+ *  same `{ <kind>: <n> }` shape but with at most one
+ *  key. */
+const computeKindCounts = async (
+  store: SqliteStore,
+  kindFilter?: string,
+): Promise<Record<string, number>> => {
+  const records = await store.search({
+    limit: 100_000,
+    ...(kindFilter !== undefined ? { kind: kindFilter } : {}),
+  })
   const counts: Record<string, number> = {}
   for (const r of records) {
     const k = r.record.kind

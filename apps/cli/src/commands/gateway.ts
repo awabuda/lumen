@@ -43,6 +43,15 @@ export interface GatewayCommandOptions {
   readonly host?: string
   /** Path prefix for all routes. Default `/v1`. */
   readonly pathPrefix?: string
+  /**
+   * P43.d — `status` action only. Output format.
+   * 'human' (default) is the pre-P43.d one-line
+   * text; 'json' emits a structured object
+   * (CI-friendly). Brings `status` to parity with
+   * the other CLI surfaces that already honour
+   * the `--format` flag.
+   */
+  readonly format?: 'human' | 'json'
 }
 
 /**
@@ -111,10 +120,27 @@ export const gatewayStatusCommand = async (
   // (Phase C gateway UI work).
   const port = options.port ?? 0
   const host = options.host ?? '127.0.0.1'
+  const pathPrefix = options.pathPrefix ?? '/v1'
+  // P43.d — emit a JSON object on `status`. The
+  // shape mirrors the human output verbatim.
+  if (options.format === 'json') {
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          status: 'not-running',
+          plannedEndpoint: `http://${host}:${port === 0 ? '<random>' : String(port)}${pathPrefix}`,
+          host,
+          port,
+          pathPrefix,
+        },
+        null,
+        2,
+      )}\n`,
+    )
+    return 0
+  }
   process.stdout.write(
-    `lumen gateway status: not running (no pidfile yet; future P-ticket wires daemon mode)\nplanned endpoint: http://${host}:${port === 0 ? '<random>' : String(port)}${
-      options.pathPrefix ?? '/v1'
-    }\n`,
+    `lumen gateway status: not running (no pidfile yet; future P-ticket wires daemon mode)\nplanned endpoint: http://${host}:${port === 0 ? '<random>' : String(port)}${pathPrefix}\n`,
   )
   return 0
 }

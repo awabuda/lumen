@@ -38,12 +38,22 @@ export const buildDoctorRows = async (
     readonly product?: boolean
     readonly verbose?: boolean
     /**
-     * P37.d — when true, skip the API key presence check
+     * P40.c — when true, skip the API key presence check
      * (treat it as a WARN row with the SKIP marker rather
      * than a FAIL). When undefined / false, the missing
      * key is a FAIL row (the pre-P37.d default).
      */
     readonly noApiKey?: boolean
+    /**
+     * P43.a — restrict the row set to a single top-level
+     * section (e.g. `config`, `mcp`, `api-key`). When
+     * undefined, all rows are emitted (the pre-P43.a
+     * default). The shape of the returned array is
+     * unchanged — only the count differs. CI can use
+     * this to slice the doctor output without having to
+     * pipe through `jq`.
+     */
+    readonly section?: string
   } = {},
 ): Promise<DoctorRow[]> => {
   const rows: DoctorRow[] = []
@@ -362,5 +372,12 @@ export const buildDoctorRows = async (
   // path is fully exhaustive without a verbose
   // gate, so we leave the flag as a no-op marker.
   void options.verbose
-  return rows
+  // P43.a — when `section` is set, restrict the
+  // returned array to that single section. The
+  // human path is unchanged (the human path
+  // always prints every row).
+  if (options.section === undefined) {
+    return rows
+  }
+  return rows.filter((r) => r.section === options.section)
 }

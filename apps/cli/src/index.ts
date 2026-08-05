@@ -242,15 +242,21 @@ program
     '--no-api-key',
     'P37.d: skip the API key presence check. Useful for offline diagnostics in CI sandboxes that do not have the LLM key mounted.',
   )
+  .option(
+    '--section <name>',
+    'P43.a: when --format json is set, restrict the row set to a single top-level section (e.g. `config`, `mcp`, `api-key`). The human path is unchanged (always prints every row).',
+  )
   .action(async (opts: Record<string, unknown>) => {
     const { doctorCommand } = await import('./commands/doctor.js')
     const formatRaw = opts.format as string | undefined
     const format: 'human' | 'json' = formatRaw === 'json' ? 'json' : 'human'
+    const section = opts.section as string | undefined
     const code = await doctorCommand({
       verbose: opts.verbose === true,
       product: opts.product === true,
       format,
       noApiKey: opts.apiKey === false,
+      ...(section !== undefined ? { section } : {}),
     })
     process.exit(code)
   })
@@ -354,12 +360,14 @@ program
     } else if (subcommand === 'show') {
       const formatRaw = opts.format as string | undefined
       const format = formatRaw === 'json' ? 'json' : 'human'
+      const kindRaw = opts.kind as string | undefined
       code = await memoryShowCommand({
         ...(memoryPath !== undefined ? { memoryPath } : {}),
         ...(memoryMdPath !== undefined ? { memoryMdPath } : {}),
         ...(userMdPath !== undefined ? { userMdPath } : {}),
         format,
         ...(opts.verbose === true ? { verbose: true } : {}),
+        ...(kindRaw !== undefined ? { kindFilter: kindRaw } : {}),
       })
     } else {
       process.stderr.write(`lumen memory: unknown subcommand: ${subcommand}\n`)
@@ -375,6 +383,11 @@ program
   .option('--port <n>', 'Port to listen on (0 picks a random free port)', '0')
   .option('--host <h>', 'Host to bind (default 127.0.0.1 — loopback only)', '127.0.0.1')
   .option('--path-prefix <path>', 'Path prefix for all routes', '/v1')
+  .option(
+    '--format <fmt>',
+    'status (P43.d): output format. "human" (default) or "json". CI-friendly.',
+    'human',
+  )
   .action(async (subcommand: string, opts: Record<string, unknown>) => {
     const { gatewayStartCommand, gatewayStopCommand, gatewayStatusCommand } = await import(
       './commands/gateway.js'
@@ -415,7 +428,13 @@ program
     } else if (subcommand === 'stop') {
       code = await gatewayStopCommand()
     } else if (subcommand === 'status') {
-      code = await gatewayStatusCommand(baseOpts)
+      // P43.d — wire `--format json` to the `status`
+      // action. The human path is unchanged. The
+      // `start` / `stop` actions do not currently
+      // honour the flag.
+      const formatRaw = opts.format as string | undefined
+      const format: 'human' | 'json' = formatRaw === 'json' ? 'json' : 'human'
+      code = await gatewayStatusCommand({ ...baseOpts, format })
     } else {
       process.stderr.write(`lumen gateway: unknown subcommand: ${subcommand}\n`)
       code = 1
@@ -826,6 +845,11 @@ program
   .argument('[name]', 'Tool name (for "show")')
   .option('--approval-required', 'Only show tools that require approval at runtime')
   .option('--toolset', 'List built-in toolsets instead of individual tools')
+  .option(
+    '--format <fmt>',
+    'list (P43.b): output format. "human" (default) or "json". CI-friendly.',
+    'human',
+  )
   .action(async (subcommand: string, name: string | undefined, opts: Record<string, unknown>) => {
     const { toolsListCommand, toolsShowCommand, toolsCheckCommand } = await import(
       './commands/tools.js'
@@ -841,9 +865,12 @@ program
     } else if (subcommand === 'check') {
       code = await toolsCheckCommand()
     } else if (subcommand === 'list') {
+      const formatRaw = opts.format as string | undefined
+      const format: 'human' | 'json' = formatRaw === 'json' ? 'json' : 'human'
       code = await toolsListCommand({
         approvalRequiredOnly: opts.approvalRequired === true,
         toolset: opts.toolset === true,
+        format,
       })
     } else {
       process.stderr.write(`lumen tools: unknown subcommand: ${subcommand}\n`)

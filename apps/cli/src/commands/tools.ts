@@ -23,6 +23,12 @@ export interface ToolsListOptions {
   readonly approvalRequiredOnly?: boolean
   /** Show toolsets instead of individual tools. */
   readonly toolset?: boolean
+  /**
+   * P43.b — output format. 'human' (default) is
+   * the pre-P43.b one-row-per-tool text layout;
+   * 'json' emits a JSON array (CI-friendly).
+   */
+  readonly format?: 'human' | 'json'
 }
 
 /** Options for `lumen tools show`. */
@@ -42,6 +48,15 @@ export const toolsListCommand = async (opts: ToolsListOptions = {}): Promise<num
     ? tools.filter((t) => t.describe().risk === 'approval-required')
     : tools
 
+  // P43.b — emit a JSON array when `--format json`.
+  // Brings `list` to parity with every other
+  // CLI surface that already honours the
+  // `--format` flag (P35..P42 cumulative).
+  if (opts.format === 'json') {
+    const rows = filtered.map((t) => t.describe())
+    process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`)
+    return 0
+  }
   process.stdout.write(`Lumen tools (${filtered.length}/${tools.length})\n\n`)
   if (filtered.length === 0) {
     process.stdout.write('  No tools matched.\n')
