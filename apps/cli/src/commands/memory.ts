@@ -71,6 +71,20 @@ export interface MemoryCommandOptions {
   readonly trustThreshold?: number
   /** Profile label written into the markdown frontmatter. */
   readonly profile?: string
+  /**
+   * P38.b — `list` action: optional kind filter. When set,
+   * only records whose `kind === filterKind` are
+   * returned. Pre-P38.b the list was always 'fact'
+   * (the markdown bridge's projection target); the
+   * filter now lets operators see reflection / session
+   * / user-pref records too.
+   */
+  readonly filterKind?: string
+  /** P38.b — `list` action: max records to print. Default 50. */
+  readonly limit?: number
+  /** P38.b — `list` action: output format. 'human' (default)
+   *  or 'json' (CI-friendly). */
+  readonly format?: 'human' | 'json'
 }
 
 /** `lumen memory sync` — pull sqlite → md, ingest if newer. */
@@ -97,5 +111,51 @@ export const memoryShowCommand = async (opts: MemoryCommandOptions = {}): Promis
   }, opts)
 }
 
+/** P38.b — `lumen memory list [--kind <k>]` — print every record
+ *  in the SqliteStore, optionally filtered by kind. The default
+ *  output is the one-line-per-record layout; `--format json`
+ *  emits a JSON array (CI-friendly). The list is sorted by
+ *  `createdAt` (newest first) and capped by `--limit` (50 by
+ *  default).
+ */
+export const memoryListCommand = async (opts: MemoryCommandOptions = {}): Promise<number> => {
+  const limit = opts.limit ?? 50
+  return await withBridge(async (_bridge, store) => {
+    const records = await store.search({
+      ...(opts.filterKind !== undefined ? { kind: opts.filterKind } : {}),
+      limit: 10_000,
+    })
+    const sorted = records
+      .map((r) => r.record)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit)
+    if (opts.format === 'json') {
+      const rows = sorted.map((r) => ({
+        id: r.id,
+        kind: r.kind,
+        trust: r.trust,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        content: r.content.slice(0, 200),
+      }))
+      process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`)
+      return 0
+    }
+    if (sorted.length === 0) {
+      const where = opts.filterKind !== undefined ? ` (kind=${opts.filterKind})` : ''
+      process.stdout.write(`(no memory records${where})\n`)
+      return 0
+    }
+    process.stdout.write(
+      `Memory records (${sorted.length}${opts.filterKind !== undefined ? `, kind=${opts.filterKind}` : ''}):\n\n`,
+    )
+    for (const r of sorted) {
+      process.stdout.write(
+        `  ${r.id}  kind=${r.kind}  trust=${r.trust.toFixed(2)}  createdAt=${r.createdAt}\n    ${r.content.slice(0, 160)}\n\n`,
+      )
+    }
+    return 0
+  }, opts)
+}
 /** Re-export path helpers for tests + other commands. */
 export { defaultMemoryMdPath, defaultUserMdPath }

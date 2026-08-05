@@ -65,12 +65,29 @@ export interface CheckpointListOptions {
   readonly store?: BaseCheckpointStore
   /** Path to a SQLite-backed store. Overrides the in-memory default. */
   readonly file?: string
+  /**
+   * P38.d — output format. 'human' (default) is the
+   * pre-P38.d one-line-per-checkpoint text layout;
+   * 'json' emits a JSON array (CI-friendly). Brings
+   * `list` to parity with `show --format json` (P37.b).
+   */
+  readonly format?: 'human' | 'json'
 }
 
 export const checkpointListCommand = async (opts: CheckpointListOptions): Promise<number> => {
   const store = await resolveStore(opts)
   try {
     const list = await store.list(opts.sessionId)
+    if (opts.format === 'json') {
+      const rows = list.map((cp) => ({
+        id: cp.id,
+        iterations: cp.iterations,
+        createdAt: cp.createdAt,
+        ...(cp.label !== undefined ? { label: cp.label } : {}),
+      }))
+      process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`)
+      return 0
+    }
     if (list.length === 0) {
       process.stdout.write(`(no checkpoints for session ${opts.sessionId})\n`)
       return 0

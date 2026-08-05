@@ -110,6 +110,13 @@ export interface RunCommandOptions {
   sessionId?: string
   /** Checkpoint cadence forwarded to Agent.run. */
   checkpointInterval?: number
+  /**
+   * P38.c — when true, print the budget summary
+   * (tokens / cost / time) after the run resolves.
+   * Same shape as the `/cost` TUI slash (P34.3).
+   * Default false (pre-P38.c behaviour).
+   */
+  stat?: boolean
 }
 
 export const runCommand = async (options: RunCommandOptions): Promise<number> => {
@@ -230,6 +237,21 @@ export const runCommand = async (options: RunCommandOptions): Promise<number> =>
         process.stdout.write(
           `[lumen] agent stopped after ${result.iterations} iteration(s) with ${result.finalMessage.toolCalls.length} tool call(s) and no final text.\n`,
         )
+      }
+      // P38.c — `--stat` emits a budget summary on stdout.
+      // Reads from the agent's `budgetSnapshot()` (P23.12)
+      // which is populated by the Agent.run path. Format
+      // mirrors the `/cost` TUI slash so operators can
+      // diff the two.
+      if (options.stat === true) {
+        const budget = built.agent.budgetSnapshot()
+        if (budget === undefined) {
+          process.stdout.write('[stat] budget: no run budget recorded\n')
+        } else {
+          process.stdout.write(
+            `[stat] budget: tokens=${budget.used} cost=$${budget.costUsdConsumed().toFixed(4)} time=${budget.timeMsConsumed()}ms\n`,
+          )
+        }
       }
       return 0
     } finally {

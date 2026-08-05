@@ -91,7 +91,9 @@ rules:
  *    4. LUMEN_DEFAULT_MODEL env
  *    All four undefined → typed ConfigError
  */
-export const starterConfigTemplate = (): string => `# Lumen main config — ` + new Date().toISOString().slice(0, 10) + `
+export const starterConfigTemplate = (): string => {
+  const date = new Date().toISOString().slice(0, 10)
+  return `# Lumen main config — ${date}
 #
 # Written by \`lumen init --with-config\` (P-2026-07-29 audit
 # GAP-3 follow-up). This file is read by every CLI subcommand;
@@ -179,7 +181,16 @@ mcp:
 logging:
   level: info             # trace | debug | info | warn | error
   redactSecrets: true     # scrub apiKey / Authorization headers from logs
+
+# ──────────────────────────────────────────────────────────────
+# P38.a — Product assembly (OPT-IN: P33.B Day4). Uncomment
+# the next line to make every run / chat mount the
+# assistant assembly (plan / permission / skill / reflection
+# middleware). The default is bare; see BUILTIN_ASSEMBLIES.
+# ──────────────────────────────────────────────────────────────
+# defaultProfile: assistant
 `
+}
 
 /** Options for {@link initCommand}. */
 export interface InitCommandOptions {
@@ -204,6 +215,19 @@ export interface InitCommandOptions {
   withContext?: boolean
   /** Override the cwd for `--with-context` (default: current cwd). */
   cwd?: string
+  /**
+   * P38.a — when set alongside `--with-config`, append
+   * `defaultProfile: assistant` to the starter main
+   * config so the operator's first `lumen run` lands in
+   * the assistant assembly (plan / permission / skill /
+   * reflection middleware all mounted). The default
+   * profile name is `'assistant'` (P33.B Day4); the
+   * `--with-default-profile` flag without a value is
+   * intentional — a profile name parameter is out of
+   * scope for P38.a (operators who want `bare` etc.
+   * edit the config directly).
+   */
+  withDefaultProfile?: boolean
 }
 
 /** Run the `lumen init` command. Returns 0 on success, 2 on conflict. */
@@ -246,7 +270,18 @@ export const initCommand = async (options: InitCommandOptions = {}): Promise<num
       return 2
     }
     await fs.mkdir(resolve(cfgDest, '..'), { recursive: true })
-    await fs.writeFile(cfgDest, starterConfigTemplate(), 'utf8')
+    // P38.a — when --with-default-profile is set, the
+    // starter template's commented `defaultProfile: ...`
+    // line is uncommented so the assistant assembly
+    // mounts out of the box. We splice on the literal
+    // uncommented line at a stable marker so the
+    // pre-existing template body is unchanged.
+    const baseConfig = starterConfigTemplate()
+    const finalConfig =
+      options.withDefaultProfile === true
+        ? baseConfig.replace('# defaultProfile: assistant', 'defaultProfile: assistant')
+        : baseConfig
+    await fs.writeFile(cfgDest, finalConfig, 'utf8')
     process.stdout.write(`wrote ${cfgDest}\n`)
   }
 

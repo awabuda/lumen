@@ -82,6 +82,10 @@ program
   .option('--resume-ttl <ms>', 'Maximum checkpoint age for auto-resume (default 600000)')
   .option('--checkpoint-interval <steps>', 'Save every N completed steps (default 1)')
   .option(
+    '--stat',
+    'P38.c: print a budget summary (tokens / cost / time) after the run resolves. Mirrors the `/cost` TUI slash.',
+  )
+  .option(
     '--enable-skill-trigger',
     'Wire SkillTriggerMiddleware (P20.6.2). Activates skills from the local skill registry (default ~/.lumen/skills) by keyword-matching each user message and injects active skill descriptions into the system prompt. Off by default to preserve the pre-P20.6.2 behaviour.',
   )
@@ -133,6 +137,7 @@ program
           : undefined,
       enableSkillTrigger: opts.enableSkillTrigger === true,
       skillsPath: opts.skillsPath as string | undefined,
+      stat: opts.stat === true,
       // P24.4 (bug.md #9) — opt-in browser tool flags.
       webBrowser: opts.webBrowser === true,
       webBrowserExe: opts.webBrowserExe as string | undefined,
@@ -300,11 +305,21 @@ program
 program
   .command('memory')
   .description('Inspect and manage the memory markdown bridge (MEMORY.md / USER.md)')
-  .argument('[subcommand]', '"sync" (default) or "show"', 'sync')
+  .argument('[subcommand]', '"sync" (default), "show", or "list"', 'sync')
   .option('--memory-path <path>', 'Override the SQLite memory database path')
   .option('--memory-md-path <path>', 'Override MEMORY.md path (default ~/.lumen/MEMORY.md)')
   .option('--user-md-path <path>', 'Override USER.md path (default ~/.lumen/USER.md)')
   .option('--trust-threshold <n>', 'Minimum trust to project into markdown (default 0.6)', '0.6')
+  .option(
+    '--kind <k>',
+    'list (P38.b): filter records by kind. Useful for `fact` / `reflection` / `user-pref` / `session`.',
+  )
+  .option('--limit <n>', 'list (P38.b): max records to print (default 50).')
+  .option(
+    '--format <fmt>',
+    'list (P38.b): output format. "human" (default) or "json". CI-friendly.',
+    'human',
+  )
   .option('--profile <name>', 'Profile label written into the markdown frontmatter')
   .action(async (subcommand: string, opts: Record<string, unknown>) => {
     const { memorySyncCommand, memoryShowCommand } = await import('./commands/memory.js')
@@ -474,7 +489,9 @@ program
         process.stderr.write('lumen checkpoint: missing <session-id> for "list"\n')
         code = 1
       } else {
-        code = await checkpointListCommand({ sessionId: arg, file })
+        const formatRaw = opts.format as string | undefined
+        const format = formatRaw === 'json' ? 'json' : 'human'
+        code = await checkpointListCommand({ sessionId: arg, file, format })
       }
     } else if (subcommand === 'show') {
       if (!arg) {
@@ -944,6 +961,10 @@ program
     '--cwd <path>',
     'P31.7: override the cwd for `--with-context`. Default is the cwd at command run time.',
   )
+  .option(
+    '--with-default-profile',
+    'P38.a: with --with-config, also uncomment `defaultProfile: assistant` in the starter config so the assistant assembly (plan / permission / skill / reflection) mounts out of the box.',
+  )
   .action(async (opts: Record<string, unknown>) => {
     const { initCommand } = await import('./commands/init.js')
     const code = await initCommand({
@@ -953,6 +974,7 @@ program
       configPath: opts.configPath as string | undefined,
       withContext: opts.withContext === true,
       cwd: opts.cwd as string | undefined,
+      withDefaultProfile: opts.withDefaultProfile === true,
     })
     process.exit(code)
   })
