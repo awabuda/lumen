@@ -40,6 +40,18 @@ export interface ApplyPatchCommandOptions {
   readonly path: string
   readonly dryRun?: boolean
   /**
+   * P35.e — output format. 'human' (default) emits the
+   * one-line-per-hunk layout; 'json' emits a single
+   * object (CI-friendly).
+   */
+  readonly format?: 'human' | 'json'
+  /**
+   * P35.e — when --format json is set, include the
+   * raw `PatchPlan` shape in the JSON output. Default
+   * false (keep the CI surface compact).
+   */
+  readonly includePlan?: boolean
+  /**
    * Directory relative to which `*** Add File: <path>` and
    * `*** Update File: <path>` paths are resolved. Defaults
    * to `process.cwd()`. Operators who want the patch to
@@ -105,6 +117,17 @@ export const applyPatchCommand = async (options: ApplyPatchCommandOptions): Prom
   }
 
   if (options.dryRun === true) {
+    if (options.format === 'json') {
+      const summary = plan.hunks.map((h, i) => ({
+        index: i,
+        kind: h.isCreate ? 'create' : h.isDelete ? 'delete' : 'update',
+        filePath: h.filePath,
+      }))
+      process.stdout.write(
+        `${JSON.stringify({ dryRun: true, hunks: plan.hunks.length, summary }, null, 2)}\n`,
+      )
+      return 0
+    }
     process.stdout.write(`dry-run: ${plan.hunks.length} hunk(s) planned\n`)
     for (let i = 0; i < plan.hunks.length; i += 1) {
       const hunk = plan.hunks[i]
@@ -123,6 +146,23 @@ export const applyPatchCommand = async (options: ApplyPatchCommandOptions): Prom
       `lumen apply-patch: applier error: ${err instanceof Error ? err.message : String(err)}\n`,
     )
     return 2
+  }
+  if (options.format === 'json') {
+    const payload = {
+      dryRun: false,
+      hunks: plan.hunks.length,
+      applied: result.applied.map((a) => ({ filePath: a.filePath, kind: a.kind })),
+      failed: result.failed.map((f) => {
+        const hunk = plan.hunks[f.index]
+        return {
+          index: f.index,
+          filePath: hunk?.filePath ?? '<unknown>',
+          reason: f.reason,
+        }
+      }),
+    }
+    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
+    return result.failed.length > 0 ? 1 : 0
   }
   process.stdout.write(`${formatResult(plan, result, false)}\n`)
   return result.failed.length > 0 ? 1 : 0

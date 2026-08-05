@@ -1005,12 +1005,25 @@ export class Agent {
         })
       }
 
+      // P36 (bug.md #41 hooks lifecycle upgrade) — surface
+      // the final budget snapshot on the `run:end` hook so
+      // observers can read cost / tokens without holding a
+      // reference to the agent. Optional fields are
+      // populated when the run actually built a budget
+      // (the pre-AgentConfig budget path leaves them
+      // undefined for backward compatibility).
+      const runEndExtras: { costUsd?: number; tokensUsed?: number } = {}
+      if (budget !== undefined) {
+        runEndExtras.costUsd = budget.costUsdConsumed()
+        runEndExtras.tokensUsed = budget.tokensConsumed()
+      }
       await this.hooks.dispatch(
         {
           kind: 'run:end',
           sessionId,
           finalMessage: lastMessage,
           iterations,
+          ...runEndExtras,
         },
         { sessionId, iteration: iterations, startedAt: Date.now() },
       )

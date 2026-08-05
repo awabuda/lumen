@@ -19,7 +19,24 @@ import type { AssistantMessage, Message, ToolCall, ToolResult } from '../message
 /** Lifecycle events the agent emits. */
 export type HookEvent =
   | { kind: 'run:start'; sessionId: string; userMessage: string }
-  | { kind: 'run:end'; sessionId: string; finalMessage: AssistantMessage; iterations: number }
+  | {
+      kind: 'run:end'
+      sessionId: string
+      finalMessage: AssistantMessage
+      iterations: number
+      /**
+       * P36 (bug.md #41 hooks lifecycle upgrade) — additive
+       * cost metric. When the Agent finishes a run, we
+       * surface the budget's total cost in this hook so
+       * observers (logging, billing, /cost snapshots) can
+       * read it without the budget being exposed
+       * separately. Undefined when the run never built a
+       * budget (e.g. threw before the first tool call).
+       */
+      costUsd?: number
+      /** P36 — total tokens consumed across all model calls. */
+      tokensUsed?: number
+    }
   | { kind: 'step:start'; iteration: number }
   | { kind: 'step:end'; iteration: number; message: AssistantMessage }
   | { kind: 'message:append'; message: Message }

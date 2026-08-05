@@ -81,6 +81,14 @@ export interface SessionCommandOptions {
   readonly olderThanDays?: number
   /** `show` only: limit messages returned. Default 100. */
   readonly limit?: number
+  /**
+   * P35.f — output format. 'human' (default) emits the
+   * one-line-per-session layout; 'json' emits a single
+   * JSON array (CI-friendly). Currently only `list`
+   * honours this flag; other sub-commands degrade to
+   * their pre-P35.f text path.
+   */
+  readonly format?: 'human' | 'json'
 }
 
 /** Format a unix-ms timestamp as a short local string. */
@@ -105,6 +113,17 @@ export const sessionListCommand = async (opts: SessionCommandOptions = {}): Prom
     path = opts.memoryPath ?? defaultMemoryPath()
     sessions = await store.listSessions()
   }, opts)
+
+  if (opts.format === 'json') {
+    const rows = sessions.map((s) => ({
+      id: s.id,
+      title: s.title ?? null,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+    }))
+    process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`)
+    return 0
+  }
 
   process.stdout.write(`Lumen sessions (${path})\n\n`)
   if (sessions.length === 0) {

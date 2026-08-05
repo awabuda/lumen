@@ -254,6 +254,7 @@ program
   .option('--force', 'Confirm destructive operations (delete, prune)')
   .option('--older-than <days>', 'prune: cut-off age in days (default 30)', '30')
   .option('--limit <n>', 'show: limit messages returned (default 100)', '100')
+  .option('--format <fmt>', 'P35.f: list output format. "human" (default) or "json".', 'human')
   .action(async (subcommand: string, id: string | undefined, opts: Record<string, unknown>) => {
     const { sessionListCommand, sessionShowCommand, sessionDeleteCommand, sessionPruneCommand } =
       await import('./commands/session.js')
@@ -261,7 +262,9 @@ program
     const force = opts.force === true
     let code = 0
     if (subcommand === 'list') {
-      code = await sessionListCommand({ memoryPath })
+      const formatRaw = opts.format as string | undefined
+      const format = formatRaw === 'json' ? 'json' : 'human'
+      code = await sessionListCommand({ memoryPath, format })
     } else if (subcommand === 'show') {
       if (!id) {
         process.stderr.write('lumen session: missing <id> for "show"\n')
@@ -952,14 +955,22 @@ program
   .argument('<file>', 'Path to a V4A patch file')
   .option('--dry-run', 'Parse + plan but do not touch the filesystem')
   .option(
+    '--format <fmt>',
+    'P35.e: output format. "human" (default) or "json". CI-friendly.',
+    'human',
+  )
+  .option(
     '--cwd <dir>',
     'Directory relative to which file paths in the patch are resolved (default: process.cwd())',
   )
   .action(async (file: string, opts: Record<string, unknown>) => {
     const { applyPatchCommand } = await import('./commands/apply-patch.js')
+    const formatRaw = opts.format as string | undefined
+    const format = formatRaw === 'json' ? 'json' : 'human'
     const code = await applyPatchCommand({
       path: file,
       dryRun: opts.dryRun === true,
+      format,
       ...(opts.cwd !== undefined ? { cwd: opts.cwd as string } : {}),
     })
     process.exit(code)
