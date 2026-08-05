@@ -126,6 +126,15 @@ export interface PlanApproveOptions {
    * json` (P37.c) and `show --format json` (P39.a).
    */
   readonly format?: 'human' | 'json'
+  /**
+   * P46.b — when true, do NOT actually apply the
+   * approval. Instead, report what WOULD change
+   * (the new status + the notes that would be
+   * recorded) without writing the file. Useful in
+   * CI to gate an approval on a pre-condition
+   * (e.g. "only approve if the goal matches X").
+   */
+  readonly dryRun?: boolean
 }
 
 export const planApproveCommand = async (opts: PlanApproveOptions): Promise<number> => {
@@ -135,6 +144,19 @@ export const planApproveCommand = async (opts: PlanApproveOptions): Promise<numb
   if (!updated) {
     process.stderr.write(`lumen plan approve: no plan with id "${opts.id}"\n`)
     return 1
+  }
+  if (opts.dryRun === true) {
+    // P46.b — dry-run path: report the post-approval
+    // shape WITHOUT calling saveStore. The human
+    // path emits a `would approve ...` summary; the
+    // JSON path emits the same shape the apply
+    // path would.
+    if (opts.format === 'json') {
+      process.stdout.write(`${JSON.stringify(updated, null, 2)}\n`)
+      return 0
+    }
+    process.stdout.write(`would approve ${updated.id}\n`)
+    return 0
   }
   await saveStore(file, store)
   if (opts.format === 'json') {
@@ -155,6 +177,16 @@ export interface PlanShowOptions {
    * `show` to parity with `list --format json` (P37.c).
    */
   readonly format?: 'human' | 'json'
+  /**
+   * P46.a — when true, omit the `notes` field from
+   * both the human and JSON output. Useful for
+   * CI consumers that pipe the output to a system
+   * which does not need the operator's review
+   * comments. Default `false` (pre-P46.a behaviour
+   * preserves the notes — operators are still
+   * expected to read the review).
+   */
+  readonly noNotes?: boolean
 }
 
 export interface PlanRejectOptions {
@@ -178,11 +210,19 @@ export const planShowCommand = async (opts: PlanShowOptions = {}): Promise<numbe
     return 1
   }
   if (opts.format === 'json') {
-    process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`)
+    // P46.a — when noNotes is set, omit the `notes`
+    // field from the JSON output. The pre-P46.a
+    // shape preserved the notes unconditionally.
+    const payload: Record<string, unknown> =
+      opts.noNotes === true ? { ...plan, notes: undefined } : { ...plan }
+    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
     return 0
   }
   process.stdout.write(`Plan ${plan.id}\n`)
   process.stdout.write(`  status:  ${formatStatus(plan)}\n`)
+  if (!(opts.noNotes === true)) {
+    process.stdout.write(`  notes:   ${plan.notes ?? '(none)'}\n`)
+  }
   process.stdout.write(`  goal:    ${JSON.stringify(plan.goal)}\n`)
   process.stdout.write(`  steps:   ${plan.steps.length}\n`)
   process.stdout.write(`  createdAt: ${plan.createdAt}\n`)

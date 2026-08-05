@@ -59,6 +59,16 @@ export interface ApplyPatchCommandOptions {
    * dedicated build dir) pass this explicitly.
    */
   readonly cwd?: string
+  /**
+   * P46.c — when true, suppress the one-line
+   * human-path summary (`dry-run: N hunk(s) planned` /
+   * `(no hunks applied)` / etc.). Useful in CI when
+   * the script only cares about the exit code or
+   * the JSON shape (the JSON path is unaffected).
+   * Default `false` (pre-P46.c behaviour is the
+   * human-friendly summary line).
+   */
+  readonly quiet?: boolean
 }
 
 const fsApplier = (root: string): PatchApplier => ({
@@ -128,12 +138,16 @@ export const applyPatchCommand = async (options: ApplyPatchCommandOptions): Prom
       )
       return 0
     }
-    process.stdout.write(`dry-run: ${plan.hunks.length} hunk(s) planned\n`)
-    for (let i = 0; i < plan.hunks.length; i += 1) {
-      const hunk = plan.hunks[i]
-      if (hunk === undefined) continue
-      const kind = hunk.isCreate ? 'create' : hunk.isDelete ? 'delete' : 'update'
-      process.stdout.write(`  hunk #${i}: ${kind} ${hunk.filePath}\n`)
+    // P46.c — `--quiet` suppresses the human-path
+    // summary line. The exit code is unaffected.
+    if (options.quiet !== true) {
+      process.stdout.write(`dry-run: ${plan.hunks.length} hunk(s) planned\n`)
+      for (let i = 0; i < plan.hunks.length; i += 1) {
+        const hunk = plan.hunks[i]
+        if (hunk === undefined) continue
+        const kind = hunk.isCreate ? 'create' : hunk.isDelete ? 'delete' : 'update'
+        process.stdout.write(`  hunk #${i}: ${kind} ${hunk.filePath}\n`)
+      }
     }
     return 0
   }
@@ -164,6 +178,12 @@ export const applyPatchCommand = async (options: ApplyPatchCommandOptions): Prom
     process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
     return result.failed.length > 0 ? 1 : 0
   }
-  process.stdout.write(`${formatResult(plan, result, false)}\n`)
+  // P46.c — `--quiet` suppresses the human-path
+  // summary line on the apply path. The JSON
+  // path is unaffected (always emits a JSON
+  // object).
+  if (options.quiet !== true) {
+    process.stdout.write(`${formatResult(plan, result, false)}\n`)
+  }
   return result.failed.length > 0 ? 1 : 0
 }

@@ -278,6 +278,10 @@ program
     '--dry-run',
     'prune (P44.b): when true, do NOT actually delete sessions. The `--force` and apply steps are skipped; the output reports how many rows would be removed.',
   )
+  .option(
+    '--since-ms <ms>',
+    'list (P46.d): cap the session list to records whose `createdAt >= sinceMs`. Useful for CI jobs that want to surface "sessions created since <ts>".',
+  )
   .option('--format <fmt>', 'P35.f: list output format. "human" (default) or "json".', 'human')
   .action(async (subcommand: string, id: string | undefined, opts: Record<string, unknown>) => {
     const { sessionListCommand, sessionShowCommand, sessionDeleteCommand, sessionPruneCommand } =
@@ -296,10 +300,15 @@ program
       const listLimitRaw = opts.listLimit
       const listLimit =
         typeof listLimitRaw === 'string' ? Number.parseInt(listLimitRaw, 10) : undefined
+      // P46.d — wire `--since-ms <ms>` to the `list`
+      // action. Accepts a numeric epoch-ms.
+      const sinceMsRaw = opts.sinceMs
+      const sinceMs = typeof sinceMsRaw === 'string' ? Number.parseInt(sinceMsRaw, 10) : undefined
       code = await sessionListCommand({
         memoryPath,
         format,
         ...(listLimit !== undefined ? { listLimit } : {}),
+        ...(sinceMs !== undefined && Number.isFinite(sinceMs) ? { sinceMs } : {}),
       })
     } else if (subcommand === 'show') {
       if (!id) {
@@ -514,8 +523,16 @@ program
   .option('--notes <text>', 'Approve/reject: free-form notes to record on the plan')
   .option(
     '--format <fmt>',
-    'list / show / approve / reject (P37.c + P39.a + P41.a + P41.b): output format. "human" (default) or "json". CI-friendly.',
+    'list / show / approve / reject (P37.c + P39.a + P41.a + P41.b + P46.b): output format. "human" (default) or "json". CI-friendly.',
     'human',
+  )
+  .option(
+    '--no-notes',
+    'show (P46.a): omit the `notes` field from the human + JSON output. Useful for CI consumers that do not need the operator review text.',
+  )
+  .option(
+    '--dry-run',
+    'approve (P46.b): do NOT actually apply the approval. Report what WOULD change without writing the file. The JSON path emits the post-approval shape; the human path emits `would approve <id>`.',
   )
   .option('--plans-path <path>', 'Override the plans JSON file path')
   .action(async (subcommand: string, id: string | undefined, opts: Record<string, unknown>) => {
@@ -535,7 +552,7 @@ program
       } else {
         const formatRaw = opts.format as string | undefined
         const format = formatRaw === 'json' ? 'json' : 'human'
-        code = await planShowCommand({ id, file, format })
+        code = await planShowCommand({ id, file, format, noNotes: opts.notes === false })
       }
     } else if (subcommand === 'approve') {
       if (!id) {
@@ -544,7 +561,13 @@ program
       } else {
         const formatRaw = opts.format as string | undefined
         const format = formatRaw === 'json' ? 'json' : 'human'
-        code = await planApproveCommand({ id, notes, file, format })
+        code = await planApproveCommand({
+          id,
+          notes,
+          file,
+          format,
+          dryRun: opts.dryRun === true,
+        })
       }
     } else if (subcommand === 'reject') {
       if (!id) {
@@ -1175,6 +1198,10 @@ program
   .argument('<file>', 'Path to a V4A patch file')
   .option('--dry-run', 'Parse + plan but do not touch the filesystem')
   .option(
+    '--quiet',
+    'P46.c: suppress the one-line human-path summary. The exit code is unaffected; the JSON path is unaffected.',
+  )
+  .option(
     '--format <fmt>',
     'P35.e: output format. "human" (default) or "json". CI-friendly.',
     'human',
@@ -1192,6 +1219,7 @@ program
       dryRun: opts.dryRun === true,
       format,
       ...(opts.cwd !== undefined ? { cwd: opts.cwd as string } : {}),
+      ...(opts.quiet === true ? { quiet: true } : {}),
     })
     process.exit(code)
   })

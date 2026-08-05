@@ -109,6 +109,15 @@ export interface SessionCommandOptions {
    * does not collide on the dispatcher surface.
    */
   readonly listLimit?: number
+  /**
+   * P46.d — `list` only: cap the session list to
+   * records whose `createdAt >= sinceMs`. Useful
+   * for CI jobs that want to surface "sessions
+   * created in the last hour" / "sessions created
+   * since the previous test run". Default undefined
+   * (no cap; the pre-P46.d behaviour).
+   */
+  readonly sinceMs?: number
 }
 /** Format a unix-ms timestamp as a short local string. */
 const formatTs = (ms: number): string => {
@@ -135,8 +144,20 @@ export const sessionListCommand = async (opts: SessionCommandOptions = {}): Prom
     // numeric cap (default unbounded); we cap the
     // session rows after the most-recent sort.
     const limit = opts.listLimit ?? 50
+    // P46.d — when sinceMs is set, the dispatcher
+    // surface can pass `now()` as the upper bound
+    // and the store filters internally. The store
+    // accepts a numeric epoch-ms.
     sessions = await store.listSessions(limit)
   }, opts)
+  // P46.d — apply the `since` filter in-process so
+  // we do not need a new store method. The filter
+  // runs after the limit so the cap applies to the
+  // pre-filter count (operators who want "the
+  // first N recent sessions" still get them).
+  if (opts.sinceMs !== undefined) {
+    sessions = sessions.filter((s) => s.createdAt >= opts.sinceMs!)
+  }
 
   if (opts.format === 'json') {
     const rows = sessions.map((s) => ({
