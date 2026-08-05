@@ -39,6 +39,12 @@ export interface DoctorOptions {
    * infrastructure checks. Default `false`.
    */
   readonly product?: boolean
+  /**
+   * P35 — output format. 'human' (default) emits the
+   * one-line-per-check layout; 'json' emits a single
+   * array of DoctorRow objects (CI-friendly).
+   */
+  readonly format?: 'human' | 'json'
 }
 
 export const doctorCommand = async (opts: DoctorOptions = {}): Promise<number> => {
@@ -52,6 +58,16 @@ export const doctorCommand = async (opts: DoctorOptions = {}): Promise<number> =
   const fail = (msg: string): void => {
     process.stdout.write(`  [FAIL] ${msg}\n`)
     failed += 1
+  }
+
+  // P35 — JSON output path. We build rows first, then
+  // emit a single JSON array. The human path is unchanged.
+  if (opts.format === 'json') {
+    const { buildDoctorRows } = await import('./doctor-format.js')
+    const rows = await buildDoctorRows(opts)
+    process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`)
+    const failed = rows.filter((r) => r.severity === 'FAIL').length
+    return failed === 0 ? 0 : 1
   }
 
   process.stdout.write('Lumen doctor\n\n')
@@ -299,12 +315,12 @@ export const doctorCommand = async (opts: DoctorOptions = {}): Promise<number> =
       if (productFailed === 0) {
         process.stdout.write('  All product gates pass.\n')
       } else {
-        process.stdout.write(`  ${productFailed} product gate(s) still pending — see OPTIMIZATION-PLAN.md §0.5.\n`)
+        process.stdout.write(
+          `  ${productFailed} product gate(s) still pending — see OPTIMIZATION-PLAN.md §0.5.\n`,
+        )
       }
     } catch (err) {
-      fail(
-        `product gate runner crashed: ${err instanceof Error ? err.message : String(err)}`,
-      )
+      fail(`product gate runner crashed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 

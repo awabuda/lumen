@@ -228,11 +228,19 @@ program
     '--product',
     'P33.A: additionally run G-P1..G-P6 product-completeness gates (OPTIMIZATION-PLAN.md §0.5)',
   )
+  .option(
+    '--format <fmt>',
+    'P35: output format. "human" (default) or "json". JSON emits a single array of DoctorRow objects (CI-friendly).',
+    'human',
+  )
   .action(async (opts: Record<string, unknown>) => {
     const { doctorCommand } = await import('./commands/doctor.js')
+    const formatRaw = opts.format as string | undefined
+    const format: 'human' | 'json' = formatRaw === 'json' ? 'json' : 'human'
     const code = await doctorCommand({
       verbose: opts.verbose === true,
       product: opts.product === true,
+      format,
     })
     process.exit(code)
   })
