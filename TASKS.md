@@ -1861,6 +1861,39 @@ pnpm exec biome check apps/cli/src apps/cli/test \
 
 CLI test delta: 385 → 391 (+6).
 
+### P34.10 — `lumen team run --dry-run` (CI gate / pre-flight)
+
+Phase B backlog slice — pure read-only pre-flight
+validation that skips buildAgent / orchestrateTeam
+entirely. Useful as a CI gate: validate the team.json
+shape + cross-reference agent/task names without
+spending model tokens.
+
+#### Commits
+
+```
+9702ec4  P34.10  lumen team run --dry-run
+```
+
+#### Surface
+
+```
+lumen team run --dry-run <team.json> [--format json]
+  - human: '[dry-run] team ... (mode=...) — N tasks'
+            followed by one [i/N] agent  prompt per line.
+  - json:  { name, mode, agents, tasks: [{index, agentName, prompt}] }
+```
+
+#### Verification
+
+```
+pnpm --filter @lumen/cli typecheck    # 0 errors
+pnpm --filter @lumen/cli test       # 395 tests, 0 fail
+pnpm exec biome check apps/cli/src apps/cli/test   apps/cli/src/commands apps/cli/test  # 0 errors
+```
+
+CLI test delta: 391 → 395 (+4).
+
 ### P34.3 — Trust / Plan UX (Phase B.3 closure)
 
 Phase B.3 (OPTIMIZATION-PLAN §3 B.3) ships in P34.3:
