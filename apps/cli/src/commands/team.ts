@@ -410,10 +410,11 @@ export interface TeamCommandOptions {
    */
   readonly recursive?: boolean
   /**
-   * P34.6 — `list` action: output format. `'human'`
-   * (default) prints the one-block-per-team summary;
-   * `'json'` prints a single JSON array suitable for
-   * CI pipelines that diff against the listing.
+   * P34.6 — output format. `'human'` (default) is
+   * the pre-P34.6 one-line-per-section text layout;
+   * `'json'` emits a single structured object (CI-friendly).
+   * P39.c extends this flag to the `validate` action
+   * (previously only `list` honoured the format).
    */
   readonly format?: 'human' | 'json'
   /**
@@ -671,6 +672,23 @@ export const teamCommand = async (options: TeamCommandOptions): Promise<number> 
     // so reaching here means the file is valid. We still
     // print a confirmation line so the operator can see
     // what was checked.
+    if (options.format === 'json') {
+      const mode = resolveTeamMode(team)
+      process.stdout.write(
+        `${JSON.stringify(
+          {
+            path: options.path,
+            name: team.name,
+            mode,
+            agents: team.agents.map((a) => a.name),
+            tasks: team.tasks?.length ?? 0,
+          },
+          null,
+          2,
+        )}\n`,
+      )
+      return 0
+    }
     process.stdout.write(
       `ok: ${options.path}  (name=${team.name}, mode=${resolveTeamMode(team)}, agents=${team.agents.length}${
         team.tasks ? `, tasks=${team.tasks.length}` : ''

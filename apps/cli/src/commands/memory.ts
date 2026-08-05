@@ -82,8 +82,13 @@ export interface MemoryCommandOptions {
   readonly filterKind?: string
   /** P38.b — `list` action: max records to print. Default 50. */
   readonly limit?: number
-  /** P38.b — `list` action: output format. 'human' (default)
-   *  or 'json' (CI-friendly). */
+  /**
+   * P38.b + P39.b — output format. 'human' (default)
+   * emits the pre-P38.b one-line-per-section text
+   * layout; 'json' emits a structured object (CI-friendly).
+   * Used by both `list` and `show` (P39.b brings
+   * `show` to parity with `list --format json`).
+   */
   readonly format?: 'human' | 'json'
 }
 
@@ -104,6 +109,26 @@ export const memorySyncCommand = async (opts: MemoryCommandOptions = {}): Promis
 export const memoryShowCommand = async (opts: MemoryCommandOptions = {}): Promise<number> => {
   return await withBridge(async (bridge) => {
     const desc = bridge.describe()
+    if (opts.format === 'json') {
+      // P39.b — emit the bridge descriptor as JSON for
+      // CI consumers. The shape mirrors the human
+      // output, with one extra `lastSyncIso` field that
+      // resolves '(never)' to null so jq / CI can
+      // branch cleanly.
+      process.stdout.write(
+        `${JSON.stringify(
+          {
+            memoryMdPath: desc.memoryMdPath,
+            userMdPath: desc.userMdPath,
+            lastSyncMs: desc.lastSyncMs,
+            lastSyncIso: desc.lastSyncMs > 0 ? new Date(desc.lastSyncMs).toISOString() : null,
+          },
+          null,
+          2,
+        )}\n`,
+      )
+      return 0
+    }
     process.stdout.write(
       `memory markdown bridge:\n  MEMORY.md: ${desc.memoryMdPath}\n  USER.md:   ${desc.userMdPath}\n  last sync: ${desc.lastSyncMs > 0 ? new Date(desc.lastSyncMs).toISOString() : '(never)'}\n`,
     )

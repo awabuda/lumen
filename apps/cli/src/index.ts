@@ -341,10 +341,13 @@ program
         ...(profile !== undefined ? { profile } : {}),
       })
     } else if (subcommand === 'show') {
+      const formatRaw = opts.format as string | undefined
+      const format = formatRaw === 'json' ? 'json' : 'human'
       code = await memoryShowCommand({
         ...(memoryPath !== undefined ? { memoryPath } : {}),
         ...(memoryMdPath !== undefined ? { memoryMdPath } : {}),
         ...(userMdPath !== undefined ? { userMdPath } : {}),
+        format,
       })
     } else {
       process.stderr.write(`lumen memory: unknown subcommand: ${subcommand}\n`)
@@ -411,7 +414,11 @@ program
 program
   .command('plan')
   .description('Inspect and manage persisted plans (list / approve / reject)')
-  .argument('[subcommand]', '"list" (default), "approve <id>", or "reject <id>"', 'list')
+  .argument(
+    '[subcommand]',
+    '"list" (default), "show <id>", "approve <id>", or "reject <id>"',
+    'list',
+  )
   .argument('[id]', 'Plan id (for "approve" and "reject")')
   .option('--notes <text>', 'Approve/reject: free-form notes to record on the plan')
   .option(
@@ -421,9 +428,8 @@ program
   )
   .option('--plans-path <path>', 'Override the plans JSON file path')
   .action(async (subcommand: string, id: string | undefined, opts: Record<string, unknown>) => {
-    const { planApproveCommand, planListCommand, planRejectCommand } = await import(
-      './commands/plan.js'
-    )
+    const { planApproveCommand, planListCommand, planRejectCommand, planShowCommand } =
+      await import('./commands/plan.js')
     const file = opts.plansPath as string | undefined
     const notes = opts.notes as string | undefined
     let code = 0
@@ -431,6 +437,15 @@ program
       const formatRaw = opts.format as string | undefined
       const format = formatRaw === 'json' ? 'json' : 'human'
       code = await planListCommand({ file, format })
+    } else if (subcommand === 'show') {
+      if (!id) {
+        process.stderr.write('lumen plan: missing <id> for "show"\n')
+        code = 2
+      } else {
+        const formatRaw = opts.format as string | undefined
+        const format = formatRaw === 'json' ? 'json' : 'human'
+        code = await planShowCommand({ id, file, format })
+      }
     } else if (subcommand === 'approve') {
       if (!id) {
         process.stderr.write('lumen plan: missing <id> for "approve"\n')
@@ -724,16 +739,19 @@ program
 program
   .command('config')
   .description('Inspect the resolved Lumen config')
-  .argument('[subcommand]', '"show" (default), "path", or "validate"', 'show')
+  .argument('[subcommand]', '"show" (default), "path", "validate", or "get"', 'show')
   .option('-c, --config <path>', 'Path to a Lumen config file')
+  .option(
+    '--path <dotted-path>',
+    'get (P39.d): dotted path into the resolved config (e.g. `defaultModel`, `agent.maxIterations`).',
+  )
   .option(
     '--section <name>',
     'show (P35.b): only print the named top-level section of the config (e.g. "model", "providers", "mcp", "agent"). Unknown names print an empty JSON object and exit 0.',
   )
   .action(async (subcommand: string, opts: Record<string, unknown>) => {
-    const { configShowCommand, configPathCommand, configValidateCommand } = await import(
-      './commands/config.js'
-    )
+    const { configGetCommand, configShowCommand, configPathCommand, configValidateCommand } =
+      await import('./commands/config.js')
     const configPath = opts.config as string | undefined
     const section = opts.section as string | undefined
     let code = 0
@@ -741,6 +759,13 @@ program
       code = await configPathCommand({ configPath })
     } else if (subcommand === 'validate') {
       code = await configValidateCommand({ configPath })
+    } else if (subcommand === 'get') {
+      // P39.d — `--path <dotted-path>` flag is the query.
+      const dottedPath = opts.path as string | undefined
+      code = await configGetCommand({
+        ...(configPath !== undefined ? { configPath } : {}),
+        ...(dottedPath !== undefined ? { path: dottedPath } : {}),
+      })
     } else if (subcommand === 'show') {
       code = await configShowCommand({
         ...(configPath !== undefined ? { configPath } : {}),
@@ -827,7 +852,9 @@ program
           process.stderr.write('lumen team: missing <path> for "validate"\n')
           code = 2
         } else {
-          code = await teamCommand({ action: 'validate', path: filePath })
+          const formatRaw = opts.format as string | undefined
+          const format = formatRaw === 'json' ? 'json' : 'human'
+          code = await teamCommand({ action: 'validate', path: filePath, format })
         }
       } else if (subcommand === 'show') {
         if (!filePath) {

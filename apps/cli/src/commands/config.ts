@@ -57,6 +57,17 @@ export interface ConfigShowOptions {
    */
   readonly section?: string
 }
+export interface ConfigGetOptions {
+  readonly configPath?: string
+  /**
+   * P39.d — dotted path into the redacted config
+   * (e.g. `defaultModel`, `agent.maxIterations`,
+   * `mcp.servers[0].name`). Returns the value at
+   * the path as a one-line JSON snippet. Unknown
+   * paths print `null` and exit 0 (CI-friendly).
+   */
+  readonly path?: string
+}
 export interface ConfigPathOptions {
   readonly configPath?: string
 }
@@ -88,6 +99,54 @@ export const configShowCommand = async (opts: ConfigShowOptions = {}): Promise<n
  * *hint* — what matters is that the user can see where their
  * config is being read from.
  */
+/**
+ * `lumen config get <dotted-path>` — P39.d. Read a single
+ * value out of the resolved + redacted config. Useful for
+ * `lumen config get defaultModel` style shell substitution.
+ * Returns 0 with the value on stdout, or 0 with `null` if
+ * the path does not exist (CI consumers can branch on the
+ * value). Does NOT mutate the config.
+ */
+export const configGetCommand = async (opts: ConfigGetOptions = {}): Promise<number> => {
+  if (opts.path === undefined || opts.path.length === 0) {
+    process.stderr.write('lumen config get: missing <path> argument\n')
+    return 2
+  }
+  const config = await loadCliConfig(opts.configPath)
+  const redacted = redact(config) as Record<string, unknown>
+  const value = lookupPath(redacted, opts.path)
+  if (value === undefined) {
+    process.stdout.write('null\n')
+    return 0
+  }
+  process.stdout.write(`${JSON.stringify(value)}\n`)
+  return 0
+}
+
+const lookupPath = (root: unknown, path: string): unknown => {
+  // Dotted-path resolution. `a.b.c` walks the nested
+  // object. `a[0]` indexes an array. Returns
+  // `undefined` on any unresolved step (CI-friendly —
+  // callers can branch on `null` without an error).
+  const tokens = path.split(/[.[\]]+/).filter((t) => t.length > 0)
+  let cur: unknown = root
+  for (const t of tokens) {
+    if (cur === null || cur === undefined) return undefined
+    if (Array.isArray(cur)) {
+      const i = Number.parseInt(t, 10)
+      if (!Number.isInteger(i) || i < 0 || i >= cur.length) return undefined
+      cur = cur[i]
+    } else if (typeof cur === 'object') {
+      const rec = cur as Record<string, unknown>
+      if (!(t in rec)) return undefined
+      cur = rec[t]
+    } else {
+      return undefined
+    }
+  }
+  return cur
+}
+
 export const configPathCommand = async (opts: ConfigPathOptions = {}): Promise<number> => {
   if (opts.configPath) {
     process.stdout.write(`${opts.configPath}\n`)

@@ -133,10 +133,49 @@ export const planApproveCommand = async (opts: PlanApproveOptions): Promise<numb
   return 0
 }
 
+export interface PlanShowOptions {
+  readonly id?: string
+  readonly file?: string
+  /**
+   * P39.a — output format. 'human' (default) is the
+   * pre-P39.a one-block-per-plan text layout; 'json'
+   * emits the full Plan shape (CI-friendly). Brings
+   * `show` to parity with `list --format json` (P37.c).
+   */
+  readonly format?: 'human' | 'json'
+}
+
 export interface PlanRejectOptions {
   readonly id: string
   readonly notes?: string
   readonly file?: string
+}
+
+export const planShowCommand = async (opts: PlanShowOptions = {}): Promise<number> => {
+  const file = opts.file ?? DEFAULT_PLANS_PATH()
+  const store = await loadStore(file)
+  const plan = store.all.find((p) => p.id === opts.id)
+  if (plan === undefined) {
+    process.stderr.write(`lumen plan show: no plan with id "${opts.id}"\n`)
+    return 1
+  }
+  if (opts.format === 'json') {
+    process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`)
+    return 0
+  }
+  process.stdout.write(`Plan ${plan.id}\n`)
+  process.stdout.write(`  status:  ${formatStatus(plan)}\n`)
+  process.stdout.write(`  goal:    ${JSON.stringify(plan.goal)}\n`)
+  process.stdout.write(`  steps:   ${plan.steps.length}\n`)
+  process.stdout.write(`  createdAt: ${plan.createdAt}\n`)
+  if (plan.approvedAt !== undefined) process.stdout.write(`  approvedAt: ${plan.approvedAt}\n`)
+  if (plan.rejectedAt !== undefined) process.stdout.write(`  rejectedAt: ${plan.rejectedAt}\n`)
+  for (let i = 0; i < plan.steps.length; i += 1) {
+    const step = plan.steps[i]
+    if (step === undefined) continue
+    process.stdout.write(`    [${i + 1}/${plan.steps.length}]  ${JSON.stringify(step)}\n`)
+  }
+  return 0
 }
 
 export const planRejectCommand = async (opts: PlanRejectOptions): Promise<number> => {
