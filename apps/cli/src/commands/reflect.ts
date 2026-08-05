@@ -61,9 +61,7 @@ export const reflectRunCommand = async (opts: ReflectRunOptions = {}): Promise<n
       process.stdout.write('(no sessions in memory store; nothing to reflect)\n')
       return 0
     }
-    const target = opts.sessionId
-      ? sessions.find((s) => s.id === opts.sessionId)
-      : sessions[0]
+    const target = opts.sessionId ? sessions.find((s) => s.id === opts.sessionId) : sessions[0]
     if (!target) {
       process.stderr.write(`lumen reflect run: session "${opts.sessionId}" not found\n`)
       return 1
@@ -80,9 +78,7 @@ export const reflectRunCommand = async (opts: ReflectRunOptions = {}): Promise<n
       return 0
     }
     const persisted = await persistExtractedFacts(facts, store)
-    process.stdout.write(
-      `reflected ${persisted}/${facts.length} facts from session ${target.id}\n`,
-    )
+    process.stdout.write(`reflected ${persisted}/${facts.length} facts from session ${target.id}\n`)
     return 0
   } finally {
     await store.dispose()
@@ -128,9 +124,80 @@ export const reflectMetaCommand = async (opts: ReflectMetaOptions = {}): Promise
       })
       applied += 1
     }
-    process.stdout.write(
-      `applied ${applied}/${patches.length} trust-delta patches\n`,
-    )
+    process.stdout.write(`applied ${applied}/${patches.length} trust-delta patches\n`)
+    return 0
+  } finally {
+    await store.dispose()
+  }
+}
+
+export interface ReflectListOptions {
+  readonly memoryPath?: string
+  /** P35.d — `human` (default) prints one line per record;
+   *  `json` prints a single JSON array (CI-friendly). */
+  readonly format?: 'human' | 'json'
+  /** Max records to print. Default 50. */
+  readonly limit?: number
+}
+
+/**
+ * P35.d — `lumen reflect list` reads the SqliteStore
+ * and prints every `kind: 'reflection'` record. The
+ * command is read-only: it does NOT mutate the
+ * memory store. The output is sorted by `createdAt`
+ * (newest first) so the operator sees the most-recent
+ * reflector output at the top.
+ */
+export const reflectListCommand = async (opts: ReflectListOptions = {}): Promise<number> => {
+  const { SqliteStore } = await import('@lumen/memory')
+  const dbPath = opts.memoryPath ?? defaultMemoryPath()
+  let store: InstanceType<typeof SqliteStore> | undefined
+  try {
+    store = new SqliteStore({ path: dbPath })
+    await store.init()
+  } catch (err) {
+    process.stderr.write(`lumen reflect list: cannot open ${dbPath}: ${(err as Error).message}\n`)
+    return 1
+  }
+  try {
+    const limit = opts.limit ?? 50
+    // Fetch by kind. The high maxTrust-low limit is so
+    // we don't lose any record (trust filtering is the
+    // operator's CLI job, not the CLI's).
+    const records = await store.search({ kind: 'reflection', limit: 10_000 })
+    const sorted = records
+      .map((r) => r.record)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit)
+    if (sorted.length === 0) {
+      if (opts.format === 'json') {
+        process.stdout.write('[]\n')
+      } else {
+        process.stdout.write('(no reflection records; run `lumen reflect run` first)\n')
+      }
+      return 0
+    }
+    if (opts.format === 'json') {
+      process.stdout.write(
+        `${JSON.stringify(
+          sorted.map((r) => ({
+            id: r.id,
+            trust: r.trust,
+            createdAt: r.createdAt,
+            content: r.content.slice(0, 200),
+          })),
+          null,
+          2,
+        )}\n`,
+      )
+      return 0
+    }
+    process.stdout.write(`Reflection records (${sorted.length}):\n\n`)
+    for (const r of sorted) {
+      process.stdout.write(
+        `  ${r.id}  trust=${r.trust.toFixed(2)}  createdAt=${r.createdAt}\n    ${r.content.slice(0, 160)}\n\n`,
+      )
+    }
     return 0
   } finally {
     await store.dispose()

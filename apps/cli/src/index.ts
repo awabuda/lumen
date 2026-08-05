@@ -501,21 +501,39 @@ program
   .description('Manually trigger reflection (rule-based or cross-run meta)')
   .argument(
     '[subcommand]',
-    '"run" (per-session rule-based) or "meta" (cross-run trust delta)',
+    '"run" (per-session rule-based), "meta" (cross-run trust delta), or "list"',
     'run',
   )
   .option('--memory-path <path>', 'Override the SQLite memory database path')
   .option('--session-id <id>', 'reflect run: explicit session id (default: most recent)')
   .option('--interval <n>', 'reflect meta: trust-delta interval (default 10)')
   .option('--similarity <n>', 'reflect meta: Jaccard similarity threshold (default 0.5)')
+  .option(
+    '--format <fmt>',
+    'reflect list (P35.d): output format. "human" (default) or "json".',
+    'human',
+  )
+  .option('--limit <n>', 'reflect list (P35.d): max records to print (default 50).')
   .action(async (subcommand: string, opts: Record<string, unknown>) => {
-    const { reflectMetaCommand, reflectRunCommand } = await import('./commands/reflect.js')
+    const { reflectListCommand, reflectMetaCommand, reflectRunCommand } = await import(
+      './commands/reflect.js'
+    )
     const memoryPath = opts.memoryPath as string | undefined
     let code = 0
     if (subcommand === 'run') {
       code = await reflectRunCommand({
         ...(memoryPath !== undefined ? { memoryPath } : {}),
         ...(opts.sessionId !== undefined ? { sessionId: opts.sessionId as string } : {}),
+      })
+    } else if (subcommand === 'list') {
+      const formatRaw = opts.format as string | undefined
+      const format: 'human' | 'json' = formatRaw === 'json' ? 'json' : 'human'
+      const limitRaw = opts.limit
+      const limit = typeof limitRaw === 'string' ? Number.parseInt(limitRaw, 10) : undefined
+      code = await reflectListCommand({
+        ...(memoryPath !== undefined ? { memoryPath } : {}),
+        format,
+        ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
       })
     } else if (subcommand === 'meta') {
       const intervalRaw = opts.interval
