@@ -118,6 +118,14 @@ export interface PlanApproveOptions {
   readonly id: string
   readonly notes?: string
   readonly file?: string
+  /**
+   * P41.a — output format. 'human' (default) is
+   * the pre-P41.a `approved <id>` text; 'json' emits
+   * the post-approval Plan shape (CI-friendly).
+   * Brings `approve` to parity with `list --format
+   * json` (P37.c) and `show --format json` (P39.a).
+   */
+  readonly format?: 'human' | 'json'
 }
 
 export const planApproveCommand = async (opts: PlanApproveOptions): Promise<number> => {
@@ -129,6 +137,10 @@ export const planApproveCommand = async (opts: PlanApproveOptions): Promise<numb
     return 1
   }
   await saveStore(file, store)
+  if (opts.format === 'json') {
+    process.stdout.write(`${JSON.stringify(updated, null, 2)}\n`)
+    return 0
+  }
   process.stdout.write(`approved ${updated.id}\n`)
   return 0
 }
@@ -149,6 +161,12 @@ export interface PlanRejectOptions {
   readonly id: string
   readonly notes?: string
   readonly file?: string
+  /**
+   * P41.b — output format. 'human' (default) is
+   * the pre-P41.b `rejected <id>` text; 'json' emits
+   * the post-rejection Plan shape (CI-friendly).
+   */
+  readonly format?: 'human' | 'json'
 }
 
 export const planShowCommand = async (opts: PlanShowOptions = {}): Promise<number> => {
@@ -187,6 +205,10 @@ export const planRejectCommand = async (opts: PlanRejectOptions): Promise<number
     return 1
   }
   await saveStore(file, store)
+  if (opts.format === 'json') {
+    process.stdout.write(`${JSON.stringify(updated, null, 2)}\n`)
+    return 0
+  }
   process.stdout.write(`rejected ${updated.id}\n`)
   return 0
 }

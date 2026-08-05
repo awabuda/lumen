@@ -294,7 +294,9 @@ program
     } else if (subcommand === 'prune') {
       const daysRaw = opts.olderThan
       const days = typeof daysRaw === 'string' ? Number.parseInt(daysRaw, 10) : 30
-      code = await sessionPruneCommand({ memoryPath, force, olderThanDays: days })
+      const formatRaw = opts.format as string | undefined
+      const format = formatRaw === 'json' ? 'json' : 'human'
+      code = await sessionPruneCommand({ memoryPath, force, olderThanDays: days, format })
     } else {
       process.stderr.write(`lumen session: unknown subcommand: ${subcommand}\n`)
       code = 1
@@ -428,7 +430,7 @@ program
   .option('--notes <text>', 'Approve/reject: free-form notes to record on the plan')
   .option(
     '--format <fmt>',
-    'list (P37.c): output format. "human" (default) or "json". CI-friendly.',
+    'list / show / approve / reject (P37.c + P39.a + P41.a + P41.b): output format. "human" (default) or "json". CI-friendly.',
     'human',
   )
   .option('--plans-path <path>', 'Override the plans JSON file path')
@@ -456,14 +458,18 @@ program
         process.stderr.write('lumen plan: missing <id> for "approve"\n')
         code = 1
       } else {
-        code = await planApproveCommand({ id, notes, file })
+        const formatRaw = opts.format as string | undefined
+        const format = formatRaw === 'json' ? 'json' : 'human'
+        code = await planApproveCommand({ id, notes, file, format })
       }
     } else if (subcommand === 'reject') {
       if (!id) {
         process.stderr.write('lumen plan: missing <id> for "reject"\n')
         code = 1
       } else {
-        code = await planRejectCommand({ id, notes, file })
+        const formatRaw = opts.format as string | undefined
+        const format = formatRaw === 'json' ? 'json' : 'human'
+        code = await planRejectCommand({ id, notes, file, format })
       }
     } else {
       process.stderr.write(`lumen plan: unknown subcommand: ${subcommand}\n`)
@@ -758,6 +764,10 @@ program
     '--include-secrets',
     'show (P40.c): include apiKey / Authorization headers in the output. Default off (secrets always redacted).',
   )
+  .option(
+    '--no-redact',
+    'show (P41.d): alias for --include-secrets. Kept for shell-history / script compatibility with the pre-P40.c flags.',
+  )
   .action(async (subcommand: string, opts: Record<string, unknown>) => {
     const { configGetCommand, configShowCommand, configPathCommand, configValidateCommand } =
       await import('./commands/config.js')
@@ -779,10 +789,18 @@ program
       const formatRaw = opts.format as string | undefined
       const format = formatRaw === 'json' ? 'json' : 'human'
       const section = opts.section as string | undefined
+      // P41.d — `--no-redact` is the legacy alias for
+      // `--include-secrets`. Pre-P40.c operators passed
+      // `--no-redact` (which was a no-op in the human
+      // path because `lumen config show` did not have
+      // a redact toggle). P40.c introduced the explicit
+      // `--include-secrets` flag; P41.d adds `--no-redact`
+      // so any old shell history / scripts keep working.
+      const includeSecrets = opts.includeSecrets === true || opts.noRedact === true
       code = await configShowCommand({
         ...(configPath !== undefined ? { configPath } : {}),
         ...(section !== undefined ? { section } : {}),
-        includeSecrets: opts.includeSecrets === true,
+        includeSecrets,
         format,
       })
     } else {

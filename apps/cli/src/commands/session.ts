@@ -213,6 +213,21 @@ export const sessionPruneCommand = async (opts: SessionCommandOptions = {}): Pro
   await withStore(async (store) => {
     removed = await store.prune(days * MS_PER_DAY)
   }, opts)
+  // P41.c — emit a JSON object on prune. The pre-P41.c
+  // shape was the single-line `Pruned <n> session/record
+  // row(s) older than <d> day(s).` text. The JSON path
+  // includes the cut-off ms timestamp so CI can
+  // independently verify the boundary.
+  if (opts.format === 'json') {
+    process.stdout.write(
+      `${JSON.stringify(
+        { removed, olderThanDays: days, cutOffMs: Date.now() - days * MS_PER_DAY },
+        null,
+        2,
+      )}\n`,
+    )
+    return 0
+  }
   process.stdout.write(`Pruned ${removed} session/record row(s) older than ${days} day(s).\n`)
   return 0
 }
