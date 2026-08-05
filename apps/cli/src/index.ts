@@ -732,6 +732,10 @@ program
     '--team-checkpoint <path>',
     'run: persist a team-level checkpoint to this SQLite file after the run resolves (success or failure). Defaults to in-memory (no persistence).',
   )
+  .option(
+    '--dry-run',
+    'run (P34.10): do NOT actually dispatch sub-agents — just resolve the team plan (agents × tasks) and print. Useful as a CI gate / pre-flight check before spending model tokens.',
+  )
   .action(
     async (subcommand: string, filePath: string | undefined, opts: Record<string, unknown>) => {
       const { teamCommand } = await import('./commands/team.js')
@@ -763,6 +767,16 @@ program
         if (!filePath) {
           process.stderr.write('lumen team: missing <path> for "run"\n')
           code = 2
+        } else if (opts.dryRun === true) {
+          // P34.10 — dry-run path: skip buildAgent /
+          // orchestrateTeam entirely; just resolve the
+          // plan and emit a one-line-per-task preview.
+          code = await teamCommand({
+            action: 'run',
+            path: filePath,
+            dryRun: true,
+            format: (opts.format as 'human' | 'json' | undefined) ?? 'human',
+          })
         } else {
           // P20.7.3: build the parent context via the same
           // composition root that `lumen run` uses, so a team

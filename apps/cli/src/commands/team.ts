@@ -428,6 +428,15 @@ export interface TeamCommandOptions {
    */
   readonly runParent?: TeamParent
   /**
+   * `run` action only: when true, do NOT actually dispatch
+   * sub-agents — just resolve the team's plan (agents ×
+   * tasks) and emit a one-line-per-task human-readable
+   * preview. Useful as a CI gate: validate the team.json
+   * shape + cross-reference agent/task names without
+   * spending model tokens. P34.10.
+   */
+  readonly dryRun?: boolean
+  /**
    * `run` action only: optional team-level checkpoint store
    * (P20.7.4). When set, the runner saves one synthetic
    * checkpoint after the team resolves (success or failure).
@@ -671,13 +680,49 @@ export const teamCommand = async (options: TeamCommandOptions): Promise<number> 
   }
 
   if (action === 'run') {
-    if (!options.runParent) {
+    if (!options.dryRun && !options.runParent) {
       process.stderr.write(
         'lumen team run: internal error — no runParent provided. The CLI dispatcher is responsible for building it via buildAgent().\n',
       )
       return 2
     }
-    const runner = orchestrateTeam(team, options.runParent, {
+    if (options.dryRun === true) {
+      // P34.10 — dry-run path: skip orchestrateTeam,
+      // just resolve the agent × task matrix and print.
+      // JSON output is via `--format json` for symmetry
+      // with the list action.
+      const tasks =
+        team.tasks ?? team.agents.map((a) => ({ agentName: a.name, prompt: a.description }))
+      const plan = tasks.map((t, i) => ({
+        index: i + 1,
+        agentName: t.agentName,
+        prompt: t.prompt,
+      }))
+      const format = options.format === 'json' ? 'json' : 'human'
+      if (format === 'json') {
+        process.stdout.write(
+          `${JSON.stringify(
+            {
+              name: team.name,
+              mode: resolveTeamMode(team),
+              agents: team.agents.map((a) => a.name),
+              tasks: plan,
+            },
+            null,
+            2,
+          )}\n`,
+        )
+      } else {
+        process.stdout.write(
+          `[dry-run] team "${team.name}" (mode=${resolveTeamMode(team)}) — ${plan.length} task${plan.length === 1 ? '' : 's'}\n\n`,
+        )
+        for (const t of plan) {
+          process.stdout.write(`[${t.index}/${plan.length}] ${t.agentName}  ${t.prompt}\n`)
+        }
+      }
+      return 0
+    }
+    const runner = orchestrateTeam(team, options.runParent!, {
       ...(options.teamCheckpointStore ? { teamCheckpointStore: options.teamCheckpointStore } : {}),
     })
     process.stdout.write(`Running team "${team.name}" (mode=${resolveTeamMode(team)})\n\n`)
