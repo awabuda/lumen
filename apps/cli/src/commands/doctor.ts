@@ -45,6 +45,13 @@ export interface DoctorOptions {
    * array of DoctorRow objects (CI-friendly).
    */
   readonly format?: 'human' | 'json'
+  /**
+   * P37.d — when true, skip the API key presence check.
+   * Useful for offline diagnostics (e.g. `lumen doctor` in
+   * a CI sandbox that does not have the LLM key mounted).
+   * Default `false`.
+   */
+  readonly noApiKey?: boolean
 }
 
 export const doctorCommand = async (opts: DoctorOptions = {}): Promise<number> => {
@@ -86,10 +93,15 @@ export const doctorCommand = async (opts: DoctorOptions = {}): Promise<number> =
     fail(`Config failed to load: ${err instanceof Error ? err.message : String(err)}`)
   }
 
-  // 2. API key
+  // 2. API key — P37.d adds a `--no-api-key` opt-out for
+  // offline diagnostics. When set, the row is reported
+  // as `[SKIP]` (no failure, no pass) so the rest of the
+  // doctor report still surfaces.
   const apiKey = process.env.OPENAI_API_KEY ?? process.env.LUMEN_API_KEY
   if (apiKey) {
     ok('API key present (OPENAI_API_KEY or LUMEN_API_KEY)')
+  } else if (opts.noApiKey === true) {
+    process.stdout.write('  [SKIP]  API key check (--no-api-key)' + '\n')
   } else {
     fail('No API key in OPENAI_API_KEY or LUMEN_API_KEY')
   }

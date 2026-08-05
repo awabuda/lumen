@@ -34,7 +34,17 @@ export interface DoctorRow {
  * the JSON output rely on a deterministic ordering.
  */
 export const buildDoctorRows = async (
-  options: { readonly product?: boolean; readonly verbose?: boolean } = {},
+  options: {
+    readonly product?: boolean
+    readonly verbose?: boolean
+    /**
+     * P37.d — when true, skip the API key presence check
+     * (treat it as a WARN row with the SKIP marker rather
+     * than a FAIL). When undefined / false, the missing
+     * key is a FAIL row (the pre-P37.d default).
+     */
+    readonly noApiKey?: boolean
+  } = {},
 ): Promise<DoctorRow[]> => {
   const rows: DoctorRow[] = []
   const { loadCliConfig } = await import('../composition.js')
@@ -55,13 +65,24 @@ export const buildDoctorRows = async (
       hint: 'check ~/.lumen/config.yaml + project config schema',
     })
   }
-  // 2. API key
+  // 2. API key (P37.d) — when noApiKey is true, the
+  // missing-key row is reported as WARN (with the SKIP
+  // marker in the message) instead of FAIL. The earlier
+  // pre-P37.d behaviour is preserved when noApiKey is
+  // unset.
   const apiKey = process.env.OPENAI_API_KEY ?? process.env.LUMEN_API_KEY
   if (apiKey) {
     rows.push({
       severity: 'OK',
       section: 'api-key',
       message: 'API key present (OPENAI_API_KEY or LUMEN_API_KEY)',
+      hint: '',
+    })
+  } else if (options.noApiKey === true) {
+    rows.push({
+      severity: 'WARN',
+      section: 'api-key',
+      message: '[SKIP] API key check (--no-api-key)',
       hint: '',
     })
   } else {

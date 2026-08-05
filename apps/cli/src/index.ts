@@ -233,6 +233,10 @@ program
     'P35: output format. "human" (default) or "json". JSON emits a single array of DoctorRow objects (CI-friendly).',
     'human',
   )
+  .option(
+    '--no-api-key',
+    'P37.d: skip the API key presence check. Useful for offline diagnostics in CI sandboxes that do not have the LLM key mounted.',
+  )
   .action(async (opts: Record<string, unknown>) => {
     const { doctorCommand } = await import('./commands/doctor.js')
     const formatRaw = opts.format as string | undefined
@@ -241,6 +245,7 @@ program
       verbose: opts.verbose === true,
       product: opts.product === true,
       format,
+      noApiKey: opts.apiKey === false,
     })
     process.exit(code)
   })
@@ -394,6 +399,11 @@ program
   .argument('[subcommand]', '"list" (default), "approve <id>", or "reject <id>"', 'list')
   .argument('[id]', 'Plan id (for "approve" and "reject")')
   .option('--notes <text>', 'Approve/reject: free-form notes to record on the plan')
+  .option(
+    '--format <fmt>',
+    'list (P37.c): output format. "human" (default) or "json". CI-friendly.',
+    'human',
+  )
   .option('--plans-path <path>', 'Override the plans JSON file path')
   .action(async (subcommand: string, id: string | undefined, opts: Record<string, unknown>) => {
     const { planApproveCommand, planListCommand, planRejectCommand } = await import(
@@ -403,7 +413,9 @@ program
     const notes = opts.notes as string | undefined
     let code = 0
     if (subcommand === 'list') {
-      code = await planListCommand({ file })
+      const formatRaw = opts.format as string | undefined
+      const format = formatRaw === 'json' ? 'json' : 'human'
+      code = await planListCommand({ file, format })
     } else if (subcommand === 'approve') {
       if (!id) {
         process.stderr.write('lumen plan: missing <id> for "approve"\n')
@@ -443,6 +455,11 @@ program
   .option('--session <id>', 'restore: scope latest-in-progress lookup to this session id')
   .option('--latest', 'restore: pick the latest in-progress checkpoint across every session')
   .option('--json', 'restore: emit the resolved checkpoint as JSON instead of a one-liner')
+  .option(
+    '--format <fmt>',
+    'show (P37.b): output format. "human" (default) or "json". CI-friendly.',
+    'human',
+  )
   .action(async (subcommand: string, arg: string | undefined, opts: Record<string, unknown>) => {
     const {
       checkpointDeleteCommand,
@@ -464,7 +481,9 @@ program
         process.stderr.write('lumen checkpoint: missing <id> for "show"\n')
         code = 1
       } else {
-        code = await checkpointShowCommand({ id: arg, file })
+        const formatRaw = opts.format as string | undefined
+        const format = formatRaw === 'json' ? 'json' : 'human'
+        code = await checkpointShowCommand({ id: arg, file, format })
       }
     } else if (subcommand === 'delete') {
       if (!arg) {

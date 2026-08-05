@@ -23,7 +23,8 @@
     "rules": {
       "recommended": true,
       "suspicious": { "noExplicitAny": "warn" },
-      "style": { "useImportType": "warn", "noNonNullAssertion": "off" }
+      "style": { "useImportType": "warn", "noNonNullAssertion": "off" },
+      "performance": { "noDelete": "off" }
     }
   },
   "javascript": {

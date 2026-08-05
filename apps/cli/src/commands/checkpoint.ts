@@ -92,6 +92,13 @@ export interface CheckpointShowOptions {
   readonly id: string
   readonly store?: BaseCheckpointStore
   readonly file?: string
+  /**
+   * P37.b — output format. 'human' (default) is the
+   * pre-P37.b one-line-per-field text layout; 'json'
+   * emits the full AgentCheckpoint as JSON for CI
+   * pipelines and scripted consumers.
+   */
+  readonly format?: 'human' | 'json'
 }
 
 export const checkpointShowCommand = async (opts: CheckpointShowOptions): Promise<number> => {
@@ -101,6 +108,10 @@ export const checkpointShowCommand = async (opts: CheckpointShowOptions): Promis
     if (!cp) {
       process.stderr.write(`lumen checkpoint show: no checkpoint with id "${opts.id}"\n`)
       return 1
+    }
+    if (opts.format === 'json') {
+      process.stdout.write(`${JSON.stringify(cp, null, 2)}\n`)
+      return 0
     }
     printCheckpoint(cp)
     return 0

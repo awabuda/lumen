@@ -74,12 +74,31 @@ const formatStatus = (plan: { approvedAt?: number; rejectedAt?: number }): strin
 
 export interface PlanListOptions {
   readonly file?: string
+  /**
+   * P37.c — output format. 'human' (default) is the
+   * pre-P37.c one-line-per-plan text layout; 'json'
+   * emits the PlanStore snapshot as JSON for CI.
+   */
+  readonly format?: 'human' | 'json'
 }
 
 export const planListCommand = async (opts: PlanListOptions = {}): Promise<number> => {
   const file = opts.file ?? DEFAULT_PLANS_PATH()
   const store = await loadStore(file)
   const plans = [...store.all].sort((a, b) => b.createdAt - a.createdAt)
+  if (opts.format === 'json') {
+    const rows = plans.map((plan) => ({
+      id: plan.id,
+      status: formatStatus(plan),
+      goal: plan.goal,
+      steps: plan.steps.length,
+      createdAt: plan.createdAt,
+      ...(plan.approvedAt !== undefined ? { approvedAt: plan.approvedAt } : {}),
+      ...(plan.rejectedAt !== undefined ? { rejectedAt: plan.rejectedAt } : {}),
+    }))
+    process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`)
+    return 0
+  }
   if (plans.length === 0) {
     process.stdout.write(`(no plans in ${file})\n`)
     return 0
