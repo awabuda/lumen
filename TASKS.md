@@ -1894,6 +1894,39 @@ pnpm exec biome check apps/cli/src apps/cli/test   apps/cli/src/commands apps/cl
 
 CLI test delta: 391 → 395 (+4).
 
+### P35 — `lumen doctor --format json` (Phase C.2 first slice)
+
+Phase C.2 (OPTIMIZATION-PLAN §4 C.2) first slice:
+the existing `lumen doctor` command gains a
+`--format json` flag that emits a single JSON array
+of DoctorRow objects. CI pipelines can grep the
+`OK` / `WARN` / `FAIL` severity vocabulary and
+`jq` for specific sections.
+
+#### Commits
+
+```
+544d5f2  P35  lumen doctor --format json
+```
+
+#### Surface
+
+```
+lumen doctor [--format human|json] [--product]
+  --format human (default) — one-line-per-check
+  --format json              — single JSON array
+```
+
+#### Verification
+
+```
+pnpm --filter @lumen/cli typecheck    # 0 errors
+pnpm --filter @lumen/cli test       # 401 tests, 0 fail
+pnpm exec biome check apps/cli/src apps/cli/test   apps/cli/src/commands apps/cli/test  # 0 errors
+```
+
+CLI test delta: 395 → 401 (+6).
+
 ### P34.3 — Trust / Plan UX (Phase B.3 closure)
 
 Phase B.3 (OPTIMIZATION-PLAN §3 B.3) ships in P34.3:
