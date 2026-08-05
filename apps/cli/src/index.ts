@@ -270,6 +270,14 @@ program
   .option('--force', 'Confirm destructive operations (delete, prune)')
   .option('--older-than <days>', 'prune: cut-off age in days (default 30)', '30')
   .option('--limit <n>', 'show: limit messages returned (default 100)', '100')
+  .option(
+    '--list-limit <n>',
+    'list (P44.c): cap the number of sessions emitted (default 50). Renamed from `--limit` to avoid colliding with the existing `show` / `prune` --limit flag (different meaning).',
+  )
+  .option(
+    '--dry-run',
+    'prune (P44.b): when true, do NOT actually delete sessions. The `--force` and apply steps are skipped; the output reports how many rows would be removed.',
+  )
   .option('--format <fmt>', 'P35.f: list output format. "human" (default) or "json".', 'human')
   .action(async (subcommand: string, id: string | undefined, opts: Record<string, unknown>) => {
     const { sessionListCommand, sessionShowCommand, sessionDeleteCommand, sessionPruneCommand } =
@@ -280,7 +288,19 @@ program
     if (subcommand === 'list') {
       const formatRaw = opts.format as string | undefined
       const format = formatRaw === 'json' ? 'json' : 'human'
-      code = await sessionListCommand({ memoryPath, format })
+      // P44.c — wire `--list-limit <n>` to the `list`
+      // action. Note the rename: the existing `--limit`
+      // flag is shared with `show` / `prune` (different
+      // meanings), so the dispatcher must accept a
+      // separate `--list-limit` for the `list` action.
+      const listLimitRaw = opts.listLimit
+      const listLimit =
+        typeof listLimitRaw === 'string' ? Number.parseInt(listLimitRaw, 10) : undefined
+      code = await sessionListCommand({
+        memoryPath,
+        format,
+        ...(listLimit !== undefined ? { listLimit } : {}),
+      })
     } else if (subcommand === 'show') {
       if (!id) {
         process.stderr.write('lumen session: missing <id> for "show"\n')
@@ -288,7 +308,12 @@ program
       } else {
         const limitRaw = opts.limit
         const limit = typeof limitRaw === 'string' ? Number.parseInt(limitRaw, 10) : undefined
-        code = await sessionShowCommand(id, { memoryPath, limit })
+        // P44.d — wire `--format json` to the
+        // `show` action. The pre-P44.d path was
+        // the human text layout only.
+        const formatRaw = opts.format as string | undefined
+        const format = formatRaw === 'json' ? 'json' : 'human'
+        code = await sessionShowCommand(id, { memoryPath, limit, format })
       }
     } else if (subcommand === 'delete') {
       if (!id) {
@@ -307,7 +332,17 @@ program
       const days = typeof daysRaw === 'string' ? Number.parseInt(daysRaw, 10) : 30
       const formatRaw = opts.format as string | undefined
       const format = formatRaw === 'json' ? 'json' : 'human'
-      code = await sessionPruneCommand({ memoryPath, force, olderThanDays: days, format })
+      // P44.b — `--dry-run` overrides the per-file
+      // existence check. The pre-P44.b `--force`
+      // flag is required for the apply step;
+      // `--dry-run` skips the apply even with `--force`.
+      code = await sessionPruneCommand({
+        memoryPath,
+        force: opts.force === true,
+        olderThanDays: days,
+        format,
+        dryRun: opts.dryRun === true,
+      })
     } else {
       process.stderr.write(`lumen session: unknown subcommand: ${subcommand}\n`)
       code = 1
@@ -627,12 +662,15 @@ program
     } else if (subcommand === 'meta') {
       const intervalRaw = opts.interval
       const similarityRaw = opts.similarity
+      const formatRaw = opts.format as string | undefined
+      const format: 'human' | 'json' = formatRaw === 'json' ? 'json' : 'human'
       code = await reflectMetaCommand({
         ...(memoryPath !== undefined ? { memoryPath } : {}),
         ...(typeof intervalRaw === 'string' ? { interval: Number.parseInt(intervalRaw, 10) } : {}),
         ...(typeof similarityRaw === 'string'
           ? { similarityThreshold: Number.parseFloat(similarityRaw) }
           : {}),
+        format,
       })
     } else {
       process.stderr.write(`lumen reflect: unknown subcommand: ${subcommand}\n`)

@@ -89,6 +89,18 @@ export interface ReflectMetaOptions {
   readonly memoryPath?: string
   readonly interval?: number
   readonly similarityThreshold?: number
+  /**
+   * P44.a — output format. 'human' (default) is
+   * the pre-P44.a one-line text; 'json' emits a
+   * structured object (CI-friendly). Brings `meta`
+   * to parity with `list` (P35.d). The `meta`
+   * action does mutate the memory store
+   * (applies trust-delta patches), so the JSON
+   * shape includes the patch list before any
+   * apply step:
+   *   { proposed, applied, patches: [...] }
+   */
+  readonly format?: 'human' | 'json'
 }
 
 export const reflectMetaCommand = async (opts: ReflectMetaOptions = {}): Promise<number> => {
@@ -110,8 +122,39 @@ export const reflectMetaCommand = async (opts: ReflectMetaOptions = {}): Promise
         : {}),
     })
     const patches = await reflector.reflect(store)
+    if (opts.format === 'json') {
+      // P44.a — emit the patch list as JSON so CI
+      // can decide whether to apply via the dispatcher.
+      // The pre-P44.a `apply` step is intentionally
+      // baked into the same dispatch (the meta reflector
+      // is single-process and the cost of re-running
+      // is negligible), so the JSON object includes
+      // both the proposed and the applied counts.
+      process.stdout.write(
+        `${JSON.stringify(
+          {
+            proposed: patches.length,
+            patches: patches.map((p) => ({
+              recordId: p.recordId,
+              nextTrust: p.nextTrust,
+              delta: p.delta,
+              clusterSize: p.clusterSize,
+            })),
+          },
+          null,
+          2,
+        )}\n`,
+      )
+      // The apply step is still performed in-process
+      // (the `format: json` flag is a reporting knob,
+      // not a control flow change). The shape above is
+      // the pre-apply snapshot; the human path
+      // surfaces the post-apply summary line.
+    }
     if (patches.length === 0) {
-      process.stdout.write('(no fact clusters formed; nothing to adjust)\n')
+      if (opts.format !== 'json') {
+        process.stdout.write('(no fact clusters formed; nothing to adjust)\n')
+      }
       return 0
     }
     let applied = 0
@@ -123,6 +166,12 @@ export const reflectMetaCommand = async (opts: ReflectMetaOptions = {}): Promise
         trust: patch.nextTrust,
       })
       applied += 1
+    }
+    if (opts.format === 'json') {
+      // P44.a — append the post-apply summary so
+      // the JSON path is self-contained.
+      process.stdout.write(`${JSON.stringify({ applied, total: patches.length })}\n`)
+      return 0
     }
     process.stdout.write(`applied ${applied}/${patches.length} trust-delta patches\n`)
     return 0

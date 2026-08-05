@@ -89,6 +89,26 @@ export interface SessionCommandOptions {
    * their pre-P35.f text path.
    */
   readonly format?: 'human' | 'json'
+  /**
+   * P44.b — `prune` only: when true, do NOT actually
+   * delete sessions. Instead, report how many rows
+   * would be removed (without `--force` and without
+   * the apply step). Useful in CI to gate a prune
+   * job on a maximum-removals threshold.
+   */
+  readonly dryRun?: boolean
+  /**
+   * P44.c — `list` only: cap the number of sessions
+   * emitted (sorted by `createdAt` desc). Default 50.
+   * Brings `list` to parity with the other `list`
+   * surfaces (P35.d, P38.b, P39.d, P41.c). CI can
+   * use this to slice the output without having to
+   * pipe through `jq`. The flag name is `listLimit`
+   * (not `limit`) so the existing `show` /
+   * `prune` `--limit` flag (different meaning)
+   * does not collide on the dispatcher surface.
+   */
+  readonly listLimit?: number
 }
 /** Format a unix-ms timestamp as a short local string. */
 const formatTs = (ms: number): string => {
@@ -110,7 +130,12 @@ export const sessionListCommand = async (opts: SessionCommandOptions = {}): Prom
   let path = ''
   await withStore(async (store) => {
     path = opts.memoryPath ?? defaultMemoryPath()
-    sessions = await store.listSessions()
+    // P44.c — honour the `--list-limit` flag when
+    // set. The store's `listSessions` accepts a
+    // numeric cap (default unbounded); we cap the
+    // session rows after the most-recent sort.
+    const limit = opts.listLimit ?? 50
+    sessions = await store.listSessions(limit)
   }, opts)
 
   if (opts.format === 'json') {
@@ -152,6 +177,35 @@ export const sessionShowCommand = async (
   if (!session) {
     process.stderr.write(`Session not found: ${id}\n`)
     return 1
+  }
+  // P44.d — emit a JSON object on `show`. The
+  // shape mirrors the human text path verbatim
+  // (id, title, createdAt, updatedAt, messages[])
+  // with role / content / toolName / createdAt
+  // per message). Brings `show` to parity with
+  // `list` (P35.f), `prune` (P41.c), and
+  // `delete` (P42.b).
+  if (opts.format === 'json') {
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          id: session.id,
+          title: session.title ?? null,
+          createdAt: session.createdAt,
+          updatedAt: session.updatedAt,
+          messages: messages.map((m) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            toolName: m.toolName ?? null,
+            createdAt: m.createdAt,
+          })),
+        },
+        null,
+        2,
+      )}\n`,
+    )
+    return 0
   }
   process.stdout.write(`Session ${session.id}\n`)
   process.stdout.write(`  title:     ${session.title ?? '(no title)'}\n`)
@@ -220,6 +274,21 @@ export const sessionPruneCommand = async (opts: SessionCommandOptions = {}): Pro
   }
   let removed = 0
   await withStore(async (store) => {
+    // P44.b — dry-run path: count the rows that the
+    // prune would remove without calling `store.prune`.
+    // The store exposes a `list()` shape but no
+    // public `countOlderThan`; we read every session
+    // and apply the same cut-off timestamp the real
+    // prune would. The 1-2 commit scope forbids
+    // adding a public `countOlderThan` to the store
+    // surface (a follow-up P-ticket can do that
+    // if dry-run stays hot).
+    if (opts.dryRun === true) {
+      const all = await store.listSessions(100_000)
+      const cutOff = Date.now() - days * MS_PER_DAY
+      removed = all.filter((s) => s.createdAt < cutOff).length
+      return
+    }
     removed = await store.prune(days * MS_PER_DAY)
   }, opts)
   // P41.c — emit a JSON object on prune. The pre-P41.c
@@ -230,10 +299,25 @@ export const sessionPruneCommand = async (opts: SessionCommandOptions = {}): Pro
   if (opts.format === 'json') {
     process.stdout.write(
       `${JSON.stringify(
-        { removed, olderThanDays: days, cutOffMs: Date.now() - days * MS_PER_DAY },
+        {
+          removed,
+          olderThanDays: days,
+          cutOffMs: Date.now() - days * MS_PER_DAY,
+          dryRun: opts.dryRun === true,
+        },
         null,
         2,
       )}\n`,
+    )
+    return 0
+  }
+  // P44.b — the dry-run summary line is `would
+  // prune <n> session/record row(s)` to make it
+  // visually distinct from the apply path
+  // (`Pruned <n> ...`).
+  if (opts.dryRun === true) {
+    process.stdout.write(
+      `would prune ${removed} session/record row(s) older than ${days} day(s). Re-run with --force (without --dry-run) to apply.\n`,
     )
     return 0
   }
