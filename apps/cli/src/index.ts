@@ -669,18 +669,26 @@ program
   .description('Inspect the resolved Lumen config')
   .argument('[subcommand]', '"show" (default), "path", or "validate"', 'show')
   .option('-c, --config <path>', 'Path to a Lumen config file')
+  .option(
+    '--section <name>',
+    'show (P35.b): only print the named top-level section of the config (e.g. "model", "providers", "mcp", "agent"). Unknown names print an empty JSON object and exit 0.',
+  )
   .action(async (subcommand: string, opts: Record<string, unknown>) => {
     const { configShowCommand, configPathCommand, configValidateCommand } = await import(
       './commands/config.js'
     )
     const configPath = opts.config as string | undefined
+    const section = opts.section as string | undefined
     let code = 0
     if (subcommand === 'path') {
       code = await configPathCommand({ configPath })
     } else if (subcommand === 'validate') {
       code = await configValidateCommand({ configPath })
     } else if (subcommand === 'show') {
-      code = await configShowCommand({ configPath })
+      code = await configShowCommand({
+        ...(configPath !== undefined ? { configPath } : {}),
+        ...(section !== undefined ? { section } : {}),
+      })
     } else {
       process.stderr.write(`lumen config: unknown subcommand: ${subcommand}\n`)
       code = 1

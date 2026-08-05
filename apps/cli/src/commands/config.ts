@@ -49,6 +49,13 @@ const redact = (value: unknown, key?: string): unknown => {
 
 export interface ConfigShowOptions {
   readonly configPath?: string
+  /**
+   * P35.b — when set, only print the named top-level
+   * section of the config (e.g. 'model', 'providers',
+   * 'mcp', 'agent'). Unknown names print an empty
+   * JSON object and exit 0 (CI-friendly).
+   */
+  readonly section?: string
 }
 export interface ConfigPathOptions {
   readonly configPath?: string
@@ -60,7 +67,12 @@ export interface ConfigValidateOptions {
 /** `lumen config show` — pretty-print the resolved config with secrets redacted. */
 export const configShowCommand = async (opts: ConfigShowOptions = {}): Promise<number> => {
   const config = await loadCliConfig(opts.configPath)
-  const redacted = redact(config)
+  const redacted = redact(config) as Record<string, unknown>
+  if (opts.section !== undefined) {
+    const section = redacted[opts.section]
+    process.stdout.write(`${JSON.stringify(section ?? {}, null, 2)}\n`)
+    return 0
+  }
   process.stdout.write(`${JSON.stringify(redacted, null, 2)}\n`)
   return 0
 }
