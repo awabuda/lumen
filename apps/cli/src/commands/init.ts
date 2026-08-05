@@ -228,6 +228,22 @@ export interface InitCommandOptions {
    * edit the config directly).
    */
   withDefaultProfile?: boolean
+  /**
+   * P42.a — explicit profile name to splice into the
+   * starter config. When set, takes precedence over
+   * `withDefaultProfile` (which is the boolean flag
+   * for the `assistant` default). Operator syntax:
+   * `lumen init --with-config --with-default-profile=bare`
+   * writes `defaultProfile: bare` instead of the
+   * `assistant` default. The value is **not validated**
+   * against the BUILTIN_ASSEMBLIES list — operators
+   * who reference a custom profile (e.g. an
+   * organisation-level assembly defined in
+   * `config.product.assemblies`) can pass that name
+   * directly. The CLI does a literal splice on the
+   * template marker.
+   */
+  defaultProfileName?: string
 }
 
 /** Run the `lumen init` command. Returns 0 on success, 2 on conflict. */
@@ -276,10 +292,17 @@ export const initCommand = async (options: InitCommandOptions = {}): Promise<num
     // mounts out of the box. We splice on the literal
     // uncommented line at a stable marker so the
     // pre-existing template body is unchanged.
+    // P42.a — `defaultProfileName` (set via
+    // `--with-default-profile=<name>`) takes precedence
+    // over the boolean `withDefaultProfile` flag.
+    // When the boolean is set but the name is not, we
+    // fall back to the `assistant` default.
     const baseConfig = starterConfigTemplate()
+    const profileName =
+      options.defaultProfileName ?? (options.withDefaultProfile === true ? 'assistant' : undefined)
     const finalConfig =
-      options.withDefaultProfile === true
-        ? baseConfig.replace('# defaultProfile: assistant', 'defaultProfile: assistant')
+      profileName !== undefined
+        ? baseConfig.replace('# defaultProfile: assistant', `defaultProfile: ${profileName}`)
         : baseConfig
     await fs.writeFile(cfgDest, finalConfig, 'utf8')
     process.stdout.write(`wrote ${cfgDest}\n`)

@@ -90,7 +90,6 @@ export interface SessionCommandOptions {
    */
   readonly format?: 'human' | 'json'
 }
-
 /** Format a unix-ms timestamp as a short local string. */
 const formatTs = (ms: number): string => {
   if (ms <= 0) return '(unset)'
@@ -191,6 +190,16 @@ export const sessionDeleteCommand = async (
   if (!removed) {
     process.stderr.write(`Session not found: ${id}\n`)
     return 1
+  }
+  // P42.b — emit a JSON object on delete. Brings
+  // `delete` to parity with `prune` (P41.c) and
+  // `list` (P35.f). The shape includes the session
+  // id and the deletion timestamp.
+  if (opts.format === 'json') {
+    process.stdout.write(
+      `${JSON.stringify({ id, deleted: true, deletedAt: Date.now() }, null, 2)}\n`,
+    )
+    return 0
   }
   process.stdout.write(`Deleted session: ${id}\n`)
   return 0

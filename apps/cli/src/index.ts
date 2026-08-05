@@ -289,7 +289,12 @@ program
         process.stderr.write('lumen session: missing <id> for "delete"\n')
         code = 1
       } else {
-        code = await sessionDeleteCommand(id, { memoryPath, force })
+        // P42.b — wire `--format json` to the delete
+        // action. Brings `delete` to parity with
+        // `prune` (P41.c) and `list` (P35.f).
+        const formatRaw = opts.format as string | undefined
+        const format = formatRaw === 'json' ? 'json' : 'human'
+        code = await sessionDeleteCommand(id, { memoryPath, force, format })
       }
     } else if (subcommand === 'prune') {
       const daysRaw = opts.olderThan
@@ -757,6 +762,10 @@ program
     'get (P39.d): dotted path into the resolved config (e.g. `defaultModel`, `agent.maxIterations`).',
   )
   .option(
+    '--with-default-profile [name]',
+    'P38.a / P42.a — with --with-config, also uncomment `defaultProfile: <name>` in the starter config. Default name is `assistant` when the flag is set without a value. Explicit names: `lumen init --with-config --with-default-profile=bare`.',
+  )
+  .option(
     '--section <name>',
     'show (P35.b): only print the named top-level section of the config (e.g. "model", "providers", "mcp", "agent"). Unknown names print an empty JSON object and exit 0.',
   )
@@ -1021,19 +1030,40 @@ program
     'P31.7: override the cwd for `--with-context`. Default is the cwd at command run time.',
   )
   .option(
-    '--with-default-profile',
-    'P38.a: with --with-config, also uncomment `defaultProfile: assistant` in the starter config so the assistant assembly (plan / permission / skill / reflection) mounts out of the box.',
+    '--with-default-profile [name]',
+    'P38.a / P42.a — with --with-config, also uncomment `defaultProfile: <name>` in the starter config. Default name is `assistant` when the flag is set without a value. Explicit names: `lumen init --with-config --with-default-profile=bare`.',
+  )
+  .option(
+    '--force-all',
+    'P42.d — skip the file-existence check entirely. The pre-P42.d `--force` flag re-writes a single file; `--force-all` overwrites every target file (permissions + config + .lumen/AGENTS.md / TOOLS.md) without prompting.',
   )
   .action(async (opts: Record<string, unknown>) => {
     const { initCommand } = await import('./commands/init.js')
+    // P42.a — `--with-default-profile [name]` is commander
+    // optional-value syntax. When the flag is set without
+    // a value, commander hands back `true` (boolean); when
+    // it carries an explicit name, it hands back the
+    // string. We split the two cases here so the
+    // InitCommandOptions surface stays one option.
+    const profileRaw = opts.withDefaultProfile
+    const profileExplicit =
+      typeof profileRaw === 'string' && profileRaw.length > 0 ? profileRaw : undefined
+    const profileImplicit = profileRaw === true
+    // P42.d — `--force-all` overrides the per-file
+    // existence check. The pre-P42.d `--force` flag
+    // only overwrites a single target; `--force-all`
+    // applies to all of: permissions, config,
+    // `<cwd>/.lumen/AGENTS.md`, `<cwd>/.lumen/TOOLS.md`.
+    const forceAll = opts.forceAll === true
     const code = await initCommand({
-      force: opts.force === true,
+      force: opts.force === true || forceAll,
       path: opts.path as string | undefined,
       withConfig: opts.withConfig === true,
       configPath: opts.configPath as string | undefined,
       withContext: opts.withContext === true,
       cwd: opts.cwd as string | undefined,
-      withDefaultProfile: opts.withDefaultProfile === true,
+      withDefaultProfile: profileImplicit || profileExplicit !== undefined,
+      ...(profileExplicit !== undefined ? { defaultProfileName: profileExplicit } : {}),
     })
     process.exit(code)
   })
