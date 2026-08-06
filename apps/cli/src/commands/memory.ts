@@ -128,6 +128,24 @@ export interface MemoryCommandOptions {
    * with at most one entry.
    */
   readonly kindFilter?: string
+  /**
+   * P42.c — `prune` action: when true, gate the
+   * destructive delete step. The pre-P42.c path
+   * was a no-op (no prune action existed). The
+   * operator must pass `--force` to actually
+   * delete records; without it, the dry-run path
+   * reports how many records WOULD be removed.
+   */
+  readonly force?: boolean
+  /**
+   * P42.c — `prune` action: when true, run the
+   * dry-run path (count would-delete records,
+   * emit JSON). Without `--force`, `prune` runs
+   * in dry-run mode by default. CI surfaces
+   * can pipe through `jq` to inspect the
+   * `removed` count.
+   */
+  readonly dryRun?: boolean
 }
 
 /** `lumen memory sync` — pull sqlite → md, ingest if newer. */
@@ -270,5 +288,100 @@ export const memoryListCommand = async (opts: MemoryCommandOptions = {}): Promis
     return 0
   }, opts)
 }
+/**
+ * P42.c — `lumen memory prune [--kind <k>]` deletes
+ * every record whose `kind === pruneKind` (or, when
+ * `--kind` is omitted, every record). The action
+ * is destructive and gated behind `--force`:
+ * without `--force`, `prune` runs in dry-run mode
+ * and reports how many records WOULD be removed.
+ *
+ * The operator can pipe the dry-run output through
+ * `jq` to gate the delete on a threshold (e.g.
+ * `prune --force --kind reflection \\| jq '.removed \|> 100'`).
+ *
+ * P42.c — also adds `--kind <k>` (already generic
+ * in P38.b for `list`; here we accept it as a
+ * single-token kind filter). The dispatcher
+ * enforces `--kind <k>` is the only positional
+ * flow; the path is intentionally narrow.
+ *
+ * Subtle: the agent loop should NOT depend on
+ * this command (the inner-loop reflects into the
+ * same store). The pre-P42.c absence of a
+ * destructive prune CLI was a deliberate "no
+ * footgun" choice. P42.c ships the CLI but every
+ * flag is gated behind `--force` so the default
+ * path stays dry-run.
+ */
+export const memoryPruneCommand = async (opts: MemoryCommandOptions = {}): Promise<number> => {
+  const pruneKind = opts.filterKind
+  if (opts.dryRun === true || opts.force !== true) {
+    // P42.c — dry-run path. Count would-delete
+    // records without invoking `store.delete`.
+    // Mirrors the `session prune --dry-run`
+    // (P44.b) pattern.
+    return await withBridge(async (_bridge, store) => {
+      const records = await store.search({
+        ...(pruneKind !== undefined ? { kind: pruneKind } : {}),
+        limit: 100_000,
+      })
+      const removed = records.length
+      if (opts.format === 'json') {
+        process.stdout.write(
+          `${JSON.stringify(
+            {
+              dryRun: true,
+              removed,
+              ...(pruneKind !== undefined ? { kind: pruneKind } : {}),
+            },
+            null,
+            2,
+          )}\n`,
+        )
+      } else {
+        process.stdout.write(
+          `would prune ${removed} record(s)${pruneKind !== undefined ? ` (kind=${pruneKind})` : ''}\n`,
+        )
+      }
+      return 0
+    }, opts)
+  }
+  // P42.c — force path. Iterate the search result
+  // and call `store.delete` for each record. The
+  // delete is idempotent at the row level; if a
+  // record was deleted between search and delete,
+  // the call returns false and we skip.
+  return await withBridge(async (_bridge, store) => {
+    const records = await store.search({
+      ...(pruneKind !== undefined ? { kind: pruneKind } : {}),
+      limit: 100_000,
+    })
+    let removed = 0
+    for (const r of records) {
+      const ok = await store.delete(r.record.id)
+      if (ok) removed += 1
+    }
+    if (opts.format === 'json') {
+      process.stdout.write(
+        `${JSON.stringify(
+          {
+            dryRun: false,
+            removed,
+            ...(pruneKind !== undefined ? { kind: pruneKind } : {}),
+          },
+          null,
+          2,
+        )}\n`,
+      )
+    } else {
+      process.stdout.write(
+        `pruned ${removed} record(s)${pruneKind !== undefined ? ` (kind=${pruneKind})` : ''}\n`,
+      )
+    }
+    return 0
+  }, opts)
+}
+
 /** Re-export path helpers for tests + other commands. */
 export { defaultMemoryMdPath, defaultUserMdPath }

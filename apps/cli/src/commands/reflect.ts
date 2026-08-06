@@ -101,6 +101,19 @@ export interface ReflectMetaOptions {
    *   { proposed, applied, patches: [...] }
    */
   readonly format?: 'human' | 'json'
+  /**
+   * P48.e — when true, do NOT actually apply
+   * the trust-delta patches. Instead, emit the
+   * pre-apply patch list. Useful in CI to gate
+   * a meta-reflect run on the proposed change
+   * count. Mirrors the `plan approve --dry-run`
+   * (P46.b) / `plan reject --dry-run` (P47.a)
+   * pattern. The human path emits
+   * `would apply <n> trust-delta patches`;
+   * the JSON path emits the same shape the
+   * apply path would.
+   */
+  readonly dryRun?: boolean
 }
 
 export const reflectMetaCommand = async (opts: ReflectMetaOptions = {}): Promise<number> => {
@@ -150,6 +163,19 @@ export const reflectMetaCommand = async (opts: ReflectMetaOptions = {}): Promise
       // not a control flow change). The shape above is
       // the pre-apply snapshot; the human path
       // surfaces the post-apply summary line.
+      // P48.e — when dryRun is true, return without
+      // applying the patches. The JSON path is the
+      // pre-apply snapshot; the apply step is skipped.
+      if (opts.dryRun === true) {
+        return 0
+      }
+    } else if (opts.dryRun === true) {
+      // P48.e — human path: emit a summary line
+      // and skip the apply step.
+      process.stdout.write(
+        `would apply ${patches.length} trust-delta patches (no changes written)\n`,
+      )
+      return 0
     }
     if (patches.length === 0) {
       if (opts.format !== 'json') {

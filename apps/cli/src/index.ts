@@ -385,7 +385,7 @@ program
 program
   .command('memory')
   .description('Inspect and manage the memory markdown bridge (MEMORY.md / USER.md)')
-  .argument('[subcommand]', '"sync" (default), "show", or "list"', 'sync')
+  .argument('[subcommand]', '"sync" (default), "show", "list", or "prune"', 'sync')
   .option('--memory-path <path>', 'Override the SQLite memory database path')
   .option('--memory-md-path <path>', 'Override MEMORY.md path (default ~/.lumen/MEMORY.md)')
   .option('--user-md-path <path>', 'Override USER.md path (default ~/.lumen/USER.md)')
@@ -404,6 +404,10 @@ program
     'list (P45.d): skip the `minTrust` floor (default 0.6) so the list returns every record regardless of trust.',
   )
   .option(
+    '--force',
+    'prune (P42.c): actually delete the records (default `dry-run`, which only counts). Without `--force`, `prune` reports the would-delete count but does not mutate the store.',
+  )
+  .option(
     '--format <fmt>',
     'list (P38.b): output format. "human" (default) or "json". CI-friendly.',
     'human',
@@ -414,9 +418,8 @@ program
   )
   .option('--profile <name>', 'Profile label written into the markdown frontmatter')
   .action(async (subcommand: string, opts: Record<string, unknown>) => {
-    const { memorySyncCommand, memoryShowCommand, memoryListCommand } = await import(
-      './commands/memory.js'
-    )
+    const { memorySyncCommand, memoryShowCommand, memoryListCommand, memoryPruneCommand } =
+      await import('./commands/memory.js')
     const memoryPath = opts.memoryPath as string | undefined
     const memoryMdPath = opts.memoryMdPath as string | undefined
     const userMdPath = opts.userMdPath as string | undefined
@@ -466,6 +469,24 @@ program
         ...(excludeKindRaw !== undefined ? { excludeKind: excludeKindRaw } : {}),
         ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
         ...(opts.trust === true ? { noTrust: true } : {}),
+      })
+    } else if (subcommand === 'prune') {
+      // P42.c — wire `lumen memory prune` to
+      // the dispatcher. The action is destructive
+      // (deletes every record whose kind matches
+      // `--kind`, or every record if `--kind` is
+      // omitted) and gated behind `--force`.
+      // Without `--force`, the action runs in
+      // dry-run mode (count would-delete records).
+      const formatRaw = opts.format as string | undefined
+      const format = formatRaw === 'json' ? 'json' : 'human'
+      const kindRaw = opts.kind as string | undefined
+      code = await memoryPruneCommand({
+        ...(memoryPath !== undefined ? { memoryPath } : {}),
+        format,
+        ...(kindRaw !== undefined ? { filterKind: kindRaw } : {}),
+        force: opts.force === true,
+        dryRun: opts.force !== true,
       })
     } else {
       process.stderr.write(`lumen memory: unknown subcommand: ${subcommand}\n`)
@@ -754,6 +775,10 @@ program
     '--no-content',
     'reflect list (P49.c): drop the `content` field from each record in the JSON output. Useful for long reflection lists where CI only needs id + trust + createdAt.',
   )
+  .option(
+    '--dry-run',
+    'meta (P48.e): emit the pre-apply patch list without writing back to the store. Mirrors the `plan approve --dry-run` (P46.b) / `plan reject --dry-run` (P47.a) pattern.',
+  )
   .action(async (subcommand: string, opts: Record<string, unknown>) => {
     const { reflectListCommand, reflectMetaCommand, reflectRunCommand } = await import(
       './commands/reflect.js'
@@ -794,6 +819,11 @@ program
           ? { similarityThreshold: Number.parseFloat(similarityRaw) }
           : {}),
         format,
+        // P48.e — wire `--dry-run` to the `meta`
+        // action. The pre-P48.e path always
+        // applied; P48.e respects the dry-run
+        // flag to skip the apply step.
+        dryRun: opts.dryRun === true,
       })
     } else {
       process.stderr.write(`lumen reflect: unknown subcommand: ${subcommand}\n`)
