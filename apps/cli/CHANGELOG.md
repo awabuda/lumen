@@ -1,5 +1,12 @@
 # @lumen/cli
 
+## 0.47.1
+
+### Patch Changes
+
+- Updated dependencies [aa18d4a]
+  - @lumen/skills@0.18.0
+
 ## 0.47.0
 
 ### Minor Changes
