@@ -1399,6 +1399,29 @@ program.action(async (opts: Record<string, unknown>) => {
   process.exit(code)
 })
 
+// P54 — when the operator runs `lumen` (no
+// arguments) on a non-TTY stream (e.g. piping
+// into a redirector, or in a non-interactive
+// background process), commander defaults to
+// the `chat` command, which mounts the Ink TUI
+// and immediately throws "Raw mode is not
+// supported on the current process.stdin".
+// The pre-P54 behaviour crashed with a stack
+// trace, which is confusing for non-interactive
+// callers. P54 prints a one-line hint + the
+// help output and exits 2, so the operator
+// learns that they want either a real TTY
+// (for `lumen chat`) or a different subcommand
+// (e.g. `lumen run "..."`, `lumen doctor`,
+// `lumen session list`).
+if (process.argv.length <= 2 && !process.stdin.isTTY) {
+  process.stderr.write(
+    'lumen: the default subcommand (`chat`) requires a real TTY. Run `lumen --help` to see the full subcommand list, or `lumen doctor` to verify your install.\n',
+  )
+  process.stdout.write(program.helpInformation())
+  process.exit(2)
+}
+
 program.parseAsync(process.argv).catch((err: unknown) => {
   const message = err instanceof Error ? err.message : String(err)
   process.stderr.write(`lumen: unexpected error: ${message}\n`)
