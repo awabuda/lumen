@@ -14,6 +14,32 @@ import type {
 } from './base.js'
 import { SkillConfigError } from './errors.js'
 
+/** P52.a — bug.md #67 follow-up. Substitute
+ *  `${ARG[i]}` / `${ARGUMENTS}` / `$ARG[0]`
+ *  placeholders in the input string with the
+ *  corresponding element of `args`. Out-of-range
+ *  placeholders are left untouched. The
+ *  `${ARGUMENTS}` placeholder joins the array
+ *  with spaces (the pre-P52.a Claude Code
+ *  convention). */
+const substituteArgs = (input: string, args: ReadonlyArray<string>): string => {
+  if (!input.includes('${')) return input
+  // Special case: ${ARGUMENTS} joins the array
+  // with spaces (the pre-P52.a Claude Code
+  // convention). The local `result` variable
+  // is used to avoid reassigning the `input`
+  // parameter (biome `noParameterAssign`).
+  const result = input.includes('${ARGUMENTS}')
+    ? input.replace(/\$\{ARGUMENTS\}/g, args.join(' '))
+    : input
+  // Indexed: ${ARG[0]} / ${ARG[1]} / ...
+  return result.replace(/\$\{ARG\[(\d+)\]\}/g, (match, idxStr) => {
+    const idx = Number.parseInt(idxStr, 10)
+    if (idx < 0 || idx >= args.length) return match
+    return args[idx] ?? match
+  })
+}
+
 /** Activated skill paired with its score. */
 export interface ActivatedSkill {
   /** Skill instance. */
@@ -86,7 +112,31 @@ export class SkillRegistry {
     // P23.10 (fix #35) — same parallel rationale: apply()
     // is read-only against ctx and writes only to the
     // returned array, so Promise.all is safe.
-    return await Promise.all(active.map((item) => item.skill.apply(ctx)))
+    const applied = await Promise.all(active.map((item) => item.skill.apply(ctx)))
+    // P52.a — bug.md #67 follow-up. When the
+    // composition root passes `ctx.arguments`,
+    // substitute each `${ARG[i]}` /
+    // `${ARGUMENTS}` / `$ARG[0]` placeholder
+    // in the skill's `instructions` text with
+    // the corresponding element. The
+    // `arguments` array is positional (the
+    // operator typed `/code-review <branch>`
+    // — `branch` is `arguments[0]`). The
+    // `${ARGUMENTS}` placeholder is a special
+    // case that joins the array with spaces
+    // (the pre-P52.a Claude Code convention).
+    // Out-of-range placeholders are left
+    // untouched (the operator should see
+    // the raw `${ARG[1]}` in the output so
+    // they can fix the invocation).
+    if (ctx.arguments === undefined) return applied
+    return applied.map((app) => {
+      if (app.instructions.length === 0) return app
+      return {
+        ...app,
+        instructions: app.instructions.map((s) => substituteArgs(s, ctx.arguments ?? [])),
+      }
+    })
   }
 
   /** Number of registered skills. */

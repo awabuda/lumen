@@ -29,6 +29,24 @@ export const SkillContextSchema = z.object({
   pathHints: z.array(z.string()).optional(),
   /** Opaque metadata supplied by the composition root. */
   metadata: z.record(z.unknown()).optional(),
+  /**
+   * P52.a — positional arguments to substitute
+   * into the skill's instruction templates.
+   * Bug.md #67 follow-up: the pre-P52.a path
+   * did not parameterise skill templates. The
+   * operator could not call a skill with
+   * positional args (e.g. `/code-review <branch>`).
+   * P52.a accepts an array of args; the
+   * SkillRegistry replaces each `${ARG[i]}` /
+   * `${ARGUMENTS}` / `$ARG[0]` placeholder in
+   * the skill's `instructions` text with the
+   * corresponding element. Placeholders that
+   * reference an out-of-range index are left
+   * untouched (the operator should see the
+   * raw `${ARG[1]}` in the output so they
+   * can fix the invocation).
+   */
+  arguments: z.array(z.string()).optional(),
 })
 export type SkillContext = z.infer<typeof SkillContextSchema>
 
