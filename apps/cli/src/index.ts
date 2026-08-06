@@ -275,6 +275,10 @@ program
     'show (P47.c): include the `metadata` field in the JSON output. Default off (no surface change).',
   )
   .option(
+    '--no-load',
+    'delete (P48.h): skip the P45.a session + message-history load. The JSON path emits `lastAccessMs: null` instead of the most-recent message `createdAt`. Useful for bulk-delete operations in CI.',
+  )
+  .option(
     '--list-limit <n>',
     'list (P44.c): cap the number of sessions emitted (default 50). Renamed from `--limit` to avoid colliding with the existing `show` / `prune` --limit flag (different meaning).',
   )
@@ -343,7 +347,12 @@ program
         // `prune` (P41.c) and `list` (P35.f).
         const formatRaw = opts.format as string | undefined
         const format = formatRaw === 'json' ? 'json' : 'human'
-        code = await sessionDeleteCommand(id, { memoryPath, force, format })
+        code = await sessionDeleteCommand(id, {
+          memoryPath,
+          force: opts.force === true,
+          format,
+          noLoad: opts.noLoad === true,
+        })
       }
     } else if (subcommand === 'prune') {
       const daysRaw = opts.olderThan
@@ -722,7 +731,10 @@ program
     'reflect list (P35.d): output format. "human" (default) or "json".',
     'human',
   )
-  .option('--limit <n>', 'reflect list (P35.d): max records to print (default 50).')
+  .option(
+    '--list-limit <n>',
+    'reflect list (P48.d): cap the number of records emitted (default 50). Renamed from `--limit` to match the P44.c `session list --list-limit` convention.',
+  )
   .action(async (subcommand: string, opts: Record<string, unknown>) => {
     const { reflectListCommand, reflectMetaCommand, reflectRunCommand } = await import(
       './commands/reflect.js'
@@ -737,12 +749,18 @@ program
     } else if (subcommand === 'list') {
       const formatRaw = opts.format as string | undefined
       const format: 'human' | 'json' = formatRaw === 'json' ? 'json' : 'human'
-      const limitRaw = opts.limit
-      const limit = typeof limitRaw === 'string' ? Number.parseInt(limitRaw, 10) : undefined
+      // P48.d — wire `--list-limit <n>` to the
+      // `list` action. The pre-P48.d name
+      // `--limit` was renamed to `--list-limit`
+      // for parity with the P44.c
+      // `session list --list-limit` convention.
+      const listLimitRaw = opts.listLimit
+      const listLimit =
+        typeof listLimitRaw === 'string' ? Number.parseInt(listLimitRaw, 10) : undefined
       code = await reflectListCommand({
         ...(memoryPath !== undefined ? { memoryPath } : {}),
         format,
-        ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
+        ...(listLimit !== undefined && Number.isFinite(listLimit) ? { listLimit } : {}),
       })
     } else if (subcommand === 'meta') {
       const intervalRaw = opts.interval

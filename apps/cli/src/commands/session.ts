@@ -90,6 +90,16 @@ export interface SessionCommandOptions {
    */
   readonly format?: 'human' | 'json'
   /**
+   * P48.h — when true, skip the P45.a session +
+   * message-history load. The JSON path will
+   * emit `lastAccessMs: null` (since the load
+   * is skipped) instead of the most-recent
+   * message `createdAt`. Useful in CI for
+   * bulk-delete operations where the load
+   * cost dominates the apply cost.
+   */
+  readonly noLoad?: boolean
+  /**
    * P44.b — `prune` only: when true, do NOT actually
    * delete sessions. Instead, report how many rows
    * would be removed (without `--force` and without
@@ -281,9 +291,15 @@ export const sessionDeleteCommand = async (
     // BEFORE the delete so the JSON path can
     // surface the `lastAccessMs` field. The read
     // is a few KB; cost is negligible.
-    session = await store.getSession(id)
-    if (session) {
-      messages = await store.getSessionMessages(id, { limit: 1_000 })
+    // P48.h — when `noLoad` is set, skip the
+    // load. The JSON `lastAccessMs` will fall back
+    // to `session.createdAt`. Useful in CI for
+    // bulk-delete operations.
+    if (opts.noLoad !== true) {
+      session = await store.getSession(id)
+      if (session) {
+        messages = await store.getSessionMessages(id, { limit: 1_000 })
+      }
     }
     removed = await store.deleteSession(id)
   }, opts)
@@ -304,9 +320,26 @@ export const sessionDeleteCommand = async (
     // before deletion. The value is computed BEFORE
     // `store.deleteSession` so the post-delete state
     // is not consulted.
-    let lastAccessMs = session?.createdAt ?? Date.now()
-    if (messages.length > 0) {
-      lastAccessMs = Math.max(...messages.map((m) => m.createdAt))
+    let lastAccessMs: number | null = null
+    if (session) {
+      lastAccessMs = session.createdAt
+      if (messages.length > 0) {
+        lastAccessMs = Math.max(...messages.map((m) => m.createdAt))
+      }
+    } else if (opts.noLoad === true) {
+      // P48.h — the no-load path cannot compute
+      // `lastAccessMs`. We emit `null` so CI can
+      // distinguish "we did not look" from
+      // "we looked and the session is empty".
+      lastAccessMs = null
+    } else {
+      // Session was not found (we still call
+      // deleteSession; the human path reports
+      // `Session not found: <id>`). Surface
+      // `lastAccessMs: null` so the JSON shape
+      // is stable across the "found" and
+      // "not found" paths.
+      lastAccessMs = null
     }
     process.stdout.write(
       `${JSON.stringify({ id, deleted: true, deletedAt: Date.now(), lastAccessMs }, null, 2)}\n`,

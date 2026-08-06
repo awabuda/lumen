@@ -185,8 +185,17 @@ export interface ReflectListOptions {
   /** P35.d — `human` (default) prints one line per record;
    *  `json` prints a single JSON array (CI-friendly). */
   readonly format?: 'human' | 'json'
-  /** Max records to print. Default 50. */
-  readonly limit?: number
+  /**
+   * P35.d — Max records to print. Default 50.
+   * P48.d — renamed `--list-limit` to align with
+   * the P44.c convention used by
+   * `session list --list-limit`. The pre-P48.d
+   * name `limit` was renamed to `listLimit` so
+   * the flag can be wired through the dispatcher
+   * without colliding with the future
+   * `reflect show --limit` flag (if any).
+   */
+  readonly listLimit?: number
 }
 
 /**
@@ -209,7 +218,7 @@ export const reflectListCommand = async (opts: ReflectListOptions = {}): Promise
     return 1
   }
   try {
-    const limit = opts.limit ?? 50
+    const limit = opts.listLimit ?? 50
     // Fetch by kind. The high maxTrust-low limit is so
     // we don't lose any record (trust filtering is the
     // operator's CLI job, not the CLI's).
