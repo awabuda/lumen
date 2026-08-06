@@ -129,6 +129,18 @@ export interface MemoryCommandOptions {
    */
   readonly kindFilter?: string
   /**
+   * P51.b — `show` action: when true, emit a
+   * histogram of the records' `trust` field
+   * (binned 0.0 / 0.1 / ... / 1.0) alongside
+   * the per-kind count. Useful for operators
+   * sanity-checking the trust distribution
+   * (e.g. to confirm that low-trust records
+   * are accumulating as expected, or that
+   * the meta-reflector is pruning them).
+   * Default `false` (no surface change).
+   */
+  readonly trustDistribution?: boolean
+  /**
    * P42.c — `prune` action: when true, gate the
    * destructive delete step. The pre-P42.c path
    * was a no-op (no prune action existed). The
@@ -186,6 +198,13 @@ export const memoryShowCommand = async (opts: MemoryCommandOptions = {}): Promis
       if (opts.verbose === true) {
         payload.kindCounts = await computeKindCounts(store, opts.kindFilter)
       }
+      if (opts.trustDistribution === true) {
+        // P51.b — compute a 11-bucket trust
+        // histogram. The default `trust` field
+        // is 0.0-1.0. We bin into 0.0 / 0.1 /
+        // ... / 1.0.
+        payload.trustDistribution = await computeTrustDistribution(store, opts.kindFilter)
+      }
       process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`)
       return 0
     }
@@ -200,6 +219,13 @@ export const memoryShowCommand = async (opts: MemoryCommandOptions = {}): Promis
       } else {
         process.stdout.write('  kind counts:\n')
         for (const [k, n] of entries) process.stdout.write(`    ${k}=${n}\n`)
+      }
+    }
+    if (opts.trustDistribution === true) {
+      const dist = await computeTrustDistribution(store, opts.kindFilter)
+      process.stdout.write('  trust distribution (11 buckets, 0.0 / 0.1 / ... / 1.0):\n')
+      for (const [k, n] of Object.entries(dist)) {
+        process.stdout.write(`    ${k}: ${'#'.repeat(Math.min(n, 40))} ${n}\n`)
       }
     }
     return 0
@@ -229,6 +255,36 @@ const computeKindCounts = async (
     counts[k] = (counts[k] ?? 0) + 1
   }
   return counts
+}
+
+/** P51.b — compute a 11-bucket histogram of the
+ *  records' `trust` field. The default `trust`
+ *  field is 0.0-1.0; we bin into
+ *  0.0 / 0.1 / ... / 1.0 (eleven buckets). The
+ *  output is `{ '<bucket>': <n> }` with all
+ *  eleven keys present (zero-count buckets are
+ *  included so CI can pipe through `jq` without
+ *  missing-key errors). */
+const computeTrustDistribution = async (
+  store: SqliteStore,
+  kindFilter?: string,
+): Promise<Record<string, number>> => {
+  const records = await store.search({
+    limit: 100_000,
+    ...(kindFilter !== undefined ? { kind: kindFilter } : {}),
+  })
+  const buckets: Record<string, number> = {}
+  for (let i = 0; i <= 10; i += 1) {
+    const key = (i * 0.1).toFixed(1)
+    buckets[key] = 0
+  }
+  for (const r of records) {
+    const trust = r.record.trust
+    const idx = Math.min(10, Math.max(0, Math.floor(trust * 10)))
+    const key = (idx * 0.1).toFixed(1)
+    buckets[key] = (buckets[key] ?? 0) + 1
+  }
+  return buckets
 }
 /** P38.b — `lumen memory list [--kind <k>]` — print every record
  *  in the SqliteStore, optionally filtered by kind. The default

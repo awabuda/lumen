@@ -392,7 +392,11 @@ program
   .option('--trust-threshold <n>', 'Minimum trust to project into markdown (default 0.6)', '0.6')
   .option(
     '--kind <k>',
-    'list (P38.b): filter records by kind. Useful for `fact` / `reflection` / `user-pref` / `session`.',
+    'list (P38.b) / show (P43.c) / prune (P42.c): filter records by kind. Useful for `fact` / `reflection` / `user-pref` / `session`.',
+  )
+  .option(
+    '--trust-distribution',
+    'show (P51.b): when set with --verbose, emit a 11-bucket trust histogram (0.0 / 0.1 / ... / 1.0) alongside the per-kind count. Default off (no surface change).',
   )
   .option(
     '--exclude-kind <k>',
@@ -448,6 +452,12 @@ program
         format,
         ...(opts.verbose === true ? { verbose: true } : {}),
         ...(kindRaw !== undefined ? { kindFilter: kindRaw } : {}),
+        // P51.b — wire `--trust-distribution` to
+        // the `show` action. Requires `--verbose`
+        // (the distribution is computed alongside
+        // the per-kind count, sharing the store
+        // search call).
+        ...(opts.trustDistribution === true ? { trustDistribution: true } : {}),
       })
     } else if (subcommand === 'list') {
       // P45.d — wire `--no-trust` to the `list`
