@@ -15,6 +15,8 @@
  * the JSX in a separate file so this file can stay pure TypeScript.
  */
 
+import * as os from 'node:os'
+import * as path from 'node:path'
 import type { AgentCheckpoint } from '@lumen/core'
 import { defaultChatCheckpointPath, defaultChatSessionId } from '../chat-paths.js'
 import { findResumeCheckpoint } from '../checkpoint-resume.js'
@@ -140,6 +142,48 @@ export const chatCommand = async (options: ChatCommandOptions): Promise<number> 
   // persistence too: registry entries survive across launches
   // is part of the same durability surface as chat history.
   const loopsStore = persist ? new SqliteLoopsStore({}) : undefined
+  // P57 — the SqliteStore is the same instance the
+  // agent writes `session_messages` to on every
+  // turn. We pass it into the Chat component so
+  // the P57 effect can fetch prior-conversation
+  // messages on mount. Pre-P57 the TUI was
+  // limited to the in-progress checkpoint path
+  // (P32.2), which only restores unfinished
+  // runs; a `success` / `error` outcome cleared
+  // the checkpoint and the TUI would reopen to
+  // an empty log even though every turn was on
+  // disk.
+  // P57 — the same `~/.lumen/memory.db` the agent
+  // uses for its `session_messages` writes. The
+  // path resolution matches `composition.ts`'s
+  // `defaultMemoryPath` (`LUMEN_MEMORY_PATH`
+  // override + `$HOME/.lumen/memory.db` fallback).
+  // We import the host-relative `os` + `path` once
+  // at the top of the file in the regular import
+  // block; here we read them off the synchronous
+  // `node:os` / `node:path` modules rather than
+  // through `import()` because path resolution is
+  // sync.
+  const memoryPath = ((): string => {
+    const override = process.env.LUMEN_MEMORY_PATH
+    if (override) return override
+    return path.join(os.homedir(), '.lumen', 'memory.db')
+  })()
+  const memoryStore = persist
+    ? await (async () => {
+        const { SqliteStore } = await import('@lumen/memory')
+        return new SqliteStore({ path: memoryPath })
+      })()
+    : undefined
+  if (memoryStore) {
+    try {
+      await memoryStore.init()
+    } catch {
+      // fresh install — init throws when the file
+      // does not exist; the store stays uninit and
+      // the P57 effect no-ops.
+    }
+  }
   let initialResumeFrom: AgentCheckpoint | undefined
   try {
     initialResumeFrom = checkpointStore
@@ -165,6 +209,7 @@ export const chatCommand = async (options: ChatCommandOptions): Promise<number> 
       ...(loopsStore !== undefined ? { loopsStore } : {}),
       initialResumeFrom,
       ...(sessionId !== undefined ? { sessionId } : {}),
+      ...(memoryStore !== undefined ? { memoryStore } : {}),
       ...(options.checkpointInterval !== undefined
         ? { checkpointInterval: options.checkpointInterval }
         : {}),

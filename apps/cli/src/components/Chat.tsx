@@ -72,6 +72,25 @@ interface ChatProps {
   /** Step checkpoint cadence for each turn. */
   readonly checkpointInterval?: number
   /**
+   * P57 — handle to the live memory store so the TUI can
+   * fetch prior-conversation messages on mount. The
+   * SqliteLoopsStore and SqliteCheckpointStore handle
+   * the cron + step-checkpoint paths; the *chat log*
+   * itself lives in `session_messages` (one row per
+   * user/assistant/tool turn). Pre-P57 the TUI only
+   * restored the most-recent in-progress checkpoint
+   * (P32.2), so a user who closed the TUI after a
+   * successful `success` / `error` event would reopen
+   * `lumen chat` to an empty log even though every
+   * prior message was sitting in `session_messages`.
+   * P57 fetches the full message history via
+   * `getSessionMessages(sessionId)` and seeds the
+   * TUI's `turns` state on mount, with the existing
+   * checkpoint path preserved as the fast-path for
+   * the in-progress resume case.
+   */
+  readonly memoryStore?: import('@lumen/memory').SqliteStore
+  /**
    * P32.1 — when persistence is on, the chat command derives a
    * stable session id (cwd-hash) and forwards it here. We pass
    * it to `streamRun({ sessionId })` so `Agent.executeLoop`
@@ -90,6 +109,9 @@ export function Chat({
   initialResumeFrom,
   checkpointInterval,
   sessionId,
+  // P57 — destructure the live memory store so the
+  // session-message history effect can read prior turns.
+  memoryStore,
 }: ChatProps): JSX.Element {
   const { exit } = useApp()
   const [turns, setTurns] = useState<readonly Turn[]>([])
@@ -129,6 +151,83 @@ export function Chat({
     // with any prior turn.
     turnCounter.current = restored.length
   }, [initialResumeFrom])
+
+  // P57 — when the TUI mounts and the P32.2
+  // checkpoint path returns undefined (the typical
+  // case: the previous session was a `success` or
+  // `error` outcome, so the in-progress checkpoint
+  // was cleared), seed the `turns` state from the
+  // full `session_messages` history instead. Pre-P57
+  // the TUI always opened to an empty chat log on
+  // restart, even though every prior turn was
+  // sitting in `session_messages`. The P57 effect
+  // fetches the messages via `getSessionMessages`
+  // and converts them to the same `Turn` shape the
+  // P32.2 effect uses; the two effects share a
+  // `turnCounter` increment so restored turn keys do
+  // not collide with new live turns.
+  useEffect(() => {
+    if (memoryStore === undefined || sessionId === undefined) return
+    let cancelled = false
+    void (async () => {
+      const messages = await memoryStore.getSessionMessages(sessionId, { limit: 1000 })
+      if (cancelled) return
+      if (messages.length === 0) return
+      // Group messages into user+assistant pairs. The
+      // session_messages table has one row per
+      // message; for a 28-message history the pairing
+      // is 14 turns (or fewer if a single user message
+      // was sent without a reply).
+      const turns: Turn[] = []
+      let pendingUser: string | undefined
+      let nextKey = turnCounter.current
+      for (const m of messages) {
+        if (m.role === 'user') {
+          pendingUser = m.content
+        } else if (m.role === 'assistant') {
+          // Reconstruct an `AssistantMessage` from the
+          // slim `SessionMessage` row. The
+          // `SessionMessage` row only carries the
+          // assistant text + toolName (a denormalised
+          // projection from P10.2); the live
+          // `AssistantMessage` interface requires
+          // `toolCalls: []` + `finishReason: 'stop'`
+          // so the TUI's `assistantMessage` cast in
+          // `<Turn assistant={...}>` stays strict. We
+          // use `as unknown as AssistantMessage`
+          // because the live agent's `toolCalls` is
+          // not recoverable from the on-disk
+          // projection (the runtime tool calls are
+          // an in-memory concept; only the resolved
+          // tool names are persisted). The TUI's
+          // `turn.toolCalls` property would be empty
+          // in a restored turn — by design, since the
+          // tool lifecycle ended before the run
+          // finished.
+          const restored: AssistantMessage = {
+            role: 'assistant',
+            content: m.content,
+            toolCalls: [],
+            finishReason: 'stop',
+            ...(m.toolName !== undefined && m.toolName !== ''
+              ? { reasoning: `tools: ${m.toolName}` }
+              : {}),
+          }
+          turns.push({ key: nextKey++, user: pendingUser ?? '', assistant: restored })
+          pendingUser = undefined
+        }
+        // tool + system rows are intentionally skipped
+        // from the visible TUI log; the message is
+        // already on disk in `session_messages`.
+      }
+      if (turns.length === 0) return
+      setTurns(turns)
+      turnCounter.current = nextKey
+    })()
+    return (): void => {
+      cancelled = true
+    }
+  }, [memoryStore, sessionId])
 
   // P32.4 — on chat mount, re-arm every loop previously
   // registered via `/loop` so closing and re-opening the TUI
