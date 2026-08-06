@@ -1,0 +1,17 @@
+#!/bin/bash
+# P55 — Force Node 25.9.0 to match the
+# better-sqlite3 ABI 141 binary. The pre-P55
+# symlink at `/opt/homebrew/bin/lumen` used
+# `#!/usr/bin/env node` and pointed at the
+# dist/index.js. `env node` resolved to the
+# first `node` on PATH, which on this machine
+# is nvm's Node 24.14.1 (ABI 137). The
+# better-sqlite3 binary was rebuilt under
+# brew's Node 25.9.0 (ABI 141), so loading it
+# from a Node 24 process crashed with
+# "compiled for 141, this Node requires 137".
+# P55 wraps the dist with an absolute Node
+# path that matches the binary's ABI, so the
+# `lumen` command always lands on the right
+# Node version regardless of PATH order.
+exec /opt/homebrew/Cellar/node/25.9.0_1/bin/node /Users/chengpengtao/workspace/lumen/apps/cli/dist/index.js "$@"
