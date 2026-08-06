@@ -19,6 +19,7 @@
  * hasn't seen yet.
  */
 
+import * as fsSync from 'node:fs'
 import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -117,7 +118,38 @@ export const createMemoryMarkdownBridge = (
   const userMdPath = options.userMdPath ?? defaultUserMdPath()
   const trustThreshold = options.trustThreshold ?? DEFAULT_TRUST_THRESHOLD
   const profile = options.profile
-  let lastSyncMs = 0
+  // P56 — initialise `lastSyncMs` from the on-disk
+  // mtime of MEMORY.md / USER.md so `describe()`
+  // reports the real last-write state. Pre-P56 the
+  // variable started at 0, so the first `describe()`
+  // (e.g. `lumen memory show` before any sync)
+  // reported "last sync: (never)" even when the
+  // files existed on disk (e.g. left over from a
+  // previous install). P56 uses sync `fs.statSync`
+  // at construction time (the bridge is created
+  // sync); the cost is two stat calls per
+  // `lumen memory <sub>` invocation, which is
+  // negligible.
+  const safeStatSync = (filePath: string): number | undefined => {
+    // P56b — apps/cli is `"type": "module"` (ESM),
+    // so `require('node:fs')` throws at module load
+    // time. The pre-P56b path used `require`, so
+    // `safeStatSync` always returned undefined and
+    // `lastSyncMs` stayed 0. P56b uses the module-scope
+    // `node:fs` import + `statSync` (sync) so the
+    // function actually returns the file mtime.
+    try {
+      // `import * as fs from 'node:fs'` is hoisted
+      // to the top of the file; `statSync` is the
+      // sync variant, matching the pre-P56b pattern
+      // without the ESM incompatibility.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return fsSync.statSync(filePath).mtimeMs
+    } catch {
+      return undefined
+    }
+  }
+  let lastSyncMs = Math.max(safeStatSync(memoryMdPath) ?? 0, safeStatSync(userMdPath) ?? 0)
 
   return {
     async syncAfterRun(): Promise<{ memoryFacts: number; userFacts: number }> {
