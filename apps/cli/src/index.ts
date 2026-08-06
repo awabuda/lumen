@@ -271,6 +271,10 @@ program
   .option('--older-than <days>', 'prune: cut-off age in days (default 30)', '30')
   .option('--limit <n>', 'show: limit messages returned (default 100)', '100')
   .option(
+    '--include-metadata',
+    'show (P47.c): include the `metadata` field in the JSON output. Default off (no surface change).',
+  )
+  .option(
     '--list-limit <n>',
     'list (P44.c): cap the number of sessions emitted (default 50). Renamed from `--limit` to avoid colliding with the existing `show` / `prune` --limit flag (different meaning).',
   )
@@ -322,7 +326,12 @@ program
         // the human text layout only.
         const formatRaw = opts.format as string | undefined
         const format = formatRaw === 'json' ? 'json' : 'human'
-        code = await sessionShowCommand(id, { memoryPath, limit, format })
+        code = await sessionShowCommand(id, {
+          memoryPath,
+          limit,
+          format,
+          includeMetadata: opts.includeMetadata === true,
+        })
       }
     } else if (subcommand === 'delete') {
       if (!id) {
@@ -370,6 +379,10 @@ program
   .option(
     '--kind <k>',
     'list (P38.b): filter records by kind. Useful for `fact` / `reflection` / `user-pref` / `session`.',
+  )
+  .option(
+    '--exclude-kind <k>',
+    'list (P47.d): inverse of `--kind`. Drop records whose kind matches. Mutually exclusive with `--kind` in the dispatcher.',
   )
   .option('--limit <n>', 'list (P38.b): max records to print (default 50).')
   .option(
@@ -427,6 +440,7 @@ program
       const formatRaw = opts.format as string | undefined
       const format = formatRaw === 'json' ? 'json' : 'human'
       const kindRaw = opts.kind as string | undefined
+      const excludeKindRaw = opts.excludeKind as string | undefined
       const limitRaw = opts.limit
       const limit = typeof limitRaw === 'string' ? Number.parseInt(limitRaw, 10) : undefined
       code = await memoryListCommand({
@@ -435,6 +449,7 @@ program
         ...(userMdPath !== undefined ? { userMdPath } : {}),
         format,
         ...(kindRaw !== undefined ? { filterKind: kindRaw } : {}),
+        ...(excludeKindRaw !== undefined ? { excludeKind: excludeKindRaw } : {}),
         ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
         ...(opts.trust === true ? { noTrust: true } : {}),
       })
@@ -522,6 +537,10 @@ program
   .argument('[id]', 'Plan id (for "approve" and "reject")')
   .option('--notes <text>', 'Approve/reject: free-form notes to record on the plan')
   .option(
+    '--since-ms <ms>',
+    'list (P47.e): cap the plan list to records whose `createdAt >= sinceMs`. Mirrors `session list --since-ms` (P46.d).',
+  )
+  .option(
     '--format <fmt>',
     'list / show / approve / reject (P37.c + P39.a + P41.a + P41.b + P46.b): output format. "human" (default) or "json". CI-friendly.',
     'human',
@@ -544,7 +563,16 @@ program
     if (subcommand === 'list') {
       const formatRaw = opts.format as string | undefined
       const format = formatRaw === 'json' ? 'json' : 'human'
-      code = await planListCommand({ file, format })
+      // P47.e — wire `--since-ms <ms>` to the
+      // `list` action. Mirrors the
+      // `session list --since-ms` (P46.d) pattern.
+      const sinceMsRaw = opts.sinceMs
+      const sinceMs = typeof sinceMsRaw === 'string' ? Number.parseInt(sinceMsRaw, 10) : undefined
+      code = await planListCommand({
+        file,
+        format,
+        ...(sinceMs !== undefined && Number.isFinite(sinceMs) ? { sinceMs } : {}),
+      })
     } else if (subcommand === 'show') {
       if (!id) {
         process.stderr.write('lumen plan: missing <id> for "show"\n')
@@ -576,7 +604,16 @@ program
       } else {
         const formatRaw = opts.format as string | undefined
         const format = formatRaw === 'json' ? 'json' : 'human'
-        code = await planRejectCommand({ id, notes, file, format })
+        // P47.a — wire `--dry-run` to the
+        // `reject` action. Mirrors the
+        // `approve --dry-run` (P46.b) pattern.
+        code = await planRejectCommand({
+          id,
+          notes,
+          file,
+          format,
+          dryRun: opts.dryRun === true,
+        })
       }
     } else {
       process.stderr.write(`lumen plan: unknown subcommand: ${subcommand}\n`)

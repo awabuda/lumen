@@ -80,6 +80,12 @@ export interface PlanListOptions {
    * emits the PlanStore snapshot as JSON for CI.
    */
   readonly format?: 'human' | 'json'
+  /**
+   * P47.e — cap the plan list to records whose
+   * `createdAt >= sinceMs`. Mirrors the
+   * `session list --since-ms` (P46.d) pattern.
+   */
+  readonly sinceMs?: number
 }
 
 export const planListCommand = async (opts: PlanListOptions = {}): Promise<number> => {
@@ -199,6 +205,14 @@ export interface PlanRejectOptions {
    * the post-rejection Plan shape (CI-friendly).
    */
   readonly format?: 'human' | 'json'
+  /**
+   * P47.a — when true, do NOT actually apply the
+   * rejection. Instead, report what WOULD change
+   * (the new status + the notes that would be
+   * recorded) without writing the file. Mirrors
+   * the `approve --dry-run` (P46.b) pattern.
+   */
+  readonly dryRun?: boolean
 }
 
 export const planShowCommand = async (opts: PlanShowOptions = {}): Promise<number> => {
@@ -243,6 +257,20 @@ export const planRejectCommand = async (opts: PlanRejectOptions): Promise<number
   if (!updated) {
     process.stderr.write(`lumen plan reject: no plan with id "${opts.id}"\n`)
     return 1
+  }
+  if (opts.dryRun === true) {
+    // P47.a — dry-run path: report the post-rejection
+    // shape WITHOUT calling saveStore. The human
+    // path emits a `would reject ...` summary; the
+    // JSON path emits the same shape the apply
+    // path would. Mirrors the `approve --dry-run`
+    // (P46.b) behaviour.
+    if (opts.format === 'json') {
+      process.stdout.write(`${JSON.stringify(updated, null, 2)}\n`)
+      return 0
+    }
+    process.stdout.write(`would reject ${updated.id}\n`)
+    return 0
   }
   await saveStore(file, store)
   if (opts.format === 'json') {

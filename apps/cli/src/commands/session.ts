@@ -110,6 +110,16 @@ export interface SessionCommandOptions {
    */
   readonly listLimit?: number
   /**
+   * P47.c — `show` only: when true, include the
+   * `metadata` field in the JSON output. The
+   * pre-P47.c shape omitted metadata (the
+   * shape included `id`, `title`, `createdAt`,
+   * `updatedAt`, and `messages[]` only). Default
+   * `false` (no surface change) so the JSON
+   * shape remains stable for CI consumers.
+   */
+  readonly includeMetadata?: boolean
+  /**
    * P46.d — `list` only: cap the session list to
    * records whose `createdAt >= sinceMs`. Useful
    * for CI jobs that want to surface "sessions
@@ -214,6 +224,11 @@ export const sessionShowCommand = async (
           title: session.title ?? null,
           createdAt: session.createdAt,
           updatedAt: session.updatedAt,
+          // P47.c — include the metadata field only
+          // when the caller passes --include-metadata.
+          // Default false so the JSON shape remains
+          // stable for CI consumers.
+          ...(opts.includeMetadata === true ? { metadata: session.metadata ?? null } : {}),
           messages: messages.map((m) => ({
             id: m.id,
             role: m.role,

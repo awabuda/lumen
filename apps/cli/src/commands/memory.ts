@@ -80,6 +80,18 @@ export interface MemoryCommandOptions {
    * / user-pref records too.
    */
   readonly filterKind?: string
+  /**
+   * P47.d — `list` action: optional kind exclusion.
+   * Inverse of `filterKind`: records whose
+   * `kind === excludeKind` are removed from the
+   * result. Useful for `lumen memory list
+   * --exclude-kind reflection` (drop noise from
+   * the operator's audit pass). Default undefined
+   * (no exclusion). Mutually exclusive with
+   * `filterKind` in the dispatcher — the operator
+   * picks one or the other, not both.
+   */
+  readonly excludeKind?: string
   /** P38.b — `list` action: max records to print. Default 50. */
   readonly limit?: number
   /**
@@ -222,7 +234,11 @@ export const memoryListCommand = async (opts: MemoryCommandOptions = {}): Promis
       minTrust,
       limit: 10_000,
     })
-    const sorted = records
+    const filtered =
+      opts.excludeKind !== undefined
+        ? records.filter((r) => r.record.kind !== opts.excludeKind)
+        : records
+    const sorted = filtered
       .map((r) => r.record)
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, limit)
