@@ -86,6 +86,28 @@ export interface PlanListOptions {
    * `session list --since-ms` (P46.d) pattern.
    */
   readonly sinceMs?: number
+  /**
+   * P49.b — `list` only: when true, omit the
+   * `goal` field from each plan in the JSON
+   * output. The pre-P49.b shape always
+   * included `goal` (typically a string, but
+   * Plans store a `Record<string, unknown>` so
+   * `goal` payloads can be large). Default
+   * `false` (no surface change).
+   */
+  readonly noGoal?: boolean
+  /**
+   * P49.d — `list` only: when true, omit the
+   * `status` field from each plan in the JSON
+   * output. The pre-P49.d shape always
+   * included `status` (`approved` / `rejected`
+   * / `pending`). Default `false` (no surface
+   * change). CI consumers that just need the
+   * plan id + timestamps can use this flag to
+   * halve the JSON payload size on long plan
+   * lists.
+   */
+  readonly noStatus?: boolean
 }
 
 export const planListCommand = async (opts: PlanListOptions = {}): Promise<number> => {
@@ -95,8 +117,19 @@ export const planListCommand = async (opts: PlanListOptions = {}): Promise<numbe
   if (opts.format === 'json') {
     const rows = plans.map((plan) => ({
       id: plan.id,
-      status: formatStatus(plan),
-      goal: plan.goal,
+      // P49.d — `--no-status` drops the `status`
+      // field from each item. Default off
+      // (no surface change) so the JSON shape
+      // remains stable for CI consumers.
+      ...(opts.noStatus !== true ? { status: formatStatus(plan) } : {}),
+      // P49.b — `--no-goal` drops the `goal`
+      // field from each item. Goal payloads
+      // can be large (operator-supplied
+      // `Record<string, unknown>`); CI consumers
+      // that just need the plan id + timestamps
+      // can use this flag to halve the JSON
+      // payload size on long plan lists.
+      ...(opts.noGoal !== true ? { goal: plan.goal } : {}),
       steps: plan.steps.length,
       createdAt: plan.createdAt,
       ...(plan.approvedAt !== undefined ? { approvedAt: plan.approvedAt } : {}),

@@ -130,6 +130,16 @@ export interface SessionCommandOptions {
    */
   readonly includeMetadata?: boolean
   /**
+   * P49.a — `show` only: when true, omit the
+   * `content` field from each message in the
+   * JSON output. The pre-P49.a shape always
+   * included `content` (CI consumers can now
+   * opt to drop the content for rate cards
+   * that just need the message shape). Default
+   * `false` (no surface change).
+   */
+  readonly noContent?: boolean
+  /**
    * P46.d — `list` only: cap the session list to
    * records whose `createdAt >= sinceMs`. Useful
    * for CI jobs that want to surface "sessions
@@ -242,7 +252,14 @@ export const sessionShowCommand = async (
           messages: messages.map((m) => ({
             id: m.id,
             role: m.role,
-            content: m.content,
+            // P49.a — `--no-content` drops the
+            // `content` field from each message.
+            // CI consumers that just need the
+            // message shape (id, role, toolName,
+            // createdAt) can use this flag to
+            // halve the JSON payload size on
+            // long sessions.
+            ...(opts.noContent !== true ? { content: m.content } : {}),
             toolName: m.toolName ?? null,
             createdAt: m.createdAt,
           })),

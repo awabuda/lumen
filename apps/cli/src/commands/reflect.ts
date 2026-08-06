@@ -196,6 +196,19 @@ export interface ReflectListOptions {
    * `reflect show --limit` flag (if any).
    */
   readonly listLimit?: number
+  /**
+   * P49.c — `list` only: when true, omit the
+   * `content` field from each record in the
+   * JSON output. The pre-P49.c shape always
+   * included a 200-char `content` preview
+   * (truncated from the full record text).
+   * Default `false` (no surface change).
+   * CI consumers that just need the id +
+   * trust + createdAt can use this flag to
+   * halve the JSON payload size on long
+   * reflection lists.
+   */
+  readonly noContent?: boolean
 }
 
 /**
@@ -242,7 +255,13 @@ export const reflectListCommand = async (opts: ReflectListOptions = {}): Promise
             id: r.id,
             trust: r.trust,
             createdAt: r.createdAt,
-            content: r.content.slice(0, 200),
+            // P49.c — `--no-content` drops the
+            // `content` field from each record.
+            // CI consumers that just need the id
+            // + trust + createdAt can use this
+            // flag to halve the JSON payload
+            // size on long reflection lists.
+            ...(opts.noContent !== true ? { content: r.content.slice(0, 200) } : {}),
           })),
           null,
           2,

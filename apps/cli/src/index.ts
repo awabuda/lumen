@@ -275,6 +275,10 @@ program
     'show (P47.c): include the `metadata` field in the JSON output. Default off (no surface change).',
   )
   .option(
+    '--no-content',
+    'show (P49.a): drop the `content` field from each message in the JSON output. Useful for long sessions where CI only needs id + role + toolName + createdAt.',
+  )
+  .option(
     '--no-load',
     'delete (P48.h): skip the P45.a session + message-history load. The JSON path emits `lastAccessMs: null` instead of the most-recent message `createdAt`. Useful for bulk-delete operations in CI.',
   )
@@ -335,6 +339,7 @@ program
           limit,
           format,
           includeMetadata: opts.includeMetadata === true,
+          noContent: opts.content === false,
         })
       }
     } else if (subcommand === 'delete') {
@@ -559,6 +564,14 @@ program
     'show (P46.a): omit the `notes` field from the human + JSON output. Useful for CI consumers that do not need the operator review text.',
   )
   .option(
+    '--no-goal',
+    'list (P49.b): drop the `goal` field from each plan in the JSON output. Useful for long plan lists where CI only needs id + status + timestamps.',
+  )
+  .option(
+    '--no-status',
+    'list (P49.d): drop the `status` field from each plan in the JSON output. Useful for long plan lists where CI only needs id + goal + timestamps.',
+  )
+  .option(
     '--dry-run',
     'approve (P46.b): do NOT actually apply the approval. Report what WOULD change without writing the file. The JSON path emits the post-approval shape; the human path emits `would approve <id>`.',
   )
@@ -581,6 +594,8 @@ program
         file,
         format,
         ...(sinceMs !== undefined && Number.isFinite(sinceMs) ? { sinceMs } : {}),
+        ...(opts.goal === false ? { noGoal: true } : {}),
+        ...(opts.status === false ? { noStatus: true } : {}),
       })
     } else if (subcommand === 'show') {
       if (!id) {
@@ -735,6 +750,10 @@ program
     '--list-limit <n>',
     'reflect list (P48.d): cap the number of records emitted (default 50). Renamed from `--limit` to match the P44.c `session list --list-limit` convention.',
   )
+  .option(
+    '--no-content',
+    'reflect list (P49.c): drop the `content` field from each record in the JSON output. Useful for long reflection lists where CI only needs id + trust + createdAt.',
+  )
   .action(async (subcommand: string, opts: Record<string, unknown>) => {
     const { reflectListCommand, reflectMetaCommand, reflectRunCommand } = await import(
       './commands/reflect.js'
@@ -761,6 +780,7 @@ program
         ...(memoryPath !== undefined ? { memoryPath } : {}),
         format,
         ...(listLimit !== undefined && Number.isFinite(listLimit) ? { listLimit } : {}),
+        ...(opts.content === false ? { noContent: true } : {}),
       })
     } else if (subcommand === 'meta') {
       const intervalRaw = opts.interval
