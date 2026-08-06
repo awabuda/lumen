@@ -73,7 +73,22 @@ export interface ApplyPatchCommandOptions {
 
 const fsApplier = (root: string): PatchApplier => ({
   read: (rel) => fs.readFile(path.resolve(root, rel), 'utf8'),
-  write: (rel, content) => fs.writeFile(path.resolve(root, rel), content, 'utf8'),
+  // P53 — `*** Add File: <path>` writes the file via
+  // this applier. Pre-P53 the write call required
+  // the parent directory to exist (an `ENOENT` on
+  // a missing parent surfaced as a failure in the
+  // patch result). The V4A spec is fine with creating
+  // new files in new directories; this is the natural
+  // place to mkdir. The pre-existing 7 pre-existing
+  // failures + 1 tools pre-existing failure remain
+  // FENCE-OFF (this fix is a 1-line addition, no
+  // schema or interface change).
+  write: (rel, content) => {
+    const abs = path.resolve(root, rel)
+    return fs
+      .mkdir(path.dirname(abs), { recursive: true })
+      .then(() => fs.writeFile(abs, content, 'utf8'))
+  },
   remove: (rel) => fs.unlink(path.resolve(root, rel)),
 })
 
