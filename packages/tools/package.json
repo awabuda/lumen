@@ -1,6 +1,6 @@
 {
   "name": "@lumen/tools",
-  "version": "0.18.1",
+  "version": "0.18.2",
   "private": true,
   "description": "Default tool implementations for the Lumen agent: filesystem (read/write/patch/list/search), shell (with pluggable sandbox), git, gh CLI bridge, web search/fetch, meta tools (date/env/whoami), and chunk_text.",
   "type": "module",

@@ -1,5 +1,12 @@
 # @lumen/server
 
+## 0.15.6
+
+### Patch Changes
+
+- Updated dependencies [9590206]
+  - @lumen/core@0.21.0
+
 ## 0.15.5
 
 ### Patch Changes
