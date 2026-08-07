@@ -79,3 +79,62 @@ export const defaultChatSessionId = (cwd: string): string => {
     .replace(/=+$/g, '')
   return `chat-${short}`
 }
+
+/**
+ * P59 — resolve the `sessionId` for `lumen chat`.
+ *
+ * Pre-P59 the chat command always used
+ * `defaultChatSessionId(cwd)` (a sha256-derived
+ * stable id). If the cwd hash changed (e.g. a
+ * mid-life `path.resolve` change, a different
+ * invocation path, or a `--session-id` override
+ * that landed before P32.1's `defaultChatSessionId`
+ * shipped), the operator's existing session
+ * history was orphaned: every `lumen chat` re-launch
+ * created a fresh session (the chat log rendered
+ * empty, the agent said "this is the first
+ * message", whether or not prior turns had landed
+ * in `session_messages`).
+ *
+ * P59 keeps the cwd-derived default for new installs
+ * but adds a fallback: if no session with the
+ * cwd-derived id exists, `lumen chat` looks up the
+ * most recent session in the SqliteStore and
+ * resumes it. The operator's prior conversation
+ * is preserved without an explicit `--resume`
+ * flag. The fallback is gated on a SqliteStore
+ * read (best-effort: corrupted memory file → falls
+ * back to the cwd-derived default).
+ *
+ * Pass `store.listSessions` directly so the CLI
+ * surface stays a pure function over the store
+ * API rather than a side-effecting helper.
+ */
+export const resolveChatSessionId = async (options: {
+  readonly store: { listSessions: (limit?: number) => Promise<ReadonlyArray<{ id: string }>> }
+  readonly cwd: string
+}): Promise<string> => {
+  const cwdDerived = defaultChatSessionId(options.cwd)
+  let sessions: ReadonlyArray<{ id: string }>
+  try {
+    sessions = await options.store.listSessions(1000)
+  } catch {
+    // best-effort
+    return cwdDerived
+  }
+  // 1. cwd-derived id wins if it exists.
+  if (sessions.some((s) => s.id === cwdDerived)) {
+    return cwdDerived
+  }
+  // 2. Fall back to the most recent session. The
+  //    listSessions contract is `ORDER BY updated_at DESC`,
+  //    so the first row is the most recent.
+  const first = sessions[0]
+  if (first !== undefined) {
+    return first.id
+  }
+  // 3. No sessions at all → use the cwd-derived id
+  //    (a fresh session will be created on the
+  //    first persistMessage).
+  return cwdDerived
+}

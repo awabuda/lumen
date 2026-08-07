@@ -18,7 +18,11 @@
 import * as os from 'node:os'
 import * as path from 'node:path'
 import type { AgentCheckpoint } from '@lumen/core'
-import { defaultChatCheckpointPath, defaultChatSessionId } from '../chat-paths.js'
+import {
+  defaultChatCheckpointPath,
+  defaultChatSessionId,
+  resolveChatSessionId,
+} from '../chat-paths.js'
 import { findResumeCheckpoint } from '../checkpoint-resume.js'
 import { type BuiltAgent, buildAgent } from '../composition.js'
 
@@ -121,38 +125,13 @@ export const chatCommand = async (options: ChatCommandOptions): Promise<number> 
   const checkpointPath = persist
     ? (options.checkpointPath ?? defaultChatCheckpointPath())
     : options.checkpointPath
-  // P32.1 — pick a stable session id when persistence is on. The
-  // user can override with `--session-id`. `--new-session`
-  // forces a fresh uuid (useful when the user wants to start a
-  // fork of the current conversation without leaving the cwd).
-  const sessionId = !persist
-    ? undefined
-    : options.newSession === true
-      ? undefined
-      : (options.sessionId ?? defaultChatSessionId(cwd))
-
-  const { SqliteCheckpointStore, SqliteLoopsStore } = await import('@lumen/memory')
-  const checkpointStore = checkpointPath
-    ? new SqliteCheckpointStore({ path: checkpointPath })
-    : undefined
-  // P32.4 — the cron registry lives in its own sqlite file at
-  // $XDG_STATE_HOME/lumen/loops.sqlite (default). The default-path
-  // helper inside `SqliteLoopsStore` handles the mkdirSync
-  // invariant from P32.1.1. `--no-persist` opts out of cron
-  // persistence too: registry entries survive across launches
-  // is part of the same durability surface as chat history.
-  const loopsStore = persist ? new SqliteLoopsStore({}) : undefined
-  // P57 — the SqliteStore is the same instance the
-  // agent writes `session_messages` to on every
-  // turn. We pass it into the Chat component so
-  // the P57 effect can fetch prior-conversation
-  // messages on mount. Pre-P57 the TUI was
-  // limited to the in-progress checkpoint path
-  // (P32.2), which only restores unfinished
-  // runs; a `success` / `error` outcome cleared
-  // the checkpoint and the TUI would reopen to
-  // an empty log even though every turn was on
-  // disk.
+  // P59 — initialize the memory store first so the
+  // session-id resolution can read `listSessions` and
+  // fall back to the most recent session when the
+  // cwd-derived id has no matching session (e.g. the
+  // cwd hash changed, or the session was created with
+  // a different id strategy). The P32.1 docblock
+  // below was kept intact for the contract description.
   // P57 — the same `~/.lumen/memory.db` the agent
   // uses for its `session_messages` writes. The
   // path resolution matches `composition.ts`'s
@@ -184,6 +163,53 @@ export const chatCommand = async (options: ChatCommandOptions): Promise<number> 
       // the P57 effect no-ops.
     }
   }
+
+  // P32.1 / P59 — pick a stable session id when persistence is on.
+  // The user can override with `--session-id`. `--new-session`
+  // forces a fresh uuid (useful when the user wants to start a
+  // fork of the current conversation without leaving the cwd).
+  // P59 adds a fallback: if the cwd-derived id has no matching
+  // session in the SqliteStore (e.g. the cwd hash changed
+  // between launches, or the session was created with a
+  // different id strategy), `resolveChatSessionId` falls back
+  // to the most recent session so the operator's prior
+  // conversation is preserved.
+  const sessionId = !persist
+    ? undefined
+    : options.newSession === true
+      ? undefined
+      : options.sessionId !== undefined
+        ? options.sessionId
+        : memoryStore
+          ? await resolveChatSessionId({ store: memoryStore, cwd })
+          : defaultChatSessionId(cwd)
+
+  const { SqliteCheckpointStore, SqliteLoopsStore } = await import('@lumen/memory')
+  const checkpointStore = checkpointPath
+    ? new SqliteCheckpointStore({ path: checkpointPath })
+    : undefined
+  // P32.4 — the cron registry lives in its own sqlite file at
+  // $XDG_STATE_HOME/lumen/loops.sqlite (default). The default-path
+  // helper inside `SqliteLoopsStore` handles the mkdirSync
+  // invariant from P32.1.1. `--no-persist` opts out of cron
+  // persistence too: registry entries survive across launches
+  // is part of the same durability surface as chat history.
+  const loopsStore = persist ? new SqliteLoopsStore({}) : undefined
+  // P57 — the SqliteStore is the same instance the
+  // agent writes `session_messages` to on every
+  // turn. We pass it into the Chat component so
+  // the P57 effect can fetch prior-conversation
+  // messages on mount. Pre-P57 the TUI was
+  // limited to the in-progress checkpoint path
+  // (P32.2), which only restores unfinished
+  // runs; a `success` / `error` outcome cleared
+  // the checkpoint and the TUI would reopen to
+  // an empty log even though every turn was on
+  // disk.
+  // P59 — the memory store is now initialised
+  // before `sessionId` (see above) so the
+  // resolver can read existing sessions. The
+  // P57 docblock is preserved here.
   let initialResumeFrom: AgentCheckpoint | undefined
   try {
     initialResumeFrom = checkpointStore
