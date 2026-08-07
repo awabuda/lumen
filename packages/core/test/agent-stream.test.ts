@@ -222,7 +222,7 @@ describe('Agent.streamRun', () => {
         content: 'saved',
         createdAt: 0,
       }),
-      getSessionMessages: vi.fn(),
+      getSessionMessages: vi.fn().mockResolvedValue([]),
       prune: vi.fn(),
     }
     const agent = new Agent({ provider, tools: new ToolRegistry(), memory })

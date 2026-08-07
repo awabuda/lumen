@@ -658,12 +658,35 @@ export class Agent {
       throw new AbortError('pre-aborted')
     }
 
+    // P58 — when no in-progress checkpoint is
+    // available, but the memory store has prior
+    // session_messages for this `sessionId`, hydrate
+    // the `messages` array from those rows before
+    // appending the new user message. Pre-P58 the
+    // agent always started fresh (`[system, user]`)
+    // when the checkpoint was missing, even though
+    // every prior turn was sitting in
+    // `session_messages`. The TUI's P57 effect
+    // reads the same rows for the chat log; P58
+    // closes the loop so the agent also sees them
+    // as part of conversation context.
+    //
+    // The fallback is gated on `this.memory`
+    // (so the in-memory path stays zero-deps) and
+    // a real `sessionId` (P32.1's cwd-derived
+    // default), and the hydrate path swallows
+    // store errors (best-effort: a corrupted
+    // memory file is not the agent's problem).
+    const hydratedFromSession = await this.hydrateMessagesFromSession(sessionId, checkpoint)
+
     const messages: Message[] = checkpoint
       ? [...checkpoint.messages]
-      : [
-          { role: 'system', content: this.systemPrompt },
-          { role: 'user', content: options.userMessage },
-        ]
+      : hydratedFromSession !== undefined
+        ? [...hydratedFromSession]
+        : [
+            { role: 'system', content: this.systemPrompt },
+            { role: 'user', content: options.userMessage },
+          ]
 
     const budget = new Budget({
       tokens: this.provider.capabilities.maxContextTokens,
@@ -1636,6 +1659,68 @@ export class Agent {
       isError: true,
       content: message,
     }
+  }
+
+  /**
+   * P58 — hydrate the `messages` array from
+   * `session_messages` when no in-progress
+   * checkpoint is available. Returns `undefined`
+   * when the agent should fall back to the
+   * default fresh-start path (no memory store, no
+   * sessionId, no prior messages, or a store
+   * error). Returns the hydrated array
+   * (system + user + assistant rows in
+   * chronological order) when the memory store
+   * has prior turns for this `sessionId`.
+   *
+   * The system-prompt row is preserved if the
+   * memory store has one (otherwise the caller's
+   * `systemPrompt` is appended at the
+   * `executeLoop` site).
+   */
+  private async hydrateMessagesFromSession(
+    sessionId: string,
+    checkpoint: import('./checkpoint.js').AgentCheckpoint | undefined,
+  ): Promise<ReadonlyArray<Message> | undefined> {
+    // The checkpoint is the fast-path (it carries
+    // the exact `messages` array). P58 only kicks
+    // in when the checkpoint is missing — the
+    // `session_messages` table is a coarser
+    // projection (the `content` field is the
+    // assistant text; the live tool calls are
+    // not recoverable from the on-disk row).
+    if (checkpoint !== undefined) return undefined
+    if (!this.memory) return undefined
+    let rows: Awaited<ReturnType<BaseMemoryStore['getSessionMessages']>>
+    try {
+      rows = await this.memory.getSessionMessages(sessionId, { limit: 1000 })
+    } catch {
+      // Best-effort: a corrupted memory file is
+      // not the agent's problem. The fresh-start
+      // path takes over.
+      return undefined
+    }
+    if (rows.length === 0) return undefined
+    const messages: Message[] = []
+    for (const r of rows) {
+      if (r.role === 'system') {
+        messages.push({ role: 'system', content: r.content })
+      } else if (r.role === 'user') {
+        messages.push({ role: 'user', content: r.content })
+      } else if (r.role === 'assistant') {
+        messages.push({
+          role: 'assistant',
+          content: r.content,
+          toolCalls: [],
+          finishReason: 'stop',
+        })
+      }
+      // tool rows are intentionally skipped
+      // (the in-memory tool lifecycle ended
+      // before the run finished; only the
+      // resolved tool names were persisted).
+    }
+    return messages
   }
 
   private async persistMessage(sessionId: string, message: Message): Promise<void> {
