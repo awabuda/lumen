@@ -299,6 +299,20 @@ Prefer minimal, surgical actions. Explain your reasoning before tool calls.
 When you have a final answer, state it directly.`
 
 /**
+ * P60 — sliding-window cap on how many prior
+ * `session_messages` rows the agent hydrates into
+ * the conversation context. Sized for ~10 turns
+ * of back-and-forth (each turn = 1 user row + 1
+ * assistant row, plus a possible system row).
+ * Pre-P60 the limit was 1000, which on long-lived
+ * sessions let old, unrelated turns drown out the
+ * user's actual current input (the
+ * "答非所问 / 这是第一条消息" symptom on
+ * `chat-lo0y9LBpGF4` with 814 rows).
+ */
+export const MAX_HYDRATE_MESSAGES = 20
+
+/**
  * Merge a JSON-arguments delta into an existing arguments object.
  *
  * OpenAI-style streams send tool-call arguments as a series of JSON
@@ -679,10 +693,22 @@ export class Agent {
     // memory file is not the agent's problem).
     const hydratedFromSession = await this.hydrateMessagesFromSession(sessionId, checkpoint)
 
+    // P60 — when we hydrate from `session_messages`,
+    // the prior turns never include the *new* user
+    // input. The chat provider expects every
+    // non-system row to land in chronological order
+    // in the `messages` payload, so we append
+    // `options.userMessage` as the trailing user
+    // row. Pre-P60 the hydrated branch silently
+    // skipped this append — the model never saw the
+    // user's actual question and answered from
+    // mid-history. The fresh-start branch already
+    // did the same append (P23.0); P60 restores
+    // parity.
     const messages: Message[] = checkpoint
       ? [...checkpoint.messages]
       : hydratedFromSession !== undefined
-        ? [...hydratedFromSession]
+        ? [...hydratedFromSession, { role: 'user', content: options.userMessage }]
         : [
             { role: 'system', content: this.systemPrompt },
             { role: 'user', content: options.userMessage },
@@ -1677,6 +1703,20 @@ export class Agent {
    * memory store has one (otherwise the caller's
    * `systemPrompt` is appended at the
    * `executeLoop` site).
+   *
+   * P60 — hydrate is bounded to a sliding window
+   * of {@link MAX_HYDRATE_MESSAGES} rows. Pre-P60
+   * the limit was 1000, which on long-lived
+   * sessions (e.g. the 6 Aug → 12 Aug cwd-derived
+   * `chat-lo0y9LBpGF4` with 814 rows) caused the
+   * agent to model its reply on the entire history
+   * instead of the most-recent turn. The user's
+   * actual input ("你好,你是谁?") was drowned out
+   * by 800+ prior "刚才让你干什么了" turns, and
+   * the model answered as if the latest turn were
+   * still "this is the first message". The window
+   * is intentionally a constant so it can be
+   * tuned without grepping the call sites.
    */
   private async hydrateMessagesFromSession(
     sessionId: string,
@@ -1693,7 +1733,9 @@ export class Agent {
     if (!this.memory) return undefined
     let rows: Awaited<ReturnType<BaseMemoryStore['getSessionMessages']>>
     try {
-      rows = await this.memory.getSessionMessages(sessionId, { limit: 1000 })
+      rows = await this.memory.getSessionMessages(sessionId, {
+        limit: MAX_HYDRATE_MESSAGES,
+      })
     } catch {
       // Best-effort: a corrupted memory file is
       // not the agent's problem. The fresh-start
