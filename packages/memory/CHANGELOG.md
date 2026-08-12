@@ -1,5 +1,12 @@
 # @lumen/memory
 
+## 0.19.3
+
+### Patch Changes
+
+- Updated dependencies [b68f836]
+  - @lumen/core@0.22.0
+
 ## 0.19.2
 
 ### Patch Changes

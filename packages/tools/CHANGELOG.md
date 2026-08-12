@@ -1,5 +1,12 @@
 # @lumen/tools
 
+## 0.18.3
+
+### Patch Changes
+
+- Updated dependencies [b68f836]
+  - @lumen/core@0.22.0
+
 ## 0.18.2
 
 ### Patch Changes

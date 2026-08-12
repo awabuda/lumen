@@ -1,5 +1,17 @@
 # @lumen/cli
 
+## 0.52.1
+
+### Patch Changes
+
+- Updated dependencies [b68f836]
+  - @lumen/core@0.22.0
+  - @lumen/llm@0.16.5
+  - @lumen/mcp@0.16.5
+  - @lumen/memory@0.19.3
+  - @lumen/server@0.15.7
+  - @lumen/tools@0.18.3
+
 ## 0.52.0
 
 ### Minor Changes
