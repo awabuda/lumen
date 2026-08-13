@@ -27,9 +27,12 @@ import type {
   AgentCheckpoint,
   AssistantMessage,
   BaseCheckpointStore,
+  Message as AgentMessage,
+  SessionMessage,
   ToolCall,
   ToolResult,
 } from '@lumen/core'
+import { MAX_HYDRATE_MESSAGES } from '@lumen/core'
 import { Box, Text, useApp, useInput } from 'ink'
 import Spinner from 'ink-spinner'
 import TextInput from 'ink-text-input'
@@ -56,6 +59,53 @@ interface Turn {
   readonly user: string
   readonly assistant?: AssistantMessage
   readonly error?: string
+}
+
+/**
+ * P61 — adapter from the slim `SessionMessage`
+ * projection (id / sessionId / role / content /
+ * toolName / createdAt) returned by
+ * `memoryStore.getSessionMessages` into the live
+ * `Message[]` shape `messagesToTurns` expects
+ * (system / user / assistant / tool messages with
+ * structured content). The mapping is lossless
+ * for the on-disk projection: tool-call metadata
+ * is intentionally dropped (the live `toolCalls`
+ * array is an in-memory concept, not on disk),
+ * and assistant content is wrapped to the
+ * `content: string` shape `UserMessage.content`
+ * also accepts.
+ */
+const sessionMessageToAgentMessage = (m: SessionMessage): AgentMessage => {
+  if (m.role === 'system') {
+    return { role: 'system', content: m.content }
+  }
+  if (m.role === 'user') {
+    return { role: 'user', content: m.content }
+  }
+  if (m.role === 'assistant') {
+    return {
+      role: 'assistant',
+      content: m.content,
+      toolCalls: [],
+      finishReason: 'stop',
+    }
+  }
+  // 'tool' rows are projected to a `ToolMessage`
+  // with a synthetic toolCallId so `messagesToTurns`
+  // can fold them into the preceding assistant's
+  // `toolCalls` array via the standard rule 2 path.
+  // `messagesToTurns` actually drops `tool` rows
+  // entirely (rule 2), so the shape only needs to
+  // satisfy the `Message` discriminated union; the
+  // `results` field is what `ToolMessageSchema`
+  // requires.
+  return {
+    role: 'tool',
+    results: [
+      { toolCallId: `s-${m.id}`, isError: false, content: m.content },
+    ],
+  }
 }
 
 type Status = 'idle' | 'thinking' | 'done' | 'error'
@@ -166,63 +216,53 @@ export function Chat({
   // P32.2 effect uses; the two effects share a
   // `turnCounter` increment so restored turn keys do
   // not collide with new live turns.
+  //
+  // P61 — the P57 fetch is bounded to the same
+  // sliding-window cap as the agent context
+  // (`MAX_HYDRATE_MESSAGES`). Pre-P61 the limit was
+  // 1000, which on long-lived cwd-derived sessions
+  // (e.g. `chat-lo0y9LBpGF4` with 883 rows on
+  // 2026-08-12) forced Ink to render every
+  // restored turn on every input keystroke, which
+  // in turn caused the "screen flicker + slow
+  // thinking" symptom: each typed character
+  // re-rendered ~440 turns of chat history, the
+  // input box repaint raced the scrollback repaint,
+  // and the user's eye saw the flicker. The agent
+  // context fix shipped separately as P60; P61
+  // closes the same fix on the TUI render surface.
   useEffect(() => {
     if (memoryStore === undefined || sessionId === undefined) return
     let cancelled = false
     void (async () => {
-      const messages = await memoryStore.getSessionMessages(sessionId, { limit: 1000 })
+      const messages = await memoryStore.getSessionMessages(sessionId, {
+        limit: MAX_HYDRATE_MESSAGES,
+      })
       if (cancelled) return
       if (messages.length === 0) return
-      // Group messages into user+assistant pairs. The
-      // session_messages table has one row per
-      // message; for a 28-message history the pairing
-      // is 14 turns (or fewer if a single user message
-      // was sent without a reply).
-      const turns: Turn[] = []
-      let pendingUser: string | undefined
-      let nextKey = turnCounter.current
-      for (const m of messages) {
-        if (m.role === 'user') {
-          pendingUser = m.content
-        } else if (m.role === 'assistant') {
-          // Reconstruct an `AssistantMessage` from the
-          // slim `SessionMessage` row. The
-          // `SessionMessage` row only carries the
-          // assistant text + toolName (a denormalised
-          // projection from P10.2); the live
-          // `AssistantMessage` interface requires
-          // `toolCalls: []` + `finishReason: 'stop'`
-          // so the TUI's `assistantMessage` cast in
-          // `<Turn assistant={...}>` stays strict. We
-          // use `as unknown as AssistantMessage`
-          // because the live agent's `toolCalls` is
-          // not recoverable from the on-disk
-          // projection (the runtime tool calls are
-          // an in-memory concept; only the resolved
-          // tool names are persisted). The TUI's
-          // `turn.toolCalls` property would be empty
-          // in a restored turn — by design, since the
-          // tool lifecycle ended before the run
-          // finished.
-          const restored: AssistantMessage = {
-            role: 'assistant',
-            content: m.content,
-            toolCalls: [],
-            finishReason: 'stop',
-            ...(m.toolName !== undefined && m.toolName !== ''
-              ? { reasoning: `tools: ${m.toolName}` }
-              : {}),
-          }
-          turns.push({ key: nextKey++, user: pendingUser ?? '', assistant: restored })
-          pendingUser = undefined
-        }
-        // tool + system rows are intentionally skipped
-        // from the visible TUI log; the message is
-        // already on disk in `session_messages`.
-      }
+      // Adapter: `memoryStore.getSessionMessages` returns
+      // the slim `SessionMessage` projection
+      // (id/sessionId/role/content/toolName/createdAt)
+      // but `messagesToTurns` expects the live
+      // `Message[]` shape (system/user/assistant/tool
+      // with structured content). Pre-P61 this effect
+      // inlined a 40-line pairing loop that re-derived
+      // the same shape and silently drifted from
+      // `messagesToTurns` on edge cases. The adapter
+      // collapses the inline copy in favour of the
+      // shared helper so the two restoration paths
+      // (P32.2 checkpoint path + P57 session_messages
+      // path) cannot diverge again.
+      const agentMessages = messages.map(sessionMessageToAgentMessage)
+      const restored = messagesToTurns(agentMessages)
+      const turns: Turn[] = restored.map((t) => ({
+        key: t.key,
+        user: t.user,
+        ...(t.assistant !== undefined ? { assistant: t.assistant } : {}),
+      }))
       if (turns.length === 0) return
       setTurns(turns)
-      turnCounter.current = nextKey
+      turnCounter.current = Math.max(turnCounter.current, restored.length)
     })()
     return (): void => {
       cancelled = true

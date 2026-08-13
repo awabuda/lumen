@@ -299,6 +299,7 @@ export { Budget, type BudgetState } from './budget/index.js'
 // Agent
 export {
   Agent,
+  MAX_HYDRATE_MESSAGES,
   type AgentConfig,
   type AgentRunOptions,
   type AgentRunResult,
