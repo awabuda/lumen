@@ -1,5 +1,13 @@
 # @lumen/desktop-bridge
 
+## 0.15.9
+
+### Patch Changes
+
+- Updated dependencies [26d3e8a]
+  - @lumen/core@0.24.0
+  - @lumen/server@0.15.9
+
 ## 0.15.8
 
 ### Patch Changes
