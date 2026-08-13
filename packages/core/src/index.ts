@@ -419,6 +419,13 @@ export {
   type ReflectionResult,
 } from './agent/middleware/reflection.js'
 export {
+  createMemoryInjectMiddleware,
+  MemorySnapshotSchema,
+  type MemorySnapshot,
+  type MemoryInjectOptions,
+  type MemoryInjectState,
+} from './agent/middleware/memory-inject.js'
+export {
   createSubAgentMiddleware,
   SubAgentMiddleware,
   SubAgentTaskTool,

@@ -204,6 +204,20 @@ export interface CliAgentOptions {
    */
   skillsPath?: string
   /**
+   * P62: when true, skip wiring `createMemoryInjectMiddleware`.
+   * The middleware reads `~/.lumen/MEMORY.md` + `USER.md` at
+   * composition time and renders a frozen snapshot into the
+   * system-prompt dynamic suffix on the first model call
+   * (Hermes `MemoryStore._system_prompt_snapshot` parity,
+   * `tools/memory_tool.py:178-211`). Default: false (memory
+   * injection is ON). Mirrors the `lumen chat/run
+   * --no-memory-inject` flag and `LUMEN_NO_MEMORY_INJECT=1`
+   * env. Has no effect when `noMemory` is true (no
+   * composition root has a memory file to read in that
+   * case).
+   */
+  noMemoryInject?: boolean
+  /**
    * P33.B Day4 — programmatic override for the
    * ProductAssembly name. Higher priority than
    * `config.product.assembly` and the profile default.
@@ -594,6 +608,32 @@ export const buildAgent = async (options: CliAgentOptions = {}): Promise<BuiltAg
       } catch (err) {
         process.stderr.write(
           `lumen: assistant assembly skill-trigger wiring skipped: ${
+            err instanceof Error ? err.message : String(err)
+          }\n`,
+        )
+      }
+    }
+    // P62 — auto-inject MEMORY.md / USER.md into the system
+    // prompt. The middleware closes over a frozen snapshot
+    // loaded at composition time (snapshot bytes are stable
+    // for the entire session; see Hermes `_system_prompt_snapshot`
+    // and P62 design doc). `noMemoryInject: true` opts out;
+    // the snapshot loader is also a no-op when `noMemory: true`
+    // (no memory file would be useful in that case). The
+    // threat pattern scan happens inside `loadMemorySnapshot`
+    // (apps/cli/src/memory-snapshot.ts) — a poisoned entry
+    // becomes `[BLOCKED: <file> entry contained pattern: <id>]`
+    // in the snapshot, the original stays in the markdown
+    // file for the user to inspect.
+    if (options.noMemory !== true && options.noMemoryInject !== true) {
+      try {
+        const { loadMemorySnapshot } = await import('./memory-snapshot.js')
+        const { createMemoryInjectMiddleware } = await import('@lumen/core')
+        const snapshot = await loadMemorySnapshot()
+        middleware.push(createMemoryInjectMiddleware({ snapshot }))
+      } catch (err) {
+        process.stderr.write(
+          `lumen: P62 memory-inject wiring skipped: ${
             err instanceof Error ? err.message : String(err)
           }\n`,
         )
