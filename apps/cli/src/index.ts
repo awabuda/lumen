@@ -163,6 +163,10 @@ program
     'P32.1: ignore any cwd-derived default and start a fresh uuid session in the current cwd',
   )
   .option(
+    '--pinned-to-cwd',
+    'P63: opt back into the P32.1 cwd-pinned behaviour. Skips the OpenClaw-style "remember last-used" fallback; the cwd-derived id is used every launch and is NOT written to the remember file.',
+  )
+  .option(
     '--no-persist',
     'P32.1: opt out of the persistent checkpoint + default-session defaults; run like pre-P32.1 (in-memory, fresh uuid per launch)',
   )
@@ -213,6 +217,7 @@ program
       checkpointPath: opts.checkpoint as string | undefined,
       sessionId: opts.sessionId as string | undefined,
       newSession: opts.newSession === true,
+      pinnedToCwd: opts.pinnedToCwd === true,
       noPersist: opts.persist === false,
       noResume: opts.resume === false,
       resumeTtlMs:

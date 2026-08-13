@@ -77,6 +77,19 @@ export interface ChatCommandOptions {
   /** P32.1: force a fresh sessionId even when cwd is unchanged. */
   newSession?: boolean
   /**
+   * P63: force the cwd-derived session id every launch
+   * and skip the OpenClaw-style "remember last-used"
+   * fallback. Mirrors `openclaw` `tui-last-session`
+   * semantics: `--pinned-to-cwd` is the opt-in for
+   * operators who want the P32.1 cwd-pinned behaviour
+   * (per-project stable session) instead of the P63
+   * default (per-scope remembered last-used session).
+   * The cwd-derived id is NOT written to the remember
+   * file when this flag is set, so it does not
+   * override the operator's other cwd launches.
+   */
+  pinnedToCwd?: boolean
+  /**
    * P32.1: disable the new persistence defaults and run like the
    * pre-P32.1 chat — in-memory checkpoint, fresh uuid per launch.
    * Used by `--no-persist` and by tests that don't want a
@@ -164,25 +177,68 @@ export const chatCommand = async (options: ChatCommandOptions): Promise<number> 
     }
   }
 
-  // P32.1 / P59 — pick a stable session id when persistence is on.
+  // P32.1 / P59 / P63 — pick a session id when persistence is on.
   // The user can override with `--session-id`. `--new-session`
   // forces a fresh uuid (useful when the user wants to start a
   // fork of the current conversation without leaving the cwd).
-  // P59 adds a fallback: if the cwd-derived id has no matching
-  // session in the SqliteStore (e.g. the cwd hash changed
-  // between launches, or the session was created with a
-  // different id strategy), `resolveChatSessionId` falls back
-  // to the most recent session so the operator's prior
-  // conversation is preserved.
-  const sessionId = !persist
-    ? undefined
-    : options.newSession === true
-      ? undefined
-      : options.sessionId !== undefined
-        ? options.sessionId
-        : memoryStore
-          ? await resolveChatSessionId({ store: memoryStore, cwd })
-          : defaultChatSessionId(cwd)
+  //
+  // P59 adds a SqliteStore-based fallback: if the cwd-derived
+  // id has no matching session in the store (e.g. the cwd
+  // hash changed), `resolveChatSessionId` falls back to the
+  // most recent session so the operator's prior conversation
+  // is preserved.
+  //
+  // P63 changes the **default** to OpenClaw's
+  // `tui_last_sessions` pattern
+  // (`~/workspace/openclaw-main/src/tui/tui-last-session.ts`):
+  // the session id is **remembered** per-scope, not derived
+  // from cwd. The 3-layer fallback is:
+  //   1. `--session-id <id>` (explicit, wins over everything)
+  //   2. `~/.lumen/chat_last_session` (last-used key for the
+  //      cwd's scope; persists across launches)
+  //   3. cwd-derived id (P32.1 default, written to the
+  //      remember file on first use so subsequent launches
+  //      reuse it)
+  //
+  // `--pinned-to-cwd` forces layer 3 every launch and skips
+  // the remember-write. The previous P59 SqliteStore
+  // fallback is preserved as a final safety net for the
+  // "cwd hash changed" case (so the user does not lose
+  // access to a session they did use, just under a
+  // different cwd-derived id).
+  let sessionId: string | undefined
+  if (persist && options.newSession !== true) {
+    const { resolveChatSession, rememberChatSession } = await import('../chat-session.js')
+    const { resolveChatSessionId: resolveP59 } = await import('../chat-paths.js')
+    const p63 = await resolveChatSession({
+      cwd,
+      ...(options.sessionId !== undefined ? { explicitSessionId: options.sessionId } : {}),
+      ...(options.pinnedToCwd === true ? { pinnedToCwd: true } : {}),
+    })
+    if (memoryStore && options.pinnedToCwd !== true) {
+      // P59 safety net: if the P63-remembered key has no
+      // matching row in the SqliteStore, fall through to
+      // the most-recent session (P59 contract). This
+      // protects against the "I upgraded lumen, my old
+      // session was keyed by a different id strategy" case.
+      const sessions = await memoryStore.listSessions(1000)
+      const hit = sessions.some((s) => s.id === p63.sessionId)
+      if (!hit) {
+        sessionId = await resolveP59({ store: memoryStore, cwd })
+      } else {
+        sessionId = p63.sessionId
+      }
+    } else {
+      sessionId = p63.sessionId
+    }
+    // Persist last-used. The outer `if` already guards
+    // `options.newSession !== true`, so the operator
+    // reached this line only when `--new-session` was
+    // NOT set. The remember file is updated on every
+    // launch so the next `lumen chat` in the same cwd
+    // resumes the same session.
+    await rememberChatSession({ cwd, sessionId })
+  }
 
   const { SqliteCheckpointStore, SqliteLoopsStore } = await import('@lumen/memory')
   const checkpointStore = checkpointPath
